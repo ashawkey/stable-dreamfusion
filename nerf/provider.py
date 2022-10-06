@@ -169,7 +169,7 @@ class NeRFDataset:
         else:
             # circle pose
             phi = (index[0] / self.size) * 2 * np.pi
-            poses, dirs = circle_poses(self.device, return_dirs=self.opt.dir_text, radius=self.radius_range[1], theta=np.pi/2, phi=phi)
+            poses, dirs = circle_poses(self.device, return_dirs=self.opt.dir_text, radius=self.radius_range[1] * 1.2, theta=np.pi/3, phi=phi)
 
             # fixed focal
             fov = (self.fovy_range[1] + self.fovy_range[0]) / 2

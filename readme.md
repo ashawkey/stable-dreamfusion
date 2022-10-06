@@ -8,7 +8,7 @@ Examples generated from text prompt `a DSLR photo of a pineapple` viewed with th
 
 https://user-images.githubusercontent.com/25863658/194241493-f3e68f78-aefe-479e-a4a8-001424a61b37.mp4
 
-### [Gallery](assets/gallery.md) | [Update Logs](assets/update_logs.md)
+### [Gallery](https://github.com/ashawkey/stable-dreamfusion/issues/1) | [Update Logs](assets/update_logs.md)
 
 # Important Notice
 This project is a **work-in-progress**, and contains lots of differences from the paper. Also, many features are still not implemented now. **The current generation quality cannot match the results from the original paper, and still fail badly for many prompts.** 

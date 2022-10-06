@@ -96,7 +96,7 @@ if __name__ == '__main__':
         else:
             test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
             trainer.test(test_loader)
-            trainer.save_mesh(resolution=256)
+            # trainer.save_mesh(resolution=256)
     
     else:
         
