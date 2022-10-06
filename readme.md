@@ -107,7 +107,7 @@ latents.backward(gradient=grad, retain_graph=True)
 * Shading & normal evaluation: `./nerf/network*.py > NeRFNetwork > forward`. Current implementation harms training and is disabled.
     * use `--albedo_iters 1000` to enable random shading mode after 1000 steps from albedo, lambertian ,and textureless
     * light direction: current implementation use a plane light source, instead of a point light source...
-* View-dependent prompting: `./nerf/provider.pu > get_view_direction`.
+* View-dependent prompting: `./nerf/provider.py > get_view_direction`.
     * ues `--angle_overhead, --angle_front` to set the border. How to better divide front/back/side regions?
 * Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option, but `tcnn` and `vanilla` are not well tested.
     * the occupancy grid based training acceleration (instant-ngp like) may harm the generation progress, since once a grid cell is marked as empty, rays won't pass it later. 
