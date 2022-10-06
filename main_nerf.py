@@ -14,6 +14,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--text', default=None, help="text prompt")
     parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray --dir_text")
+    parser.add_argument('-O2', action='store_true', help="equals --fp16 --dir_text")
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--workspace', type=str, default='workspace')
     parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
@@ -37,8 +38,8 @@ if __name__ == '__main__':
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--backbone', type=str, default='grid', help="nerf backbone, choose from [grid, tcnn, vanilla]")
     # rendering resolution in training
-    parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
-    parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
+    parser.add_argument('--w', type=int, default=128, help="render width for NeRF in training")
+    parser.add_argument('--h', type=int, default=128, help="render height for NeRF in training")
     
     ### dataset options
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
@@ -47,6 +48,11 @@ if __name__ == '__main__':
     parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
     parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 70], help="training camera fovy range")
     parser.add_argument('--dir_text', action='store_true', help="direction-encode the text prompt, by appending front/side/back/overhead view")
+    parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
+    parser.add_argument('--angle_front', type=float, default=30, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
+
+    parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
+    parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -54,8 +60,8 @@ if __name__ == '__main__':
     parser.add_argument('--H', type=int, default=800, help="GUI height")
     parser.add_argument('--radius', type=float, default=3, help="default GUI camera radius from center")
     parser.add_argument('--fovy', type=float, default=60, help="default GUI camera fovy")
-    parser.add_argument('--light_theta', type=float, default=60, help="default GUI light direction")
-    parser.add_argument('--light_phi', type=float, default=0, help="default GUI light direction")
+    parser.add_argument('--light_theta', type=float, default=60, help="default GUI light direction in [0, 180], corresponding to elevation [90, -90]")
+    parser.add_argument('--light_phi', type=float, default=0, help="default GUI light direction in [0, 360), azimuth")
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
 
     opt = parser.parse_args()
@@ -64,7 +70,10 @@ if __name__ == '__main__':
         opt.fp16 = True
         opt.cuda_ray = True
         opt.dir_text = True
-    
+    elif opt.O2:
+        opt.fp16 = True
+        opt.dir_text = True
+
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
     elif opt.backbone == 'tcnn':

@@ -365,11 +365,11 @@ class Trainer(object):
         # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
         loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
                 
-        loss = loss_guidance + 1e-3 * loss_entropy
+        loss = loss_guidance + self.opt.lambda_entropy * loss_entropy
 
         if 'loss_orient' in outputs:
             loss_orient = outputs['loss_orient']
-            loss = loss + 1e-2 * loss_orient
+            loss = loss + self.opt.lambda_orient * loss_orient
             
         return pred_rgb, pred_ws, loss
 
@@ -398,7 +398,7 @@ class Trainer(object):
         # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
         loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
                 
-        loss = 1e-3 * loss_entropy
+        loss = self.opt.lambda_entropy * loss_entropy
 
         return pred_rgb, pred_depth, loss
 
@@ -638,7 +638,7 @@ class Trainer(object):
         return outputs
 
     def train_one_epoch(self, loader):
-        self.log(f"==> Start Training Epoch {self.epoch}, lr={self.optimizer.param_groups[0]['lr']:.6f} ...")
+        self.log(f"==> Start Training {self.workspace} Epoch {self.epoch}, lr={self.optimizer.param_groups[0]['lr']:.6f} ...")
 
         total_loss = 0
         if self.local_rank == 0 and self.report_metric_at_train:
@@ -722,7 +722,7 @@ class Trainer(object):
 
 
     def evaluate_one_epoch(self, loader, name=None):
-        self.log(f"++> Evaluate at epoch {self.epoch} ...")
+        self.log(f"++> Evaluate {self.workspace} at epoch {self.epoch} ...")
 
         if name is None:
             name = f'{self.name}_ep{self.epoch:04d}'

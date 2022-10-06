@@ -448,6 +448,12 @@ class NeRFRenderer(nn.Module):
         # pre-calculate near far
         nears, fars = raymarching.near_far_from_aabb(rays_o, rays_d, self.aabb_train if self.training else self.aabb_infer)
 
+        # random sample light_d if not provided
+        if light_d is None:
+            # gaussian noise around the ray origin, so the light always face the view dir (avoid dark face)
+            light_d = - (rays_o[0] + torch.randn(3, device=device, dtype=torch.float))
+            light_d = safe_normalize(light_d)
+
         results = {}
 
         if self.training:
@@ -476,11 +482,6 @@ class NeRFRenderer(nn.Module):
            
             # allocate outputs 
             dtype = torch.float32
-
-            # fix light for all samples if not provided
-            if light_d is None:
-                light_d = torch.randn(3, device=device, dtype=torch.float)
-                light_d = safe_normalize(light_d)
             
             weights_sum = torch.zeros(N, dtype=dtype, device=device)
             depth = torch.zeros(N, dtype=dtype, device=device)

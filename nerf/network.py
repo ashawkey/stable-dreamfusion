@@ -37,26 +37,22 @@ class NeRFNetwork(NeRFRenderer):
                  opt,
                  num_layers=5,
                  hidden_dim=128,
-                 num_layers_bg=3,
-                 hidden_dim_bg=128,
+                 num_layers_bg=2,
+                 hidden_dim_bg=64,
                  ):
         
         super().__init__(opt)
 
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
-
         self.encoder, self.in_dim = get_encoder('frequency', input_dim=3)
-
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True)
 
         # background network
         if self.bg_radius > 0:
             self.num_layers_bg = num_layers_bg   
             self.hidden_dim_bg = hidden_dim_bg
-
-            self.encoder_bg, self.in_dim_bg = get_encoder('tiledgrid', input_dim=2)
-
+            self.encoder_bg, self.in_dim_bg = get_encoder('frequency', input_dim=2)
             self.bg_net = MLP(self.in_dim_bg, 3, hidden_dim_bg, num_layers_bg, bias=True)
             
         else:
@@ -84,7 +80,7 @@ class NeRFNetwork(NeRFRenderer):
         return sigma, albedo
     
     # ref: https://github.com/zhaofuq/Instant-NSR/blob/main/nerf/network_sdf.py#L192
-    def finite_differnce_normal(self, x, epsilon=5e-4):
+    def finite_difference_normal(self, x, epsilon=5e-4):
         # x: [N, 3]
         dx_pos, _ = self.common_forward((x + torch.tensor([[epsilon, 0.00, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
         dx_neg, _ = self.common_forward((x + torch.tensor([[-epsilon, 0.00, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
@@ -116,7 +112,7 @@ class NeRFNetwork(NeRFRenderer):
             # query normal
 
             # sigma, albedo = self.common_forward(x)
-            # normal = self.finite_differnce_normal(x)
+            # normal = self.finite_difference_normal(x)
 
             with torch.enable_grad():
                 x.requires_grad_(True)
@@ -127,11 +123,6 @@ class NeRFNetwork(NeRFRenderer):
             # normalize...
             normal = safe_normalize(normal)
             normal[torch.isnan(normal)] = 0
-
-            # light direction (random if not provided)
-            if l is None:
-                l = torch.randn(3, device=x.device, dtype=torch.float)
-                l = safe_normalize(l)
 
             # lambertian shading
             lambertian = ratio + (1 - ratio) * (normal @ -l).clamp(min=0) # [N,]

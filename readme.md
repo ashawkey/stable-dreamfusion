@@ -4,14 +4,14 @@ A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the
 
 The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
 
-Examples generated from text prompt `a DSLR photo of a pineapple` viewed with the GUI in real time:
+Examples generated from text prompt `a high quality photo of a pineapple` viewed with the GUI in real time:
 
 https://user-images.githubusercontent.com/25863658/194241493-f3e68f78-aefe-479e-a4a8-001424a61b37.mp4
 
 ### [Gallery](https://github.com/ashawkey/stable-dreamfusion/issues/1) | [Update Logs](assets/update_logs.md)
 
 # Important Notice
-This project is a **work-in-progress**, and contains lots of differences from the paper. Also, many features are still not implemented now. **The current generation quality cannot match the results from the original paper, and still fail badly for many prompts.** 
+This project is a **work-in-progress**, and contains lots of differences from the paper. Also, many features are still not implemented now. **The current generation quality cannot match the results from the original paper, and many prompts still fail badly!** 
 
 
 ## Notable differences from the paper
@@ -83,7 +83,7 @@ python main_nerf.py --text "a hamburger" --workspace trial_clip -O --guidance cl
 python main_nerf.py --text "a hamburger" --workspace trial_clip -O --test --gui --guidance clip
 ```
 
-# Code organization
+# Code organization & Advanced tips
 
 This is a simple description of the most important implementation details. 
 If you are interested in improving this repo, this might be a starting point.
@@ -101,14 +101,50 @@ w = (1 - self.scheduler.alphas_cumprod[t]).to(self.device)
 grad = w * (noise_pred - noise)
 latents.backward(gradient=grad, retain_graph=True)
 ```
-* Other regularizations are in `./nerf/utils.py > Trainer > train_step`.
+* Other regularizations are in `./nerf/utils.py > Trainer > train_step`. 
+    * The generation seems quite sensitive to regularizations on weights_sum (alphas for each ray). The original opacity loss tends to make NeRF disappear (zero density everywhere), so we use an entropy loss to replace it for now (encourages alpha to be either 0 or 1).
 * NeRF Rendering core function: `./nerf/renderer.py > NeRFRenderer > run_cuda`.
+* Shading & normal evaluation: `./nerf/network*.py > NeRFNetwork > forward`. Current implementation harms training and is disabled.
+    * use `--albedo_iters 1000` to enable random shading mode after 1000 steps from albedo, lambertian ,and textureless
+    * light direction: current implementation use a plane light source, instead of a point light source...
+* View-dependent prompting: `./nerf/provider.pu > get_view_direction`.
+    * ues `--angle_overhead, --angle_front` to set the border. How to better divide front/back/side regions?
+* Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option, but `tcnn` and `vanilla` are not well tested.
+    * the occupancy grid based training acceleration (instant-ngp like) may harm the generation progress, since once a grid cell is marked as empty, rays won't pass it later. 
+* Spatial density bias (gaussian density blob): `./nerf/network*.py > NeRFNetwork > gaussian`.
 
 # Acknowledgement
 
 * The amazing original work: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
+    ```
+    @article{poole2022dreamfusion,
+        author = {Poole, Ben and Jain, Ajay and Barron, Jonathan T. and Mildenhall, Ben},
+        title = {DreamFusion: Text-to-3D using 2D Diffusion},
+        journal = {arXiv},
+        year = {2022},
+    }
+    ```
 
 * Huge thanks to the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) and the [diffusers](https://github.com/huggingface/diffusers) library. 
 
+    ```
+    @misc{rombach2021highresolution,
+        title={High-Resolution Image Synthesis with Latent Diffusion Models}, 
+        author={Robin Rombach and Andreas Blattmann and Dominik Lorenz and Patrick Esser and Björn Ommer},
+        year={2021},
+        eprint={2112.10752},
+        archivePrefix={arXiv},
+        primaryClass={cs.CV}
+    }
+
+    @misc{von-platen-etal-2022-diffusers,
+        author = {Patrick von Platen and Suraj Patil and Anton Lozhkov and Pedro Cuenca and Nathan Lambert and Kashif Rasul and Mishig Davaadorj and Thomas Wolf},
+        title = {Diffusers: State-of-the-art diffusion models},
+        year = {2022},
+        publisher = {GitHub},
+        journal = {GitHub repository},
+        howpublished = {\url{https://github.com/huggingface/diffusers}}
+    }
+    ```
 
 * The GUI is developed with [DearPyGui](https://github.com/hoffstadt/DearPyGui).

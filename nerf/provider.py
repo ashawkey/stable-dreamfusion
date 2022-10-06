@@ -35,37 +35,42 @@ def visualize_poses(poses, size=0.1):
 
     trimesh.Scene(objects).show()
 
-def get_view_direction(thetas, phis):
-    #                   phis [B,]; thetas: [B,]
-    # front = 0         0-90            
-    # side (left) = 1   90-180
-    # back = 2          180-270
-    # side (right) = 3  270-360
-    # top = 4                        0-30
-    # bottom = 5                     150-180
-    res = torch.zeros(phis.shape[0], dtype=torch.long)
+def get_view_direction(thetas, phis, overhead, front):
+    #                   phis [B,];          thetas: [B,]
+    # front = 0         [0, front)
+    # side (left) = 1   [front, 180)
+    # back = 2          [180, 180+front)
+    # side (right) = 3  [180+front, 360)
+    # top = 4                               [0, overhead]
+    # bottom = 5                            [180-overhead, 180]
+    res = torch.zeros(thetas.shape[0], dtype=torch.long)
     # first determine by phis
-    res[(phis < (np.pi / 2))] = 0
-    res[(phis >= (np.pi / 2)) & (phis < np.pi)] = 1
-    res[(phis >= np.pi) & (phis < (3 * np.pi / 2))] = 2
-    res[(phis >= (3 * np.pi / 2)) & (phis < (2 * np.pi))] = 3
+    res[(phis < front)] = 0
+    res[(phis >= front) & (phis < np.pi)] = 1
+    res[(phis >= np.pi) & (phis < (np.pi + front))] = 2
+    res[(phis >= (np.pi + front))] = 3
     # override by thetas
-    res[thetas < (np.pi / 6)] = 4
-    res[thetas >= (5 * np.pi / 6)] = 5
+    res[thetas <= overhead] = 4
+    res[thetas >= (np.pi - overhead)] = 5
     return res
 
 
-def rand_poses(size, device, return_dirs=False, radius_range=[1, 1.5], theta_range=[0, 4 * np.pi / 6], phi_range=[0, 2*np.pi]):
+def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 150], phi_range=[0, 360], return_dirs=False, angle_overhead=30, angle_front=60):
     ''' generate random poses from an orbit camera
     Args:
         size: batch size of generated poses.
         device: where to allocate the output.
         radius: camera radius
-        theta_range: [min, max], should be in [0, \pi]
-        phi_range: [min, max], should be in [0, 2\pi]
+        theta_range: [min, max], should be in [0, pi]
+        phi_range: [min, max], should be in [0, 2 * pi]
     Return:
         poses: [size, 4, 4]
     '''
+
+    theta_range = np.deg2rad(theta_range)
+    phi_range = np.deg2rad(phi_range)
+    angle_overhead = np.deg2rad(angle_overhead)
+    angle_front = np.deg2rad(angle_front)
     
     radius = torch.rand(size, device=device) * (radius_range[1] - radius_range[0]) + radius_range[0]
     thetas = torch.rand(size, device=device) * (theta_range[1] - theta_range[0]) + theta_range[0]
@@ -94,14 +99,19 @@ def rand_poses(size, device, return_dirs=False, radius_range=[1, 1.5], theta_ran
     poses[:, :3, 3] = centers
 
     if return_dirs:
-        dirs = get_view_direction(thetas, phis)
+        dirs = get_view_direction(thetas, phis, angle_overhead, angle_front)
     else:
         dirs = None
     
     return poses, dirs
 
 
-def circle_poses(device, return_dirs=False, radius=1.25, theta=np.pi/2, phi=0):
+def circle_poses(device, radius=1.25, theta=60, phi=0, return_dirs=False, angle_overhead=30, angle_front=60):
+
+    theta = np.deg2rad(theta)
+    phi = np.deg2rad(phi)
+    angle_overhead = np.deg2rad(angle_overhead)
+    angle_front = np.deg2rad(angle_front)
 
     thetas = torch.FloatTensor([theta]).to(device)
     phis = torch.FloatTensor([phi]).to(device)
@@ -123,7 +133,7 @@ def circle_poses(device, return_dirs=False, radius=1.25, theta=np.pi/2, phi=0):
     poses[:, :3, 3] = centers
 
     if return_dirs:
-        dirs = get_view_direction(thetas, phis)
+        dirs = get_view_direction(thetas, phis, angle_overhead, angle_front)
     else:
         dirs = None
     
@@ -160,20 +170,20 @@ class NeRFDataset:
 
         if self.training:
             # random pose on the fly
-            poses, dirs = rand_poses(B, self.device, return_dirs=self.opt.dir_text, radius_range=self.radius_range)
+            poses, dirs = rand_poses(B, self.device, radius_range=self.radius_range, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front)
 
             # random focal
             fov = random.random() * (self.fovy_range[1] - self.fovy_range[0]) + self.fovy_range[0]
-            focal = self.H / (2 * np.tan(np.radians(fov) / 2))
+            focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
             intrinsics = np.array([focal, focal, self.cx, self.cy])
         else:
             # circle pose
-            phi = (index[0] / self.size) * 2 * np.pi
-            poses, dirs = circle_poses(self.device, return_dirs=self.opt.dir_text, radius=self.radius_range[1] * 1.2, theta=np.pi/3, phi=phi)
+            phi = (index[0] / self.size) * 360
+            poses, dirs = circle_poses(self.device, radius=self.radius_range[1] * 1.2, theta=60, phi=phi, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front)
 
             # fixed focal
             fov = (self.fovy_range[1] + self.fovy_range[0]) / 2
-            focal = self.H / (2 * np.tan(np.radians(fov) / 2))
+            focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
             intrinsics = np.array([focal, focal, self.cx, self.cy])
 
 

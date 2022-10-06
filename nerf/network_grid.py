@@ -87,7 +87,7 @@ class NeRFNetwork(NeRFRenderer):
         return sigma, albedo
     
     # ref: https://github.com/zhaofuq/Instant-NSR/blob/main/nerf/network_sdf.py#L192
-    def finite_differnce_normal(self, x, epsilon=5e-4):
+    def finite_difference_normal(self, x, epsilon=5e-4):
         # x: [N, 3]
         dx_pos, _ = self.common_forward((x + torch.tensor([[epsilon, 0.00, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
         dx_neg, _ = self.common_forward((x + torch.tensor([[-epsilon, 0.00, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
@@ -119,7 +119,7 @@ class NeRFNetwork(NeRFRenderer):
             # query normal
 
             sigma, albedo = self.common_forward(x)
-            normal = self.finite_differnce_normal(x)
+            normal = self.finite_difference_normal(x)
 
             # with torch.enable_grad():
             #     x.requires_grad_(True)
@@ -130,11 +130,6 @@ class NeRFNetwork(NeRFRenderer):
             # normalize...
             normal = safe_normalize(normal)
             normal[torch.isnan(normal)] = 0
-
-            # light direction (random if not provided)
-            if l is None:
-                l = torch.randn(3, device=x.device, dtype=torch.float)
-                l = safe_normalize(l)
 
             # lambertian shading
             lambertian = ratio + (1 - ratio) * (normal @ -l).clamp(min=0) # [N,]

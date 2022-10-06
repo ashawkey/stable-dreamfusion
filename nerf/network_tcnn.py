@@ -133,11 +133,6 @@ class NeRFNetwork(NeRFRenderer):
             if not has_grad:
                 normal = normal.detach()
 
-            # light direction (random if not provided)
-            if l is None:
-                l = torch.randn(3, device=x.device, dtype=torch.float)
-                l = l / (torch.norm(l, dim=-1, keepdim=True) + 1e-9)
-
             # lambertian shading
             lambertian = ratio + (1 - ratio) * (normal @ l).clamp(min=0) # [N,]
 
