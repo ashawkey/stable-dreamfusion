@@ -4,7 +4,7 @@ A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the
 
 The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
 
-Example of "a squierrel" and "a hamburger":
+Examples generated from text prompts only:
 
 ### [Gallery](assets/gallery.md) | [Update Logs](assets/update_logs.md)
 
@@ -70,7 +70,7 @@ First time running will take some time to compile the CUDA extensions.
 # `-O` equals `--cuda_ray --fp16 --dir_text`
 python main_nerf.py --text "a hamburger" --workspace trial -O
 
-# test (exporting 360 video)
+# test (exporting 360 video, and an obj mesh with png texture)
 python main_nerf.py --text "a hamburger" --workspace trial -O --test
 
 # test with a GUI (free view control!)
