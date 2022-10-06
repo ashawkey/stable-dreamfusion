@@ -4,12 +4,11 @@ A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the
 
 The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
 
-Examples generated from text prompt 'a DSLR photo of a pineapple' viewed with the GUI in real time:
+Examples generated from text prompt `a DSLR photo of a pineapple` viewed with the GUI in real time:
 
-Exported meshes viewed with MeshLab:
+https://user-images.githubusercontent.com/25863658/194241493-f3e68f78-aefe-479e-a4a8-001424a61b37.mp4
 
 ### [Gallery](assets/gallery.md) | [Update Logs](assets/update_logs.md)
-
 
 # Important Notice
 This project is a **work-in-progress**, and contains lots of differences from the paper. Also, many features are still not implemented now. **The current generation quality cannot match the results from the original paper, and still fail badly for many prompts.** 
