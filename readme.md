@@ -4,7 +4,7 @@ A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the
 
 The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
 
-Examples generated from text prompts only:
+Examples generated from text prompt 'a DSLR photo of a pineapple' viewed with the GUI in real time:
 
 Exported meshes viewed with MeshLab:
 
@@ -12,7 +12,7 @@ Exported meshes viewed with MeshLab:
 
 
 # Important Notice
-This project is a **work-in-progress**, and contains lots of differences from the paper. Also, many features are still not implemented now. The current generation quality cannot match the results from the original paper, and still fail badly for many prompts.
+This project is a **work-in-progress**, and contains lots of differences from the paper. Also, many features are still not implemented now. **The current generation quality cannot match the results from the original paper, and still fail badly for many prompts.** 
 
 
 ## Notable differences from the paper
@@ -23,7 +23,7 @@ This project is a **work-in-progress**, and contains lots of differences from th
 
 ## TODOs
 * The normal evaluation & shading part.
-* Improve the surface quality.
+* Better mesh (improve the surface quality). 
 
 # Install
 
@@ -86,7 +86,11 @@ python main_nerf.py --text "a hamburger" --workspace trial_clip -O --test --gui 
 
 # Code organization
 
-* The key SDS loss is located at `./nerf/sd.py > StableDiffusion > train_step`:
+This is a simple description of the most important implementation details. 
+If you are interested in improving this repo, this might be a starting point.
+Any contribution would be greatly appreciated!
+
+* The SDS loss is located at `./nerf/sd.py > StableDiffusion > train_step`:
 ```python
 # 1. we need to interpolate the NeRF rendering to 512x512, to feed it to SD's VAE.
 pred_rgb_512 = F.interpolate(pred_rgb, (512, 512), mode='bilinear', align_corners=False)
