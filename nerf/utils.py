@@ -209,6 +209,7 @@ class Trainer(object):
         self.guidance = guidance
 
         if self.guidance is not None:
+            assert ref_text is not None, 'Training must provide a text prompt!'
 
             for p in self.guidance.parameters():
                 p.requires_grad = False
@@ -401,7 +402,6 @@ class Trainer(object):
 
         return pred_rgb, pred_depth, loss
 
-    # moved out bg_color and perturb for more flexible control...
     def test_step(self, data, bg_color=None, perturb=False):  
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]

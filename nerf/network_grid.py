@@ -64,6 +64,7 @@ class NeRFNetwork(NeRFRenderer):
         else:
             self.bg_net = None
 
+    # add a density blob to the scene center
     def gaussian(self, x):
         # x: [B, N, 3]
         
