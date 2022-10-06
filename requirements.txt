@@ -14,4 +14,5 @@ pysdf
 dearpygui
 scipy
 diffusers
+transformers
 xatlas

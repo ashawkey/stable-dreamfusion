@@ -16,7 +16,7 @@ class StableDiffusion(nn.Module):
 
         try:
             with open('./TOKEN', 'r') as f:
-                self.token = f.read()
+                self.token = f.read().replace('\n', '') # remove the last \n!
                 print(f'[INFO] successfully loaded hugging face user token!')
         except FileNotFoundError as e:
             print(e)
