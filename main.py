@@ -70,8 +70,8 @@ if __name__ == '__main__':
 
     if opt.O:
         opt.fp16 = True
-        opt.cuda_ray = True
         opt.dir_text = True
+        opt.cuda_ray = True
     elif opt.O2:
         opt.fp16 = True
         opt.dir_text = True
