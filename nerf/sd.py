@@ -94,7 +94,7 @@ class StableDiffusion(nn.Module):
         noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
         # w(t), one_minus_alpha_prod, i.e., sigma^2
-        w = (1 - self.scheduler.alphas_cumprod[t]).to(self.device)
+        w = torch.sqrt(self.scheduler.alphas_cumprod[t]).to(self.device)
         grad = w * (noise_pred - noise)
 
         # clip grad for stable training?
