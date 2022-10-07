@@ -17,4 +17,5 @@ diffusers
 transformers
 xatlas
 scikit-learn
+imageio
 imageio-ffmpeg
