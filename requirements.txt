@@ -16,3 +16,4 @@ scipy
 diffusers
 transformers
 xatlas
+scikit-learn

@@ -168,7 +168,7 @@ class NeRFRenderer(nn.Module):
             from sklearn.neighbors import NearestNeighbors
             from scipy.ndimage import binary_dilation, binary_erosion
 
-            glctx = dr.RasterizeGLContext()
+            glctx = dr.RasterizeCudaContext()
 
             atlas = xatlas.Atlas()
             atlas.add_mesh(v_np, f_np)

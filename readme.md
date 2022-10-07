@@ -68,19 +68,20 @@ First time running will take some time to compile the CUDA extensions.
 
 ```bash
 ### stable-dreamfusion setting
-# train with text prompt
+## train with text prompt
 # `-O` equals `--cuda_ray --fp16 --dir_text`
-python main_nerf.py --text "a hamburger" --workspace trial -O
+python main.py --text "a hamburger" --workspace trial -O
 
+## after the training is finished:
 # test (exporting 360 video, and an obj mesh with png texture)
-python main_nerf.py --text "a hamburger" --workspace trial -O --test
+python main.py --workspace trial -O --test
 
 # test with a GUI (free view control!)
-python main_nerf.py --text "a hamburger" --workspace trial -O --test --gui
+python main.py --workspace trial -O --test --gui
 
 ### dreamfields (CLIP) setting
-python main_nerf.py --text "a hamburger" --workspace trial_clip -O --guidance clip
-python main_nerf.py --text "a hamburger" --workspace trial_clip -O --test --gui --guidance clip
+python main.py --text "a hamburger" --workspace trial_clip -O --guidance clip
+python main.py --text "a hamburger" --workspace trial_clip -O --test --gui --guidance clip
 ```
 
 # Code organization & Advanced tips
