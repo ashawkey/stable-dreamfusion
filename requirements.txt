@@ -12,7 +12,9 @@ PyMCubes
 rich
 dearpygui
 scipy
+huggingface_hub
 diffusers
 transformers
 xatlas
 scikit-learn
+imageio-ffmpeg
