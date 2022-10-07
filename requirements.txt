@@ -1,5 +1,7 @@
 torch-ema
 ninja
+cmake
+setuptools_rust
 trimesh
 opencv-python
 tensorboardX
