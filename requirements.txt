@@ -10,7 +10,6 @@ tqdm
 matplotlib
 PyMCubes
 rich
-pysdf
 dearpygui
 scipy
 diffusers

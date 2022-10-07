@@ -17,6 +17,7 @@ if __name__ == '__main__':
     parser.add_argument('-O2', action='store_true', help="equals --fp16 --dir_text")
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
+    parser.add_argument('--eval_interval', type=int, default=10, help="evaluate on the valid set every interval epochs")
     parser.add_argument('--workspace', type=str, default='workspace')
     parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
     parser.add_argument('--seed', type=int, default=0)
@@ -38,7 +39,7 @@ if __name__ == '__main__':
     # network backbone
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--backbone', type=str, default='grid', help="nerf backbone, choose from [grid, tcnn, vanilla]")
-    # rendering resolution in training
+    # rendering resolution in training, decrease this if CUDA OOM.
     parser.add_argument('--w', type=int, default=128, help="render width for NeRF in training")
     parser.add_argument('--h', type=int, default=128, help="render height for NeRF in training")
     
@@ -129,7 +130,7 @@ if __name__ == '__main__':
         # decay to 0.01 * init_lr at last iter step
         scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.01 ** min(iter / opt.iters, 1))
 
-        trainer = Trainer('ngp', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=1)
+        trainer = Trainer('ngp', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval)
 
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer
