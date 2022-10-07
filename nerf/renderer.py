@@ -271,7 +271,7 @@ class NeRFRenderer(nn.Module):
 
             print(f'[INFO] writing obj mesh to {obj_file}')
             with open(obj_file, "w") as fp:
-                fp.write(f'mtllib {name}.mtl \n')
+                fp.write(f'mtllib {name}mesh.mtl \n')
                 
                 print(f'[INFO] writing vertices {v_np.shape}')
                 for v in v_np:
