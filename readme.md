@@ -31,7 +31,7 @@ git clone https://github.com/ashawkey/stable-dreamfusion.git
 cd stable-dreamfusion
 ```
 
-**Important**: To download the Stable Diffusion model checkpoint, you should create a file called `TOKEN` under this directory (i.e., `stable-dreamfusion/TOKEN`) and copy your hugging face [access token](https://huggingface.co/docs/hub/security-tokens) into it.
+**Important**: To download the Stable Diffusion model checkpoint, you should create a file called `TOKEN` under this directory (i.e., `stable-dreamfusion/TOKEN`) and copy your hugging face [access token](https://huggingface.co/docs/hub/security-tokens) into it. If you haven't done so before, you will also need to login to the hugging face hub by running `huggingface-cli login`.
 
 ### Install with pip
 ```bash
