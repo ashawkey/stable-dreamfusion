@@ -320,6 +320,12 @@ class NeRFRenderer(nn.Module):
         nears.unsqueeze_(-1)
         fars.unsqueeze_(-1)
 
+        # random sample light_d if not provided
+        if light_d is None:
+            # gaussian noise around the ray origin, so the light always face the view dir (avoid dark face)
+            light_d = - (rays_o[0] + torch.randn(3, device=device, dtype=torch.float))
+            light_d = safe_normalize(light_d)
+
         #print(f'nears = {nears.min().item()} ~ {nears.max().item()}, fars = {fars.min().item()} ~ {fars.max().item()}')
 
         z_vals = torch.linspace(0.0, 1.0, num_steps, device=device).unsqueeze(0) # [1, T]
