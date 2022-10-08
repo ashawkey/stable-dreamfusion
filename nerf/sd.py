@@ -17,10 +17,10 @@ class StableDiffusion(nn.Module):
         try:
             with open('./TOKEN', 'r') as f:
                 self.token = f.read().replace('\n', '') # remove the last \n!
-                print(f'[INFO] successfully loaded hugging face user token!')
+                print(f'[INFO] loaded hugging face access token from ./TOKEN!')
         except FileNotFoundError as e:
-            print(e)
-            print(f'[INFO] Please first create a file called TOKEN and copy your hugging face access token into it to download stable diffusion checkpoints.')
+            self.token = True
+            print(f'[INFO] try to load hugging face access token from the default plase, make sure you have run `huggingface-cli login`.')
         
         self.device = device
         self.num_train_timesteps = 1000
