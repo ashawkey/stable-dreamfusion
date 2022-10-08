@@ -55,7 +55,7 @@ def get_view_direction(thetas, phis, overhead, front):
     return res
 
 
-def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 150], phi_range=[0, 360], return_dirs=False, angle_overhead=30, angle_front=60):
+def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 150], phi_range=[0, 360], return_dirs=False, angle_overhead=30, angle_front=60, jitter=False):
     ''' generate random poses from an orbit camera
     Args:
         size: batch size of generated poses.
@@ -82,16 +82,23 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 150], phi_ra
         radius * torch.sin(thetas) * torch.cos(phis),
     ], dim=-1) # [B, 3]
 
+    targets = 0
+
     # jitters
-    centers = centers + (torch.rand_like(centers) * 0.2 - 0.1)
-    targets = torch.randn_like(centers) * 0.2
+    if jitter:
+        centers = centers + (torch.rand_like(centers) * 0.2 - 0.1)
+        targets = targets + torch.randn_like(centers) * 0.2
 
     # lookat
     forward_vector = safe_normalize(targets - centers)
     up_vector = torch.FloatTensor([0, -1, 0]).to(device).unsqueeze(0).repeat(size, 1)
     right_vector = safe_normalize(torch.cross(forward_vector, up_vector, dim=-1))
+    
+    if jitter:
+        up_noise = torch.randn_like(up_vector) * 0.02
+    else:
+        up_noise = 0
 
-    up_noise = torch.randn_like(up_vector) * 0.02
     up_vector = safe_normalize(torch.cross(right_vector, forward_vector, dim=-1) + up_noise)
 
     poses = torch.eye(4, dtype=torch.float, device=device).unsqueeze(0).repeat(size, 1, 1)
@@ -170,7 +177,7 @@ class NeRFDataset:
 
         if self.training:
             # random pose on the fly
-            poses, dirs = rand_poses(B, self.device, radius_range=self.radius_range, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front)
+            poses, dirs = rand_poses(B, self.device, radius_range=self.radius_range, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose)
 
             # random focal
             fov = random.random() * (self.fovy_range[1] - self.fovy_range[0]) + self.fovy_range[0]
