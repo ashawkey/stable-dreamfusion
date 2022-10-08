@@ -51,19 +51,24 @@ docker run --gpus all -it --rm -v $(cd ~ && pwd):/mnt stable-dreamfusion /bin/ba
 To train:
 ```
 export TOKEN="#HUGGING FACE ACCESS TOKEN#"
-docker run --gpus all -it --rm -v $(cd ~ && pwd):/mnt stable-dreamfusion /bin/bash -c "echo ${TOKEN} > TOKEN && python3 main.py --text \"a hamburger\" --workspace trial -O"
+docker run --gpus all -it --rm -v $(cd ~ && pwd):/mnt stable-dreamfusion /bin/bash -c "echo ${TOKEN} > TOKEN \
+&& python3 main.py --text \"a hamburger\" --workspace trial -O"
 
 ```
 Run test without gui:
 ```
 export PATH_TO_WORKSPACE="#PATH_TO_WORKSPACE#"
-docker run --gpus all -it --rm -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix:ro -v $(cd ~ && pwd):/mnt -v $(cd ${PATH_TO_WORKSPACE} && pwd):/app/stable-dreamfusion/trial stable-dreamfusion /bin/bash -c "python3 main.py --workspace trial -O --test"
+docker run --gpus all -it --rm -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix:ro -v $(cd ~ && pwd):/mnt \
+-v $(cd ${PATH_TO_WORKSPACE} && pwd):/app/stable-dreamfusion/trial stable-dreamfusion /bin/bash -c "python3 \
+main.py --workspace trial -O --test"
 ```
 Run test with gui:
 ```
 export PATH_TO_WORKSPACE="#PATH_TO_WORKSPACE#"
 xhost +
-docker run --gpus all -it --rm -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix:ro -v $(cd ~ && pwd):/mnt -v $(cd ${PATH_TO_WORKSPACE} && pwd):/app/stable-dreamfusion/trial stable-dreamfusion /bin/bash -c "python3 main.py --workspace trial -O --test --gui"
+docker run --gpus all -it --rm -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix:ro -v $(cd ~ && pwd):/mnt \
+-v $(cd ${PATH_TO_WORKSPACE} && pwd):/app/stable-dreamfusion/trial stable-dreamfusion /bin/bash -c "python3 \
+main.py --workspace trial -O --test --gui"
 xhost -
 ```
 
