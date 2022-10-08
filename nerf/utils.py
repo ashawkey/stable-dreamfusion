@@ -343,6 +343,9 @@ class Trainer(object):
         pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
         # torch.cuda.synchronize(); print(f'[TIME] nerf render {time.time() - _t:.4f}s')
         
+        # print(shading)
+        # torch_vis_2d(pred_rgb[0])
+        
         # text embeddings
         if self.opt.dir_text:
             dirs = data['dir'] # [B,]

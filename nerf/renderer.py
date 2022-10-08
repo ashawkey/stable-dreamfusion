@@ -420,8 +420,8 @@ class NeRFRenderer(nn.Module):
         # mix background color
         if self.bg_radius > 0:
             # use the bg model to calculate bg_color
-            sph = raymarching.sph_from_ray(rays_o, rays_d, self.bg_radius) # [N, 2] in [-1, 1]
-            bg_color = self.background(sph, rays_d.reshape(-1, 3)) # [N, 3]
+            # sph = raymarching.sph_from_ray(rays_o, rays_d, self.bg_radius) # [N, 2] in [-1, 1]
+            bg_color = self.background(rays_d.reshape(-1, 3)) # [N, 3]
         elif bg_color is None:
             bg_color = 1
             
@@ -526,8 +526,8 @@ class NeRFRenderer(nn.Module):
         if self.bg_radius > 0:
             
             # use the bg model to calculate bg_color
-            sph = raymarching.sph_from_ray(rays_o, rays_d, self.bg_radius) # [N, 2] in [-1, 1]
-            bg_color = self.background(sph, rays_d) # [N, 3]
+            # sph = raymarching.sph_from_ray(rays_o, rays_d, self.bg_radius) # [N, 2] in [-1, 1]
+            bg_color = self.background(rays_d) # [N, 3]
 
         elif bg_color is None:
             bg_color = 1

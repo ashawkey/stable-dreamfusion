@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 from activation import trunc_exp
 from .renderer import NeRFRenderer
+from encoding import get_encoder
 
 import numpy as np
 import tinycudann as tcnn
@@ -65,19 +66,9 @@ class NeRFNetwork(NeRFRenderer):
             self.num_layers_bg = num_layers_bg   
             self.hidden_dim_bg = hidden_dim_bg
 
-            self.encoder_bg = tcnn.Encoding(
-                n_input_dims=2,
-                encoding_config={
-                    "otype": "HashGrid",
-                    "n_levels": 4,
-                    "n_features_per_level": 2,
-                    "log2_hashmap_size": 16,
-                    "base_resolution": 16,
-                    "per_level_scale": 1.5,
-                },
-            )
+            self.encoder_bg, self.in_dim_bg = get_encoder('frequency', input_dim=3)
 
-            self.bg_net = MLP(8, 3, hidden_dim_bg, num_layers_bg, bias=True)
+            self.bg_net = MLP(self.in_dim_bg, 3, hidden_dim_bg, num_layers_bg, bias=True)
             
         else:
             self.bg_net = None
@@ -156,11 +147,10 @@ class NeRFNetwork(NeRFRenderer):
         }
 
 
-    def background(self, x, d):
+    def background(self, d):
         # x: [N, 2], in [-1, 1]
 
-        h = (x + 1) / (2 * 1) # to [0, 1]
-        h = self.encoder_bg(h) # [N, C]
+        h = self.encoder_bg(d) # [N, C]
         
         h = self.bg_net(h)
 

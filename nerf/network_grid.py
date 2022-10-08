@@ -57,7 +57,7 @@ class NeRFNetwork(NeRFRenderer):
             
             # use a very simple network to avoid it learning the prompt...
             # self.encoder_bg, self.in_dim_bg = get_encoder('tiledgrid', input_dim=2, num_levels=4, desired_resolution=2048)
-            self.encoder_bg, self.in_dim_bg = get_encoder('frequency', input_dim=2)
+            self.encoder_bg, self.in_dim_bg = get_encoder('frequency', input_dim=3)
 
             self.bg_net = MLP(self.in_dim_bg, 3, hidden_dim_bg, num_layers_bg, bias=True)
             
@@ -87,7 +87,7 @@ class NeRFNetwork(NeRFRenderer):
         return sigma, albedo
     
     # ref: https://github.com/zhaofuq/Instant-NSR/blob/main/nerf/network_sdf.py#L192
-    def finite_difference_normal(self, x, epsilon=5e-4):
+    def finite_difference_normal(self, x, epsilon=1e-2):
         # x: [N, 3]
         dx_pos, _ = self.common_forward((x + torch.tensor([[epsilon, 0.00, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
         dx_neg, _ = self.common_forward((x + torch.tensor([[-epsilon, 0.00, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
@@ -155,10 +155,9 @@ class NeRFNetwork(NeRFRenderer):
         }
 
 
-    def background(self, x, d):
-        # x: [N, 2], in [-1, 1]
+    def background(self, d):
 
-        h = self.encoder_bg(x) # [N, C]
+        h = self.encoder_bg(d) # [N, C]
         
         h = self.bg_net(h)
 
