@@ -10,7 +10,7 @@ If you have the error **No CUDA runtime is found** when building the wheels for 
 ```
 sudo apt-get install nvidia-container-runtime
 ```
-Then edit ` and add the default-runtime:
+Then edit `/etc/docker/daemon.json` and add the default-runtime:
 ```
 {
     "runtimes": {
