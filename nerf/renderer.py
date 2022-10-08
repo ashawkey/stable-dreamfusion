@@ -397,7 +397,7 @@ class NeRFRenderer(nn.Module):
             density_outputs[k] = v.view(-1, v.shape[-1])
 
         sigmas, rgbs, normals = self(xyzs.reshape(-1, 3), dirs.reshape(-1, 3), light_d, ratio=ambient_ratio, shading=shading)
-        rgbs = rgbs.view(N, -1, 3) # [N, T+t, 3]
+        rgbs = rgbs.view(N, -1, 3+1) # [N, T+t, 3]
 
         #print(xyzs.shape, 'valid_rgb:', mask.sum().item())
         # orientation loss
@@ -427,7 +427,7 @@ class NeRFRenderer(nn.Module):
             
         image = image + (1 - weights_sum).unsqueeze(-1) * bg_color
 
-        image = image.view(*prefix, 3)
+        image = image.view(*prefix, 3+1)
         depth = depth.view(*prefix)
 
         mask = (nears < fars).reshape(*prefix)
@@ -491,7 +491,7 @@ class NeRFRenderer(nn.Module):
             
             weights_sum = torch.zeros(N, dtype=dtype, device=device)
             depth = torch.zeros(N, dtype=dtype, device=device)
-            image = torch.zeros(N, 3, dtype=dtype, device=device)
+            image = torch.zeros(N, 3+1, dtype=dtype, device=device)
             
             n_alive = N
             rays_alive = torch.arange(n_alive, dtype=torch.int32, device=device) # [N]
@@ -533,7 +533,7 @@ class NeRFRenderer(nn.Module):
             bg_color = 1
 
         image = image + (1 - weights_sum).unsqueeze(-1) * bg_color
-        image = image.view(*prefix, 3)
+        image = image.view(*prefix, 3+1)
 
         depth = torch.clamp(depth - nears, min=0) / (fars - nears)
         depth = depth.view(*prefix)
@@ -621,7 +621,7 @@ class NeRFRenderer(nn.Module):
         # never stage when cuda_ray
         if staged and not self.cuda_ray:
             depth = torch.empty((B, N), device=device)
-            image = torch.empty((B, N, 3), device=device)
+            image = torch.empty((B, N, 3+1), device=device)
             weights_sum = torch.empty((B, N), device=device)
 
             for b in range(B):

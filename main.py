@@ -17,7 +17,7 @@ if __name__ == '__main__':
     parser.add_argument('-O2', action='store_true', help="equals --fp16 --dir_text")
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
-    parser.add_argument('--eval_interval', type=int, default=10, help="evaluate on the valid set every interval epochs")
+    parser.add_argument('--eval_interval', type=int, default=1, help="evaluate on the valid set every interval epochs")
     parser.add_argument('--workspace', type=str, default='workspace')
     parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
     parser.add_argument('--seed', type=int, default=0)
@@ -40,8 +40,8 @@ if __name__ == '__main__':
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--backbone', type=str, default='grid', help="nerf backbone, choose from [grid, tcnn, vanilla]")
     # rendering resolution in training, decrease this if CUDA OOM.
-    parser.add_argument('--w', type=int, default=128, help="render width for NeRF in training")
-    parser.add_argument('--h', type=int, default=128, help="render height for NeRF in training")
+    parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
+    parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
     parser.add_argument('--jitter_pose', action='store_true', help="add jitters to the randomly sampled camera poses")
     
     ### dataset options
@@ -59,8 +59,8 @@ if __name__ == '__main__':
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
-    parser.add_argument('--W', type=int, default=800, help="GUI width")
-    parser.add_argument('--H', type=int, default=800, help="GUI height")
+    parser.add_argument('--W', type=int, default=64, help="GUI width")
+    parser.add_argument('--H', type=int, default=64, help="GUI height")
     parser.add_argument('--radius', type=float, default=3, help="default GUI camera radius from center")
     parser.add_argument('--fovy', type=float, default=60, help="default GUI camera fovy")
     parser.add_argument('--light_theta', type=float, default=60, help="default GUI light direction in [0, 180], corresponding to elevation [90, -90]")
@@ -96,8 +96,19 @@ if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    if opt.guidance == 'stable-diffusion':
+        from nerf.sd import StableDiffusion
+
+        guidance = StableDiffusion(device)
+    elif opt.guidance == 'clip':
+        from nerf.clip import CLIP
+
+        guidance = CLIP(device)
+    else:
+        raise NotImplementedError(f'--guidance {opt.guidance} is not implemented.')
+
     if opt.test:
-        guidance = None # no need to load guidance model at test
+        # guidance = None # no need to load guidance model at test
 
         trainer = Trainer('ngp', opt, model, guidance, device=device, workspace=opt.workspace, fp16=opt.fp16, use_checkpoint=opt.ckpt)
 
@@ -114,14 +125,6 @@ if __name__ == '__main__':
     
     else:
         
-        if opt.guidance == 'stable-diffusion':
-            from nerf.sd import StableDiffusion
-            guidance = StableDiffusion(device)
-        elif opt.guidance == 'clip':
-            from nerf.clip import CLIP
-            guidance = CLIP(device)
-        else:
-            raise NotImplementedError(f'--guidance {opt.guidance} is not implemented.')
 
         optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
         # optimizer = lambda model: Shampoo(model.get_params(opt.lr))

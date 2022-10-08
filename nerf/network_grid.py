@@ -48,7 +48,7 @@ class NeRFNetwork(NeRFRenderer):
 
         self.encoder, self.in_dim = get_encoder('tiledgrid', input_dim=3, desired_resolution=2048 * self.bound)
 
-        self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True)
+        self.sigma_net = MLP(self.in_dim, 4+1, hidden_dim, num_layers, bias=True)
 
         # background network
         if self.bg_radius > 0:
@@ -59,7 +59,7 @@ class NeRFNetwork(NeRFRenderer):
             # self.encoder_bg, self.in_dim_bg = get_encoder('tiledgrid', input_dim=2, num_levels=4, desired_resolution=2048)
             self.encoder_bg, self.in_dim_bg = get_encoder('frequency', input_dim=3)
 
-            self.bg_net = MLP(self.in_dim_bg, 3, hidden_dim_bg, num_layers_bg, bias=True)
+            self.bg_net = MLP(self.in_dim_bg, 3+1, hidden_dim_bg, num_layers_bg, bias=True)
             
         else:
             self.bg_net = None
@@ -82,7 +82,8 @@ class NeRFNetwork(NeRFRenderer):
         h = self.sigma_net(h)
 
         sigma = trunc_exp(h[..., 0] + self.gaussian(x))
-        albedo = torch.sigmoid(h[..., 1:])
+        # albedo = torch.sigmoid(h[..., 1:])
+        albedo = h[..., 1:]
 
         return sigma, albedo
     
@@ -162,7 +163,8 @@ class NeRFNetwork(NeRFRenderer):
         h = self.bg_net(h)
 
         # sigmoid activation for rgb
-        rgbs = torch.sigmoid(h)
+        # rgbs = torch.sigmoid(h)
+        rgbs = h
 
         return rgbs
 

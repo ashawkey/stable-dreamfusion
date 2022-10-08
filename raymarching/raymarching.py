@@ -259,7 +259,7 @@ class _composite_rays_train(Function):
 
         weights_sum = torch.empty(N, dtype=sigmas.dtype, device=sigmas.device)
         depth = torch.empty(N, dtype=sigmas.dtype, device=sigmas.device)
-        image = torch.empty(N, 3, dtype=sigmas.dtype, device=sigmas.device)
+        image = torch.empty(N, 3+1, dtype=sigmas.dtype, device=sigmas.device)
 
         _backend.composite_rays_train_forward(sigmas, rgbs, deltas, rays, M, N, T_thresh, weights_sum, depth, image)
 

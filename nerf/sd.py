@@ -63,12 +63,12 @@ class StableDiffusion(nn.Module):
         return text_embeddings
 
 
-    def train_step(self, text_embeddings, pred_rgb, guidance_scale=100):
+    def train_step(self, text_embeddings, latents, guidance_scale=100):
         
         # interp to 512x512 to be fed into vae.
 
         # _t = time.time()
-        pred_rgb_512 = F.interpolate(pred_rgb, (512, 512), mode='bilinear', align_corners=False)
+        # pred_rgb_512 = F.interpolate(pred_rgb, (512, 512), mode='bilinear', align_corners=False)
         # torch.cuda.synchronize(); print(f'[TIME] guiding: interp {time.time() - _t:.4f}s')
 
         # timestep ~ U(0.02, 0.98) to avoid very high/low noise level
@@ -76,7 +76,7 @@ class StableDiffusion(nn.Module):
 
         # encode image into latents with vae, requires grad!
         # _t = time.time()
-        latents = self.encode_imgs(pred_rgb_512)
+        # latents = self.encode_imgs(pred_rgb_512)
         # torch.cuda.synchronize(); print(f'[TIME] guiding: vae enc {time.time() - _t:.4f}s')
 
         # predict the noise residual with unet, NO grad!

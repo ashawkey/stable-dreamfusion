@@ -340,7 +340,7 @@ class Trainer(object):
         # _t = time.time()
         bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
         outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
-        pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
+        pred_rgb = outputs['image'].reshape(B, H, W, 3+1).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
         # torch.cuda.synchronize(); print(f'[TIME] nerf render {time.time() - _t:.4f}s')
         
         # print(shading)
@@ -389,9 +389,10 @@ class Trainer(object):
         light_d = data['light_d'] if 'light_d' in data else None
 
         outputs = self.model.render(rays_o, rays_d, staged=True, perturb=False, bg_color=None, light_d=light_d, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
-        pred_rgb = outputs['image'].reshape(B, H, W, 3)
+        pred_latent = outputs['image'].reshape(B, H, W, 3+1).permute(0, 3, 1, 2).contiguous() # [1, 3+1, H, W]
         pred_depth = outputs['depth'].reshape(B, H, W)
         pred_ws = outputs['weights_sum'].reshape(B, H, W)
+        pred_rgb = self.guidance.decode_latents(pred_latent).permute(0, 2, 3, 1).contiguous() # [1, 3, H, W]
         # mask_ws = outputs['mask'].reshape(B, H, W) # near < far
 
         # loss_ws = pred_ws.sum() / mask_ws.sum()
@@ -423,8 +424,9 @@ class Trainer(object):
 
         outputs = self.model.render(rays_o, rays_d, staged=True, perturb=perturb, light_d=light_d, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, bg_color=bg_color, **vars(self.opt))
 
-        pred_rgb = outputs['image'].reshape(B, H, W, 3)
+        pred_latent = outputs['image'].reshape(B, H, W, 3+1).permute(0, 3, 1, 2).contiguous()
         pred_depth = outputs['depth'].reshape(B, H, W)
+        pred_rgb = self.guidance.decode_latents(pred_latent).permute(0, 2, 3, 1).contiguous()
 
         return pred_rgb, pred_depth
 
