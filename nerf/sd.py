@@ -20,7 +20,7 @@ class StableDiffusion(nn.Module):
                 print(f'[INFO] loaded hugging face access token from ./TOKEN!')
         except FileNotFoundError as e:
             self.token = True
-            print(f'[INFO] try to load hugging face access token from the default plase, make sure you have run `huggingface-cli login`.')
+            print(f'[INFO] try to load hugging face access token from the default place, make sure you have run `huggingface-cli login`.')
         
         self.device = device
         self.num_train_timesteps = 1000

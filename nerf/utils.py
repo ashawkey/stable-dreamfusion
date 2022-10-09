@@ -330,11 +330,11 @@ class Trainer(object):
             if rand > 0.8: 
                 shading = 'albedo'
                 ambient_ratio = 1.0
-            elif rand > 0.4: 
-                shading = 'lambertian'
-                ambient_ratio = 0.1
+            # elif rand > 0.4: 
+            #     shading = 'textureless'
+            #     ambient_ratio = 0.1
             else: 
-                shading = 'textureless'
+                shading = 'lambertian'
                 ambient_ratio = 0.1
 
         # _t = time.time()
@@ -355,22 +355,24 @@ class Trainer(object):
         
         # encode pred_rgb to latents
         # _t = time.time()
-        loss_guidance = self.guidance.train_step(text_z, pred_rgb)
+        loss = self.guidance.train_step(text_z, pred_rgb)
         # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
 
         # occupancy loss
         pred_ws = outputs['weights_sum'].reshape(B, 1, H, W)
-        # mask_ws = outputs['mask'].reshape(B, 1, H, W) # near < far
 
-        # loss_ws = (pred_ws ** 2 + 0.01).sqrt().mean()
+        if self.opt.lambda_opacity > 0:
+            loss_opacity = (pred_ws ** 2).mean()
+            loss = loss + self.opt.lambda_opacity * loss_opacity
 
-        alphas = (pred_ws).clamp(1e-5, 1 - 1e-5)
-        # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
-        loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
-                
-        loss = loss_guidance + self.opt.lambda_entropy * loss_entropy
+        if self.opt.lambda_entropy > 0:
+            alphas = (pred_ws).clamp(1e-5, 1 - 1e-5)
+            # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
+            loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
+                    
+            loss = loss + self.opt.lambda_entropy * loss_entropy
 
-        if 'loss_orient' in outputs:
+        if self.opt.lambda_orient > 0 and 'loss_orient' in outputs:
             loss_orient = outputs['loss_orient']
             loss = loss + self.opt.lambda_orient * loss_orient
             
