@@ -73,14 +73,24 @@ First time running will take some time to compile the CUDA extensions.
 
 ```bash
 ### stable-dreamfusion setting
-## train with text prompt
+## train with text prompt (with the default settings)
 # `-O` equals `--cuda_ray --fp16 --dir_text`
+# `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
+# `--fp16` enables half-precision training.
+# `--dir_text` enables view-dependent prompting.
 python main.py --text "a hamburger" --workspace trial -O
 
-## after the training is finished:
-# test (exporting 360 video, and an obj mesh with png texture)
-python main.py --workspace trial -O --test
+# if the above command fails to generate things (learns an empty scene), maybe try:
+# 1. disable random lambertian shading, simply use albedo as color:
+python main.py --text "a hamburger" --workspace trial -O --albedo_iters 15000 # i.e., set --albedo_iters >= --iters, which is default to 15000
+# 2. use a smaller density regularization weight:
+python main.py --text "a hamburger" --workspace trial -O --lambda_entropy 1e-5
 
+## after the training is finished:
+# test (exporting 360 video)
+python main.py --workspace trial -O --test
+# also save a mesh (with obj, mtl, and png texture)
+python main.py --workspace trial -O --test --save_mesh
 # test with a GUI (free view control!)
 python main.py --workspace trial -O --test --gui
 
@@ -103,7 +113,7 @@ pred_rgb_512 = F.interpolate(pred_rgb, (512, 512), mode='bilinear', align_corner
 latents = self.encode_imgs(pred_rgb_512)
 ... # timestep sampling, noise adding and UNet noise predicting
 # 3. the SDS loss, since UNet part is ignored and cannot simply audodiff, we manually set the grad for latents.
-w = (1 - self.scheduler.alphas_cumprod[t]).to(self.device)
+w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])
 grad = w * (noise_pred - noise)
 latents.backward(gradient=grad, retain_graph=True)
 ```
@@ -119,7 +129,6 @@ latents.backward(gradient=grad, retain_graph=True)
         Training is faster if only sample 128 points uniformly per ray (5h --> 2.5h).
         More testing is needed...
 * Shading & normal evaluation: `./nerf/network*.py > NeRFNetwork > forward`. Current implementation harms training and is disabled.
-    * use `--albedo_iters 1000` to enable random shading mode after 1000 steps from albedo, lambertian, and textureless.
     * light direction: current implementation use a plane light source, instead of a point light source...
 * View-dependent prompting: `./nerf/provider.py > get_view_direction`.
     * ues `--angle_overhead, --angle_front` to set the border. How to better divide front/back/side regions?

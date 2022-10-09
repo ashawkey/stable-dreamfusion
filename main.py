@@ -32,7 +32,7 @@ if __name__ == '__main__':
     parser.add_argument('--upsample_steps', type=int, default=64, help="num steps up-sampled per ray (only valid when not using --cuda_ray)")
     parser.add_argument('--update_extra_interval', type=int, default=16, help="iter interval to update extra status (only valid when using --cuda_ray)")
     parser.add_argument('--max_ray_batch', type=int, default=4096, help="batch size of rays at inference to avoid OOM (only valid when not using --cuda_ray)")
-    parser.add_argument('--albedo_iters', type=int, default=15000, help="training iters that only use albedo shading")
+    parser.add_argument('--albedo_iters', type=int, default=1000, help="training iters that only use albedo shading")
     # model options
     parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
     parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
@@ -75,14 +75,14 @@ if __name__ == '__main__':
         opt.dir_text = True
         # use occupancy grid to prune ray sampling, faster rendering.
         opt.cuda_ray = True
-        opt.lambda_entropy = 1e-4
-        opt.lambda_opacity = 0
+        # opt.lambda_entropy = 1e-4
+        # opt.lambda_opacity = 0
 
     elif opt.O2:
         opt.fp16 = True
         opt.dir_text = True
-        opt.lambda_entropy = 1e-3
-        opt.lambda_opacity = 1e-3 # no occupancy grid, so use a stronger opacity loss.
+        opt.lambda_entropy = 1e-4 # necessary to keep non-empty
+        opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
