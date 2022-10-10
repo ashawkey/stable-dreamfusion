@@ -94,9 +94,9 @@ class StableDiffusion(nn.Module):
         noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
         noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
-        # w(t), alpha_t * sigma_t^2
-        # w = (1 - self.alphas[t])
-        w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])
+        # w(t), sigma_t^2
+        w = (1 - self.alphas[t])
+        # w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])
         grad = w * (noise_pred - noise)
 
         # clip grad for stable training?

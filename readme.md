@@ -17,13 +17,13 @@ This project is a **work-in-progress**, and contains lots of differences from th
 
 
 ## Notable differences from the paper
-* Since the Imagen model is not publicly available, we use [Stable Diffusion](https://github.com/CompVis/stable-diffusion) to replace it (implementation from [diffusers](https://github.com/huggingface/diffusers)). Different from Imagen, Stable-Diffusion is a latent diffusion model, which diffuses in a latent space instead of the original image space. Therefore, we need the loss to propagate back from the VAE's encoder part too, which introduces extra time cost in training. Currently, 15000 training steps take about 5 hours to train on a V100.
+* Since the Imagen model is not publicly available, we use [Stable Diffusion](https://github.com/CompVis/stable-diffusion) to replace it (implementation from [diffusers](https://github.com/huggingface/diffusers)). Different from Imagen, Stable-Diffusion is a latent diffusion model, which diffuses in a latent space instead of the original image space. Therefore, we need the loss to propagate back from the VAE's encoder part too, which introduces extra time cost in training. Currently, 10000 training steps take about 3 hours to train on a V100.
 * We use the [multi-resolution grid encoder](https://github.com/NVlabs/instant-ngp/) to implement the NeRF backbone (implementation from [torch-ngp](https://github.com/ashawkey/torch-ngp)), which enables much faster rendering (~10FPS at 800x800).
 * We use the Adam optimizer with a larger initial learning rate.
 
 
 ## TODOs
-* The normal evaluation & shading part.
+* Alleviate the multi-face [Janus problem](https://twitter.com/poolio/status/1578045212236034048).
 * Better mesh (improve the surface quality). 
 
 # Install
@@ -82,7 +82,7 @@ python main.py --text "a hamburger" --workspace trial -O
 
 # if the above command fails to generate things (learns an empty scene), maybe try:
 # 1. disable random lambertian shading, simply use albedo as color:
-python main.py --text "a hamburger" --workspace trial -O --albedo_iters 15000 # i.e., set --albedo_iters >= --iters, which is default to 15000
+python main.py --text "a hamburger" --workspace trial -O --albedo_iters 10000 # i.e., set --albedo_iters >= --iters, which is default to 10000
 # 2. use a smaller density regularization weight:
 python main.py --text "a hamburger" --workspace trial -O --lambda_entropy 1e-5
 
