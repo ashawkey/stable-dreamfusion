@@ -195,9 +195,6 @@ class Trainer(object):
         self.scheduler_update_every_step = scheduler_update_every_step
         self.device = device if device is not None else torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else 'cpu')
         self.console = Console()
-
-        # text prompt
-        ref_text = self.opt.text
     
         model.to(self.device)
         if self.world_size > 1:
@@ -208,20 +205,13 @@ class Trainer(object):
         # guide model
         self.guidance = guidance
 
+        # text prompt
         if self.guidance is not None:
-            assert ref_text is not None, 'Training must provide a text prompt!'
-
+            
             for p in self.guidance.parameters():
                 p.requires_grad = False
 
-            if not self.opt.dir_text:
-                self.text_z = self.guidance.get_text_embeds([ref_text])
-            else:
-                self.text_z = []
-                for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
-                    text = f"{ref_text}, {d} view"
-                    text_z = self.guidance.get_text_embeds([text])
-                    self.text_z.append(text_z)
+            self.prepare_text_embeddings()
         
         else:
             self.text_z = None
@@ -257,7 +247,7 @@ class Trainer(object):
             "results": [], # metrics[0], or valid_loss
             "checkpoints": [], # record path of saved ckpt, to automatically remove old ckpt
             "best_result": None,
-            }
+        }
 
         # auto fix
         if len(metrics) == 0 or self.use_loss_as_metric:
@@ -296,6 +286,23 @@ class Trainer(object):
             else: # path to ckpt
                 self.log(f"[INFO] Loading {self.use_checkpoint} ...")
                 self.load_checkpoint(self.use_checkpoint)
+
+    # calculate the text embs.
+    def prepare_text_embeddings(self):
+
+        if self.opt.text is None:
+            self.log(f"[WARN] text prompt is not provided.")
+            self.text_z = None
+            return
+
+        if not self.opt.dir_text:
+            self.text_z = self.guidance.get_text_embeds([self.opt.text])
+        else:
+            self.text_z = []
+            for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
+                text = f"{self.opt.text}, {d} view"
+                text_z = self.guidance.get_text_embeds([text])
+                self.text_z.append(text_z)
 
     def __del__(self):
         if self.log_ptr: 
@@ -447,6 +454,9 @@ class Trainer(object):
     ### ------------------------------
 
     def train(self, train_loader, valid_loader, max_epochs):
+
+        assert self.text_z is not None, 'Training must provide a text prompt!'
+
         if self.use_tensorboardX and self.local_rank == 0:
             self.writer = tensorboardX.SummaryWriter(os.path.join(self.workspace, "run", self.name))
 

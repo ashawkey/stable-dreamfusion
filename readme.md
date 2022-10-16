@@ -86,6 +86,12 @@ python main.py --text "a hamburger" --workspace trial -O --albedo_iters 10000 # 
 # 2. use a smaller density regularization weight:
 python main.py --text "a hamburger" --workspace trial -O --lambda_entropy 1e-5
 
+# you can also train in a GUI to visualize the training progress:
+python main.py --text "a hamburger" --workspace trial -O --gui
+
+# A Gradio GUI is also possible (with less options):
+python gradio_app.py # open in web browser
+
 ## after the training is finished:
 # test (exporting 360 video)
 python main.py --workspace trial -O --test
