@@ -109,16 +109,6 @@ print(f'[INFO] everything loaded!')
 trainer = None
 model = None
 
-def reset_params(m):
-
-    @torch.no_grad()
-    def _reset(m: nn.Module):
-        reset_parameters = getattr(m, "reset_parameters", None)
-        if callable(reset_parameters):
-            m.reset_parameters()
-
-    model.apply(fn=_reset)
-
 # define UI
 
 with gr.Blocks(css=".gradio-container {max-width: 512px;}") as demo:
