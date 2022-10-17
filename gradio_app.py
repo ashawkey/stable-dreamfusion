@@ -111,7 +111,7 @@ model = None
 
 # define UI
 
-with gr.Blocks(css=".gradio-container {max-width: 512px;}") as demo:
+with gr.Blocks(css=".gradio-container {max-width: 512px; margin: auto;}") as demo:
 
     # title
     gr.Markdown('[Stable-DreamFusion](https://github.com/ashawkey/stable-dreamfusion) Text-to-3D Example')
