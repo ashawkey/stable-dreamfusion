@@ -23,7 +23,9 @@ class CLIP(nn.Module):
         # self.gaussian_blur = T.GaussianBlur(15, sigma=(0.1, 10))
 
     
-    def get_text_embeds(self, prompt):
+    def get_text_embeds(self, prompt, negative_prompt):
+
+        # NOTE: negative_prompt is ignored for CLIP.
 
         text = clip.tokenize(prompt).to(self.device)
         text_z = self.clip_model.encode_text(text)

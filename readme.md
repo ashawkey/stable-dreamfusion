@@ -44,9 +44,6 @@ pip install -r requirements.txt
 # (optional) install nvdiffrast for exporting textured mesh (--save_mesh)
 pip install git+https://github.com/NVlabs/nvdiffrast/
 
-# (optional) install the tcnn backbone if using --tcnn
-pip install git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
-
 # (optional) install CLIP guidance for the dreamfield setting
 pip install git+https://github.com/openai/CLIP.git
 
@@ -79,6 +76,9 @@ First time running will take some time to compile the CUDA extensions.
 # `--fp16` enables half-precision training.
 # `--dir_text` enables view-dependent prompting.
 python main.py --text "a hamburger" --workspace trial -O
+
+# we also support negative text prompt now:
+python main.py --text "a rose" --negative "red" --workspace trial -O
 
 # if the above command fails to generate things (learns an empty scene), maybe try:
 # 1. disable random lambertian shading, simply use albedo as color:
@@ -138,7 +138,7 @@ latents.backward(gradient=grad, retain_graph=True)
     * light direction: current implementation use a plane light source, instead of a point light source...
 * View-dependent prompting: `./nerf/provider.py > get_view_direction`.
     * ues `--angle_overhead, --angle_front` to set the border. How to better divide front/back/side regions?
-* Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option, but `tcnn` and `vanilla` are not well tested.
+* Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option, but `vanilla` is not well tested.
 * Spatial density bias (gaussian density blob): `./nerf/network*.py > NeRFNetwork > gaussian`.
 
 # Acknowledgement

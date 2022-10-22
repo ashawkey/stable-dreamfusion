@@ -10,6 +10,12 @@ import torch.nn.functional as F
 
 import time
 
+def seed_everything(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    #torch.backends.cudnn.deterministic = True
+    #torch.backends.cudnn.benchmark = True
+
 class StableDiffusion(nn.Module):
     def __init__(self, device):
         super().__init__()
@@ -30,14 +36,14 @@ class StableDiffusion(nn.Module):
         print(f'[INFO] loading stable diffusion...')
                 
         # 1. Load the autoencoder model which will be used to decode the latents into image space. 
-        self.vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae", use_auth_token=self.token).to(self.device)
+        self.vae = AutoencoderKL.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="vae", use_auth_token=self.token).to(self.device)
 
         # 2. Load the tokenizer and text encoder to tokenize and encode the text. 
         self.tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
         self.text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14").to(self.device)
 
         # 3. The UNet model for generating the latents.
-        self.unet = UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="unet", use_auth_token=self.token).to(self.device)
+        self.unet = UNet2DConditionModel.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="unet", use_auth_token=self.token).to(self.device)
 
         # 4. Create a scheduler for inference
         self.scheduler = PNDMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=self.num_train_timesteps)
@@ -45,7 +51,9 @@ class StableDiffusion(nn.Module):
 
         print(f'[INFO] loaded stable diffusion!')
 
-    def get_text_embeds(self, prompt):
+    def get_text_embeds(self, prompt, negative_prompt):
+        # prompt, negative_prompt: [str]
+
         # Tokenize text and get embeddings
         text_input = self.tokenizer(prompt, padding='max_length', max_length=self.tokenizer.model_max_length, truncation=True, return_tensors='pt')
 
@@ -53,7 +61,7 @@ class StableDiffusion(nn.Module):
             text_embeddings = self.text_encoder(text_input.input_ids.to(self.device))[0]
 
         # Do the same for unconditional embeddings
-        uncond_input = self.tokenizer([''] * len(prompt), padding='max_length', max_length=self.tokenizer.model_max_length, return_tensors='pt')
+        uncond_input = self.tokenizer(negative_prompt, padding='max_length', max_length=self.tokenizer.model_max_length, return_tensors='pt')
 
         with torch.no_grad():
             uncond_embeddings = self.text_encoder(uncond_input.input_ids.to(self.device))[0]
@@ -155,13 +163,16 @@ class StableDiffusion(nn.Module):
 
         return latents
 
-    def prompt_to_img(self, prompts, height=512, width=512, num_inference_steps=50, guidance_scale=7.5, latents=None):
+    def prompt_to_img(self, prompts, negative_prompts='', height=512, width=512, num_inference_steps=50, guidance_scale=7.5, latents=None):
 
         if isinstance(prompts, str):
             prompts = [prompts]
+        
+        if isinstance(negative_prompts, str):
+            negative_prompts = [negative_prompts]
 
         # Prompts -> text embeds
-        text_embeds = self.get_text_embeds(prompts) # [2, 77, 768]
+        text_embeds = self.get_text_embeds(prompts, negative_prompts) # [2, 77, 768]
 
         # Text embeds -> img latents
         latents = self.produce_latents(text_embeds, height=height, width=width, latents=latents, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale) # [1, 4, 64, 64]
@@ -183,16 +194,20 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('prompt', type=str)
+    parser.add_argument('--negative', default='', type=str)
     parser.add_argument('-H', type=int, default=512)
     parser.add_argument('-W', type=int, default=512)
+    parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--steps', type=int, default=50)
     opt = parser.parse_args()
+
+    seed_everything(opt.seed)
 
     device = torch.device('cuda')
 
     sd = StableDiffusion(device)
 
-    imgs = sd.prompt_to_img(opt.prompt, opt.H, opt.W, opt.steps)
+    imgs = sd.prompt_to_img(opt.prompt, opt.negative, opt.H, opt.W, opt.steps)
 
     # visualize image
     plt.imshow(imgs[0])

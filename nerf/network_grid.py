@@ -46,7 +46,7 @@ class NeRFNetwork(NeRFRenderer):
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
 
-        self.encoder, self.in_dim = get_encoder('tiledgrid', input_dim=3, desired_resolution=2048 * self.bound)
+        self.encoder, self.in_dim = get_encoder('tiledgrid', input_dim=3, log2_hashmap_size=16, desired_resolution=2048 * self.bound)
 
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True)
 
@@ -103,6 +103,16 @@ class NeRFNetwork(NeRFRenderer):
         ], dim=-1)
 
         return normal
+
+
+    def normal(self, x):
+
+        normal = self.finite_difference_normal(x)
+        normal = safe_normalize(normal)
+        normal[torch.isnan(normal)] = 0
+
+        return normal
+
     
     def forward(self, x, d, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
@@ -119,17 +129,7 @@ class NeRFNetwork(NeRFRenderer):
             # query normal
 
             sigma, albedo = self.common_forward(x)
-            normal = self.finite_difference_normal(x)
-
-            # with torch.enable_grad():
-            #     x.requires_grad_(True)
-            #     sigma, albedo = self.common_forward(x)
-            #     # query gradient
-            #     normal = - torch.autograd.grad(torch.sum(sigma), x, create_graph=True)[0] # [N, 3]
-
-            # normalize...
-            normal = safe_normalize(normal)
-            normal[torch.isnan(normal)] = 0
+            normal = self.normal(x)
 
             # lambertian shading
             lambertian = ratio + (1 - ratio) * (normal @ -l).clamp(min=0) # [N,]

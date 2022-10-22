@@ -296,12 +296,26 @@ class Trainer(object):
             return
 
         if not self.opt.dir_text:
-            self.text_z = self.guidance.get_text_embeds([self.opt.text])
+            self.text_z = self.guidance.get_text_embeds([self.opt.text], [self.opt.negative])
         else:
             self.text_z = []
             for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
+                # construct dir-encoded text
                 text = f"{self.opt.text}, {d} view"
-                text_z = self.guidance.get_text_embeds([text])
+
+                negative_text = f"{self.opt.negative}"
+
+                # explicit negative dir-encoded text
+                if self.opt.negative_dir_text:
+                    if negative_text != '': negative_text += ', '
+
+                    if d == 'back': negative_text += "front view"
+                    elif d == 'front': negative_text += "back view"
+                    elif d == 'side': negative_text += "front view, back view"
+                    elif d == 'overhead': negative_text += "bottom view"
+                    elif d == 'bottom': negative_text += "overhead view"
+                
+                text_z = self.guidance.get_text_embeds([text], [negative_text])
                 self.text_z.append(text_z)
 
     def __del__(self):
@@ -382,6 +396,10 @@ class Trainer(object):
         if self.opt.lambda_orient > 0 and 'loss_orient' in outputs:
             loss_orient = outputs['loss_orient']
             loss = loss + self.opt.lambda_orient * loss_orient
+
+        if self.opt.lambda_smooth > 0 and 'loss_smooth' in outputs:
+            loss_smooth = outputs['loss_smooth']
+            loss = loss + self.opt.lambda_smooth * loss_smooth
             
         return pred_rgb, pred_ws, loss
 

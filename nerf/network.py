@@ -97,6 +97,19 @@ class NeRFNetwork(NeRFRenderer):
 
         return normal
     
+    def normal(self, x):
+
+        with torch.enable_grad():
+            x.requires_grad_(True)
+            sigma, albedo = self.common_forward(x)
+            # query gradient
+            normal = - torch.autograd.grad(torch.sum(sigma), x, create_graph=True)[0] # [N, 3]
+
+        # normalize...
+        normal = safe_normalize(normal)
+        normal[torch.isnan(normal)] = 0
+        return normal
+        
     def forward(self, x, d, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], view direction, nomalized in [-1, 1]

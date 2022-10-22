@@ -13,6 +13,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--text', default=None, help="text prompt")
+    parser.add_argument('--negative', default='', type=str, help="negative text prompt")
     parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray --dir_text")
     parser.add_argument('-O2', action='store_true', help="equals --fp16 --dir_text")
     parser.add_argument('--test', action='store_true', help="test mode")
@@ -38,7 +39,7 @@ if __name__ == '__main__':
     parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
     # network backbone
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
-    parser.add_argument('--backbone', type=str, default='grid', help="nerf backbone, choose from [grid, tcnn, vanilla]")
+    parser.add_argument('--backbone', type=str, default='grid', help="nerf backbone, choose from [grid, vanilla]")
     # rendering resolution in training, decrease this if CUDA OOM.
     parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
     parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
@@ -51,12 +52,14 @@ if __name__ == '__main__':
     parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
     parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 70], help="training camera fovy range")
     parser.add_argument('--dir_text', action='store_true', help="direction-encode the text prompt, by appending front/side/back/overhead view")
+    parser.add_argument('--negative_dir_text', action='store_true', help="also use negative dir text prompt.")
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
 
     parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
+    parser.add_argument('--lambda_smooth', type=float, default=0, help="loss scale for orientation")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -73,21 +76,22 @@ if __name__ == '__main__':
     if opt.O:
         opt.fp16 = True
         opt.dir_text = True
-        # use occupancy grid to prune ray sampling, faster rendering.
+        opt.negative_dir_text = True
         opt.cuda_ray = True
+
         # opt.lambda_entropy = 1e-4
         # opt.lambda_opacity = 0
 
     elif opt.O2:
         opt.fp16 = True
         opt.dir_text = True
+        opt.negative_dir_text = True
+
         opt.lambda_entropy = 1e-4 # necessary to keep non-empty
         opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
-    elif opt.backbone == 'tcnn':
-        from nerf.network_tcnn import NeRFNetwork
     elif opt.backbone == 'grid':
         from nerf.network_grid import NeRFNetwork
     else:

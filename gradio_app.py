@@ -37,7 +37,7 @@ parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, u
 parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
 # network backbone
 parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
-parser.add_argument('--backbone', type=str, default='grid', help="nerf backbone, choose from [grid, tcnn, vanilla]")
+parser.add_argument('--backbone', type=str, default='grid', help="nerf backbone, choose from [grid, vanilla]")
 # rendering resolution in training, decrease this if CUDA OOM.
 parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
 parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
@@ -78,8 +78,6 @@ opt.cuda_ray = True
 
 if opt.backbone == 'vanilla':
     from nerf.network import NeRFNetwork
-elif opt.backbone == 'tcnn':
-    from nerf.network_tcnn import NeRFNetwork
 elif opt.backbone == 'grid':
     from nerf.network_grid import NeRFNetwork
 else:

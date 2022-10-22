@@ -399,13 +399,16 @@ class NeRFRenderer(nn.Module):
         sigmas, rgbs, normals = self(xyzs.reshape(-1, 3), dirs.reshape(-1, 3), light_d, ratio=ambient_ratio, shading=shading)
         rgbs = rgbs.view(N, -1, 3) # [N, T+t, 3]
 
-        #print(xyzs.shape, 'valid_rgb:', mask.sum().item())
-        # orientation loss
         if normals is not None:
+            # orientation loss
             normals = normals.view(N, -1, 3)
-            # print(weights.shape, normals.shape, dirs.shape)
             loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
             results['loss_orient'] = loss_orient.mean()
+
+            # surface normal smoothness
+            normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2).view(N, -1, 3)
+            loss_smooth = (normals - normals_perturb).abs()
+            results['loss_smooth'] = loss_smooth.mean()
 
         # calculate weight_sum (mask)
         weights_sum = weights.sum(dim=-1) # [N]
@@ -478,11 +481,17 @@ class NeRFRenderer(nn.Module):
 
             weights_sum, depth, image = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, T_thresh)
 
-            # orientation loss
+            # normals related regularizations
             if normals is not None:
+                # orientation loss
                 weights = 1 - torch.exp(-sigmas)
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
+
+                # surface normal smoothness
+                normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2)
+                loss_smooth = (normals - normals_perturb).abs()
+                results['loss_smooth'] = loss_smooth.mean()
 
         else:
            
