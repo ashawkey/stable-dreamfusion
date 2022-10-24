@@ -87,8 +87,8 @@ if __name__ == '__main__':
         opt.dir_text = True
         opt.negative_dir_text = True
 
-        opt.lambda_entropy = 1e-4 # necessary to keep non-empty
-        opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
+        # opt.lambda_entropy = 1e-4 # necessary to keep non-empty
+        # opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
