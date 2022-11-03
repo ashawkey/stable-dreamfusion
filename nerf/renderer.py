@@ -403,7 +403,7 @@ class NeRFRenderer(nn.Module):
             # orientation loss
             normals = normals.view(N, -1, 3)
             loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
-            results['loss_orient'] = loss_orient.mean()
+            results['loss_orient'] = loss_orient.sum(-1).mean()
 
             # surface normal smoothness
             normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2).view(N, -1, 3)
@@ -483,7 +483,7 @@ class NeRFRenderer(nn.Module):
 
             # normals related regularizations
             if normals is not None:
-                # orientation loss
+                # orientation loss (not very exact in cuda ray mode)
                 weights = 1 - torch.exp(-sigmas)
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()

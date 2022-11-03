@@ -80,7 +80,7 @@ python main.py --text "a hamburger" --workspace trial -O
 # we also support negative text prompt now:
 python main.py --text "a rose" --negative "red" --workspace trial -O
 
-# if the above command fails to generate things (learns an empty scene), maybe try:
+# if the above command fails to generate meaningful things (learns an empty scene), maybe try:
 # 1. disable random lambertian shading, simply use albedo as color:
 python main.py --text "a hamburger" --workspace trial -O --albedo_iters 10000 # i.e., set --albedo_iters >= --iters, which is default to 10000
 # 2. use a smaller density regularization weight:

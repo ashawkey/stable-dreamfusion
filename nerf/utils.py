@@ -306,14 +306,14 @@ class Trainer(object):
                 negative_text = f"{self.opt.negative}"
 
                 # explicit negative dir-encoded text
-                if self.opt.negative_dir_text:
+                if self.opt.suppress_face:
                     if negative_text != '': negative_text += ', '
 
-                    if d == 'back': negative_text += "front view"
-                    elif d == 'front': negative_text += "back view"
-                    elif d == 'side': negative_text += "front view, back view"
-                    elif d == 'overhead': negative_text += "bottom view"
-                    elif d == 'bottom': negative_text += "overhead view"
+                    if d == 'back': negative_text += "face"
+                    # elif d == 'front': negative_text += ""
+                    elif d == 'side': negative_text += "face"
+                    elif d == 'overhead': negative_text += "face"
+                    elif d == 'bottom': negative_text += "face"
                 
                 text_z = self.guidance.get_text_embeds([text], [negative_text])
                 self.text_z.append(text_z)
@@ -351,9 +351,9 @@ class Trainer(object):
             if rand > 0.8: 
                 shading = 'albedo'
                 ambient_ratio = 1.0
-            # elif rand > 0.4: 
-            #     shading = 'textureless'
-            #     ambient_ratio = 0.1
+            elif rand > 0.4: 
+                shading = 'textureless'
+                ambient_ratio = 0.1
             else: 
                 shading = 'lambertian'
                 ambient_ratio = 0.1

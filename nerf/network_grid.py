@@ -102,7 +102,7 @@ class NeRFNetwork(NeRFRenderer):
             0.5 * (dz_pos - dz_neg) / epsilon
         ], dim=-1)
 
-        return normal
+        return -normal
 
 
     def normal(self, x):
@@ -132,7 +132,7 @@ class NeRFNetwork(NeRFRenderer):
             normal = self.normal(x)
 
             # lambertian shading
-            lambertian = ratio + (1 - ratio) * (normal @ -l).clamp(min=0) # [N,]
+            lambertian = ratio + (1 - ratio) * (normal @ l).clamp(min=0) # [N,]
 
             if shading == 'textureless':
                 color = lambertian.unsqueeze(-1).repeat(1, 3)

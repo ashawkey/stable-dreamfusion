@@ -52,7 +52,7 @@ if __name__ == '__main__':
     parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
     parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 70], help="training camera fovy range")
     parser.add_argument('--dir_text', action='store_true', help="direction-encode the text prompt, by appending front/side/back/overhead view")
-    parser.add_argument('--negative_dir_text', action='store_true', help="also use negative dir text prompt.")
+    parser.add_argument('--suppress_face', action='store_true', help="also use negative dir text prompt.")
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
 
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     if opt.O:
         opt.fp16 = True
         opt.dir_text = True
-        opt.negative_dir_text = True
+        # opt.suppress_face = True
         opt.cuda_ray = True
 
         # opt.lambda_entropy = 1e-4
@@ -85,7 +85,7 @@ if __name__ == '__main__':
     elif opt.O2:
         opt.fp16 = True
         opt.dir_text = True
-        opt.negative_dir_text = True
+        # opt.suppress_face = True
 
         # opt.lambda_entropy = 1e-4 # necessary to keep non-empty
         # opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
