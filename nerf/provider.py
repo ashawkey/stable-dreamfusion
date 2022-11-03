@@ -55,7 +55,7 @@ def get_view_direction(thetas, phis, overhead, front):
     return res
 
 
-def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 100], phi_range=[0, 360], return_dirs=False, angle_overhead=30, angle_front=60, jitter=False):
+def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 100], phi_range=[0, 360], return_dirs=False, angle_overhead=30, angle_front=60, jitter=False, uniform_sphere_rate=0.5):
     ''' generate random poses from an orbit camera
     Args:
         size: batch size of generated poses.
@@ -73,14 +73,27 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 100], phi_ra
     angle_front = np.deg2rad(angle_front)
     
     radius = torch.rand(size, device=device) * (radius_range[1] - radius_range[0]) + radius_range[0]
-    thetas = torch.rand(size, device=device) * (theta_range[1] - theta_range[0]) + theta_range[0]
-    phis = torch.rand(size, device=device) * (phi_range[1] - phi_range[0]) + phi_range[0]
 
-    centers = torch.stack([
-        radius * torch.sin(thetas) * torch.sin(phis),
-        radius * torch.cos(thetas),
-        radius * torch.sin(thetas) * torch.cos(phis),
-    ], dim=-1) # [B, 3]
+    if random.random() < uniform_sphere_rate:
+        unit_centers = torch.nn.functional.normalize(
+            torch.stack([
+                (torch.rand(size, device=device) - 0.5) * 2.0,
+                (torch.rand(size, device=device) - 0.5) * 2.0,
+                torch.rand(size, device=device)
+            ], dim=-1), p=2.0, dim = 1
+        )
+        thetas = torch.acos(unit_centers[:,1])
+        phis = torch.atan2(unit_centers[:,0], unit_centers[:,2])
+        centers = unit_centers * radius
+    else:
+        thetas = torch.rand(size, device=device) * (theta_range[1] - theta_range[0]) + theta_range[0]
+        phis = torch.rand(size, device=device) * (phi_range[1] - phi_range[0]) + phi_range[0]
+
+        centers = torch.stack([
+            radius * torch.sin(thetas) * torch.sin(phis),
+            radius * torch.cos(thetas),
+            radius * torch.sin(thetas) * torch.cos(phis),
+        ], dim=-1) # [B, 3]
 
     targets = 0
 
@@ -177,7 +190,7 @@ class NeRFDataset:
 
         if self.training:
             # random pose on the fly
-            poses, dirs = rand_poses(B, self.device, radius_range=self.radius_range, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose)
+            poses, dirs = rand_poses(B, self.device, radius_range=self.radius_range, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose, uniform_sphere_rate=self.opt.uniform_sphere_rate)
 
             # random focal
             fov = random.random() * (self.fovy_range[1] - self.fovy_range[0]) + self.fovy_range[0]
