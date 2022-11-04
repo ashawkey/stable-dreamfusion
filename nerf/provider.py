@@ -78,8 +78,8 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 100], phi_ra
         unit_centers = torch.nn.functional.normalize(
             torch.stack([
                 (torch.rand(size, device=device) - 0.5) * 2.0,
+                torch.rand(size, device=device),
                 (torch.rand(size, device=device) - 0.5) * 2.0,
-                torch.rand(size, device=device)
             ], dim=-1), p=2.0, dim = 1
         )
         thetas = torch.acos(unit_centers[:,1])
