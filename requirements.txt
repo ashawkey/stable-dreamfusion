@@ -19,3 +19,5 @@ xatlas
 scikit-learn
 imageio
 imageio-ffmpeg
+accelerate
+tensorboard
