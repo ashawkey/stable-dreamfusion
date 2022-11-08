@@ -28,7 +28,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1e-3, help="initial learning rate")
     parser.add_argument('--ckpt', type=str, default='latest')
     parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
-    parser.add_argument('--max_steps', type=int, default=1024, help="max num steps sampled per ray (only valid when using --cuda_ray)")
+    parser.add_argument('--max_steps', type=int, default=512, help="max num steps sampled per ray (only valid when using --cuda_ray)")
     parser.add_argument('--num_steps', type=int, default=64, help="num steps sampled per ray (only valid when not using --cuda_ray)")
     parser.add_argument('--upsample_steps', type=int, default=64, help="num steps up-sampled per ray (only valid when not using --cuda_ray)")
     parser.add_argument('--update_extra_interval', type=int, default=16, help="iter interval to update extra status (only valid when using --cuda_ray)")
@@ -80,19 +80,17 @@ if __name__ == '__main__':
         # opt.suppress_face = True
         opt.cuda_ray = True
 
-        # opt.lambda_entropy = 1e-4
-        # opt.lambda_opacity = 0
-
     elif opt.O2:
         opt.fp16 = True
         opt.dir_text = True
         # opt.suppress_face = True
 
-        # opt.lambda_entropy = 1e-4 # necessary to keep non-empty
-        # opt.lambda_opacity = 3e-3 # no occupancy grid, so use a stronger opacity loss.
-
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
+
+        opt.lambda_entropy = 0
+        opt.lambda_opacity = 1e-3
+
     elif opt.backbone == 'grid':
         from nerf.network_grid import NeRFNetwork
     else:
