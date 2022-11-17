@@ -4,6 +4,8 @@ A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the
 
 The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
 
+**NEW**: a **pure pytorch** version is also supported now by using `-O2` (no needs to build CUDA extensions, although needs more GPU memory).
+
 Colab notebooks: 
 * Instant-NGP backbone (`-O`): [![Instant-NGP Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1MXT3yfOFvO0ooKEfiUUvTKwUkrrlCHpF?usp=sharing)
 
@@ -17,8 +19,6 @@ https://user-images.githubusercontent.com/25863658/194241493-f3e68f78-aefe-479e-
 
 # Important Notice
 This project is a **work-in-progress**, and contains lots of differences from the paper. Also, many features are still not implemented now. **The current generation quality cannot match the results from the original paper, and many prompts still fail badly!** 
-
-**NEWS**: a **pure pytorch** version is also supported now by using `-O2` (no needs to build CUDA extensions, although needs more GPU memory).
 
 ## Notable differences from the paper
 * Since the Imagen model is not publicly available, we use [Stable Diffusion](https://github.com/CompVis/stable-diffusion) to replace it (implementation from [diffusers](https://github.com/huggingface/diffusers)). Different from Imagen, Stable-Diffusion is a latent diffusion model, which diffuses in a latent space instead of the original image space. Therefore, we need the loss to propagate back from the VAE's encoder part too, which introduces extra time cost in training. Currently, 10000 training steps take about 3 hours to train on a V100.
