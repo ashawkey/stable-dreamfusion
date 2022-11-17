@@ -117,12 +117,12 @@ if __name__ == '__main__':
             gui.render()
         
         else:
-            # don't save video again if exporting mesh
+            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
+            trainer.test(test_loader)
+            
             if opt.save_mesh:
                 trainer.save_mesh(resolution=256)
-            else:
-                test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
-                trainer.test(test_loader)
+            
     
     else:
         
@@ -156,12 +156,3 @@ if __name__ == '__main__':
 
             max_epoch = np.ceil(opt.iters / len(train_loader)).astype(np.int32)
             trainer.train(train_loader, valid_loader, max_epoch)
-
-            # also test
-            torch.cuda.empty_cache()
-
-            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
-            trainer.test(test_loader)
-
-            if opt.save_mesh:
-                trainer.save_mesh(resolution=256)
