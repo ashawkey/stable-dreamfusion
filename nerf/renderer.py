@@ -48,6 +48,32 @@ def sample_pdf(bins, weights, n_samples, det=False):
 
     return samples
 
+@torch.cuda.amp.autocast(enabled=False)
+def near_far_from_bound(rays_o, rays_d, bound, type='cube', min_near=0.05):
+    # rays: [B, N, 3], [B, N, 3]
+    # bound: int, radius for ball or half-edge-length for cube
+    # return near [B, N, 1], far [B, N, 1]
+
+    radius = rays_o.norm(dim=-1, keepdim=True)
+
+    if type == 'sphere':
+        near = radius - bound # [B, N, 1]
+        far = radius + bound
+
+    elif type == 'cube':
+        tmin = (-bound - rays_o) / (rays_d + 1e-15) # [B, N, 3]
+        tmax = (bound - rays_o) / (rays_d + 1e-15)
+        near = torch.where(tmin < tmax, tmin, tmax).max(dim=-1, keepdim=True)[0]
+        far = torch.where(tmin > tmax, tmin, tmax).min(dim=-1, keepdim=True)[0]
+        # if far < near, means no intersection, set both near and far to inf (1e9 here)
+        mask = far < near
+        near[mask] = 1e9
+        far[mask] = 1e9
+        # restrict near to a minimal value
+        near = torch.clamp(near, min=min_near)
+
+    return near, far
+
 
 def plot_pointcloud(pc, color=None):
     # pc: [N, 3]
@@ -124,7 +150,10 @@ class NeRFRenderer(nn.Module):
         if resolution is None:
             resolution = self.grid_size
 
-        density_thresh = min(self.mean_density, self.density_thresh)
+        if self.cuda_ray:
+            density_thresh = min(self.mean_density, self.density_thresh)
+        else:
+            density_thresh = self.density_thresh
 
         sigmas = np.zeros([resolution, resolution, resolution], dtype=np.float32)
 
@@ -138,7 +167,7 @@ class NeRFRenderer(nn.Module):
                 for zi, zs in enumerate(Z):
                     xx, yy, zz = custom_meshgrid(xs, ys, zs)
                     pts = torch.cat([xx.reshape(-1, 1), yy.reshape(-1, 1), zz.reshape(-1, 1)], dim=-1) # [S, 3]
-                    val = self.density(pts.to(self.density_bitfield.device))
+                    val = self.density(pts.to(self.aabb_train.device))
                     sigmas[xi * S: xi * S + len(xs), yi * S: yi * S + len(ys), zi * S: zi * S + len(zs)] = val['sigma'].reshape(len(xs), len(ys), len(zs)).detach().cpu().numpy() # [S, 1] --> [x, y, z]
 
         vertices, triangles = mcubes.marching_cubes(sigmas, density_thresh)
@@ -147,8 +176,8 @@ class NeRFRenderer(nn.Module):
         vertices = vertices.astype(np.float32)
         triangles = triangles.astype(np.int32)
 
-        v = torch.from_numpy(vertices).to(self.density_bitfield.device)
-        f = torch.from_numpy(triangles).int().to(self.density_bitfield.device)
+        v = torch.from_numpy(vertices).to(self.aabb_train.device)
+        f = torch.from_numpy(triangles).int().to(self.aabb_train.device)
 
         # mesh = trimesh.Trimesh(vertices, triangles, process=False) # important, process=True leads to seg fault...
         # mesh.export(os.path.join(path, f'mesh.ply'))
@@ -316,9 +345,10 @@ class NeRFRenderer(nn.Module):
         aabb = self.aabb_train if self.training else self.aabb_infer
 
         # sample steps
-        nears, fars = raymarching.near_far_from_aabb(rays_o, rays_d, aabb, self.min_near)
-        nears.unsqueeze_(-1)
-        fars.unsqueeze_(-1)
+        # nears, fars = raymarching.near_far_from_aabb(rays_o, rays_d, aabb, self.min_near)
+        # nears.unsqueeze_(-1)
+        # fars.unsqueeze_(-1)
+        nears, fars = near_far_from_bound(rays_o, rays_d, self.bound, type='sphere', min_near=self.min_near)
 
         # random sample light_d if not provided
         if light_d is None:
@@ -569,9 +599,9 @@ class NeRFRenderer(nn.Module):
         ### update density grid
         tmp_grid = - torch.ones_like(self.density_grid)
         
-        X = torch.arange(self.grid_size, dtype=torch.int32, device=self.density_bitfield.device).split(S)
-        Y = torch.arange(self.grid_size, dtype=torch.int32, device=self.density_bitfield.device).split(S)
-        Z = torch.arange(self.grid_size, dtype=torch.int32, device=self.density_bitfield.device).split(S)
+        X = torch.arange(self.grid_size, dtype=torch.int32, device=self.aabb_train.device).split(S)
+        Y = torch.arange(self.grid_size, dtype=torch.int32, device=self.aabb_train.device).split(S)
+        Z = torch.arange(self.grid_size, dtype=torch.int32, device=self.aabb_train.device).split(S)
 
         for xs in X:
             for ys in Y:

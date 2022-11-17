@@ -6,11 +6,23 @@ import torch.nn as nn
 from torch.autograd import Function
 from torch.cuda.amp import custom_bwd, custom_fwd
 
-try:
-    import _raymarching as _backend
-except ImportError:
-    from .backend import _backend
+# lazy building: 
+# `import raymarching` will not immediately build the extension, only if you actually call any functions.
 
+BACKEND = None
+
+def get_backend():
+    global BACKEND
+
+    if BACKEND is None:
+        try:
+            import _raymarching as _backend
+        except ImportError:
+            from .backend import _backend
+
+        BACKEND = _backend
+    
+    return BACKEND
 
 # ----------------------------------------
 # utils
@@ -42,7 +54,7 @@ class _near_far_from_aabb(Function):
         nears = torch.empty(N, dtype=rays_o.dtype, device=rays_o.device)
         fars = torch.empty(N, dtype=rays_o.dtype, device=rays_o.device)
 
-        _backend.near_far_from_aabb(rays_o, rays_d, aabb, N, min_near, nears, fars)
+        get_backend().near_far_from_aabb(rays_o, rays_d, aabb, N, min_near, nears, fars)
 
         return nears, fars
 
@@ -73,7 +85,7 @@ class _sph_from_ray(Function):
 
         coords = torch.empty(N, 2, dtype=rays_o.dtype, device=rays_o.device)
 
-        _backend.sph_from_ray(rays_o, rays_d, radius, N, coords)
+        get_backend().sph_from_ray(rays_o, rays_d, radius, N, coords)
 
         return coords
 
@@ -97,7 +109,7 @@ class _morton3D(Function):
 
         indices = torch.empty(N, dtype=torch.int32, device=coords.device)
         
-        _backend.morton3D(coords.int(), N, indices)
+        get_backend().morton3D(coords.int(), N, indices)
 
         return indices
 
@@ -119,7 +131,7 @@ class _morton3D_invert(Function):
 
         coords = torch.empty(N, 3, dtype=torch.int32, device=indices.device)
         
-        _backend.morton3D_invert(indices.int(), N, coords)
+        get_backend().morton3D_invert(indices.int(), N, coords)
 
         return coords
 
@@ -148,7 +160,7 @@ class _packbits(Function):
         if bitfield is None:
             bitfield = torch.empty(N, dtype=torch.uint8, device=grid.device)
 
-        _backend.packbits(grid, N, thresh, bitfield)
+        get_backend().packbits(grid, N, thresh, bitfield)
 
         return bitfield
 
@@ -215,7 +227,7 @@ class _march_rays_train(Function):
         else:
             noises = torch.zeros(N, dtype=rays_o.dtype, device=rays_o.device)
         
-        _backend.march_rays_train(rays_o, rays_d, density_bitfield, bound, dt_gamma, max_steps, N, C, H, M, nears, fars, xyzs, dirs, deltas, rays, step_counter, noises) # m is the actually used points number
+        get_backend().march_rays_train(rays_o, rays_d, density_bitfield, bound, dt_gamma, max_steps, N, C, H, M, nears, fars, xyzs, dirs, deltas, rays, step_counter, noises) # m is the actually used points number
 
         #print(step_counter, M)
 
@@ -261,7 +273,7 @@ class _composite_rays_train(Function):
         depth = torch.empty(N, dtype=sigmas.dtype, device=sigmas.device)
         image = torch.empty(N, 3, dtype=sigmas.dtype, device=sigmas.device)
 
-        _backend.composite_rays_train_forward(sigmas, rgbs, deltas, rays, M, N, T_thresh, weights_sum, depth, image)
+        get_backend().composite_rays_train_forward(sigmas, rgbs, deltas, rays, M, N, T_thresh, weights_sum, depth, image)
 
         ctx.save_for_backward(sigmas, rgbs, deltas, rays, weights_sum, depth, image)
         ctx.dims = [M, N, T_thresh]
@@ -283,7 +295,7 @@ class _composite_rays_train(Function):
         grad_sigmas = torch.zeros_like(sigmas)
         grad_rgbs = torch.zeros_like(rgbs)
 
-        _backend.composite_rays_train_backward(grad_weights_sum, grad_image, sigmas, rgbs, deltas, rays, weights_sum, image, M, N, T_thresh, grad_sigmas, grad_rgbs)
+        get_backend().composite_rays_train_backward(grad_weights_sum, grad_image, sigmas, rgbs, deltas, rays, weights_sum, image, M, N, T_thresh, grad_sigmas, grad_rgbs)
 
         return grad_sigmas, grad_rgbs, None, None, None
 
@@ -341,7 +353,7 @@ class _march_rays(Function):
         else:
             noises = torch.zeros(n_alive, dtype=rays_o.dtype, device=rays_o.device)
 
-        _backend.march_rays(n_alive, n_step, rays_alive, rays_t, rays_o, rays_d, bound, dt_gamma, max_steps, C, H, density_bitfield, near, far, xyzs, dirs, deltas, noises)
+        get_backend().march_rays(n_alive, n_step, rays_alive, rays_t, rays_o, rays_d, bound, dt_gamma, max_steps, C, H, density_bitfield, near, far, xyzs, dirs, deltas, noises)
 
         return xyzs, dirs, deltas
 
@@ -366,7 +378,7 @@ class _composite_rays(Function):
             depth: float, [N,], the depth value
             image: float, [N, 3], the RGB channel (after multiplying alpha!)
         '''
-        _backend.composite_rays(n_alive, n_step, T_thresh, rays_alive, rays_t, sigmas, rgbs, deltas, weights_sum, depth, image)
+        get_backend().composite_rays(n_alive, n_step, T_thresh, rays_alive, rays_t, sigmas, rgbs, deltas, weights_sum, depth, image)
         return tuple()
 
 

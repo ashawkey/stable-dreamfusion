@@ -13,6 +13,6 @@ class _trunc_exp(Function):
     @custom_bwd
     def backward(ctx, g):
         x = ctx.saved_tensors[0]
-        return g * torch.exp(x.clamp(-15, 15))
+        return g * torch.exp(x.clamp(max=15))
 
 trunc_exp = _trunc_exp.apply

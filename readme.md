@@ -15,11 +15,12 @@ https://user-images.githubusercontent.com/25863658/194241493-f3e68f78-aefe-479e-
 # Important Notice
 This project is a **work-in-progress**, and contains lots of differences from the paper. Also, many features are still not implemented now. **The current generation quality cannot match the results from the original paper, and many prompts still fail badly!** 
 
+**NEWS**: a **pure pytorch** version is also supported now by using `-O2` (no needs to build CUDA extensions, although needs more GPU memory).
 
 ## Notable differences from the paper
 * Since the Imagen model is not publicly available, we use [Stable Diffusion](https://github.com/CompVis/stable-diffusion) to replace it (implementation from [diffusers](https://github.com/huggingface/diffusers)). Different from Imagen, Stable-Diffusion is a latent diffusion model, which diffuses in a latent space instead of the original image space. Therefore, we need the loss to propagate back from the VAE's encoder part too, which introduces extra time cost in training. Currently, 10000 training steps take about 3 hours to train on a V100.
-* We use the [multi-resolution grid encoder](https://github.com/NVlabs/instant-ngp/) to implement the NeRF backbone (implementation from [torch-ngp](https://github.com/ashawkey/torch-ngp)), which enables much faster rendering (~10FPS at 800x800).
-* We use the Adam optimizer with a larger initial learning rate.
+* We use the [multi-resolution grid encoder](https://github.com/NVlabs/instant-ngp/) to implement the NeRF backbone (implementation from [torch-ngp](https://github.com/ashawkey/torch-ngp)), which enables much faster rendering (~10FPS at 800x800). The vanilla NeRF backbone is also supported now, but the Mip-NeRF backbone as the paper is still not implemented.
+* We use the Adam optimizer.
 
 
 ## TODOs
@@ -42,7 +43,7 @@ You could choose either of the following ways:
 ```bash
 pip install -r requirements.txt
 
-# (optional) install nvdiffrast for exporting textured mesh (--save_mesh)
+# (optional) install nvdiffrast for exporting textured mesh (if use --save_mesh)
 pip install git+https://github.com/NVlabs/nvdiffrast/
 
 # (optional) install CLIP guidance for the dreamfield setting
@@ -70,7 +71,14 @@ pip install ./raymarching # install to python path (you still need the raymarchi
 First time running will take some time to compile the CUDA extensions.
 
 ```bash
-### stable-dreamfusion setting
+#### stable-dreamfusion setting
+
+### Instant-NGP NeRF Backbone 
+# + faster rendering speed
+# + less GPU memory (~16G)
+# - need to build CUDA extensions
+# - worse surface quality
+
 ## train with text prompt (with the default settings)
 # `-O` equals `--cuda_ray --fp16 --dir_text`
 # `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
@@ -81,9 +89,9 @@ python main.py --text "a hamburger" --workspace trial -O
 # we also support negative text prompt now:
 python main.py --text "a rose" --negative "red" --workspace trial -O
 
-# if the above command fails to generate meaningful things (learns an empty scene), maybe try:
-# 1. disable random lambertian shading, simply use albedo as color:
-python main.py --text "a hamburger" --workspace trial -O --albedo_iters 10000 # i.e., set --albedo_iters >= --iters, which is default to 10000
+## if the above command fails to generate meaningful things (learns an empty scene), maybe try:
+# 1. disable random lambertian/textureless shading, simply use albedo as color:
+python main.py --text "a hamburger" --workspace trial -O --albedo
 # 2. use a smaller density regularization weight:
 python main.py --text "a hamburger" --workspace trial -O --lambda_entropy 1e-5
 
@@ -94,16 +102,33 @@ python main.py --text "a hamburger" --workspace trial -O --gui
 python gradio_app.py # open in web browser
 
 ## after the training is finished:
-# test (exporting 360 video)
+# test (exporting 360 degree video)
 python main.py --workspace trial -O --test
 # also save a mesh (with obj, mtl, and png texture)
 python main.py --workspace trial -O --test --save_mesh
 # test with a GUI (free view control!)
 python main.py --workspace trial -O --test --gui
 
-### dreamfields (CLIP) setting
-python main.py --text "a hamburger" --workspace trial_clip -O --guidance clip
-python main.py --text "a hamburger" --workspace trial_clip -O --test --gui --guidance clip
+### Vanilla NeRF backbone
+# + better surface quality
+# + pure pytorch, no need to build extensions!
+# - slow rendering speed
+# - more GPU memory
+
+## train
+# `-O2` equals `--dir_text --backbone vanilla`
+python main.py --text "a hotdog" --workspace trial2 -O2
+
+## if CUDA OOM, maybe try:
+# 1. only use albedo rendering, less GPU memory (~16G), train faster, but results may be worse
+python main.py --text "a hotdog" --workspace trial2 -O2 --albedo
+# 2. reduce NeRF sampling steps (--num_steps and --upsample_steps)
+python main.py --text "a hotdog" --workspace trial2 -O2 --num_steps 64 --upsample_steps 0
+
+## test
+python main.py --workspace trial2 -O2 --test
+python main.py --workspace trial2 -O2 --test --save_mesh
+python main.py --workspace trial2 -O2 --test --gui # not recommended, FPS will be low.
 ```
 
 # Code organization & Advanced tips
@@ -120,26 +145,19 @@ pred_rgb_512 = F.interpolate(pred_rgb, (512, 512), mode='bilinear', align_corner
 latents = self.encode_imgs(pred_rgb_512)
 ... # timestep sampling, noise adding and UNet noise predicting
 # 3. the SDS loss, since UNet part is ignored and cannot simply audodiff, we manually set the grad for latents.
-w = self.alphas[t] ** 0.5 * (1 - self.alphas[t])
+w = (1 - self.alphas[t])
 grad = w * (noise_pred - noise)
 latents.backward(gradient=grad, retain_graph=True)
 ```
 * Other regularizations are in `./nerf/utils.py > Trainer > train_step`. 
     * The generation seems quite sensitive to regularizations on weights_sum (alphas for each ray). The original opacity loss tends to make NeRF disappear (zero density everywhere), so we use an entropy loss to replace it for now (encourages alpha to be either 0 or 1).
-* NeRF Rendering core function: `./nerf/renderer.py > NeRFRenderer > run_cuda`.
-    * the occupancy grid based training acceleration (instant-ngp like, enabled by `--cuda_ray`) may harm the generation progress, since once a grid cell is marked as empty, rays won't pass it later...
-    * Not using `--cuda_ray` also works now:
-        ```bash
-        # `-O2` equals `--fp16 --dir_text`
-        python main.py --text "a hamburger" --workspace trial -O2 # faster training, but slower rendering
-        ```
-        Training is faster if only sample 128 points uniformly per ray (5h --> 2.5h).
-        More testing is needed...
+* NeRF Rendering core function: `./nerf/renderer.py > NeRFRenderer > run & run_cuda`.
 * Shading & normal evaluation: `./nerf/network*.py > NeRFNetwork > forward`. Current implementation harms training and is disabled.
-    * light direction: current implementation use a plane light source, instead of a point light source...
+    * light direction: current implementation use a plane light source, instead of a point light source.
 * View-dependent prompting: `./nerf/provider.py > get_view_direction`.
-    * ues `--angle_overhead, --angle_front` to set the border. How to better divide front/back/side regions?
-* Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option, but `vanilla` is not well tested.
+    * use `--angle_overhead, --angle_front` to set the border.
+    * use `--suppress_face` to add `face` as a negative prompt at all directions except `front`.
+* Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option.
 * Spatial density bias (gaussian density blob): `./nerf/network*.py > NeRFNetwork > gaussian`.
 
 # Acknowledgement

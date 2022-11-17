@@ -15,7 +15,7 @@ if __name__ == '__main__':
     parser.add_argument('--text', default=None, help="text prompt")
     parser.add_argument('--negative', default='', type=str, help="negative text prompt")
     parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray --dir_text")
-    parser.add_argument('-O2', action='store_true', help="equals --fp16 --dir_text")
+    parser.add_argument('-O2', action='store_true', help="equals --backbone vanilla --dir_text")
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--eval_interval', type=int, default=10, help="evaluate on the valid set every interval epochs")
@@ -30,9 +30,10 @@ if __name__ == '__main__':
     parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
     parser.add_argument('--max_steps', type=int, default=512, help="max num steps sampled per ray (only valid when using --cuda_ray)")
     parser.add_argument('--num_steps', type=int, default=64, help="num steps sampled per ray (only valid when not using --cuda_ray)")
-    parser.add_argument('--upsample_steps', type=int, default=64, help="num steps up-sampled per ray (only valid when not using --cuda_ray)")
+    parser.add_argument('--upsample_steps', type=int, default=32, help="num steps up-sampled per ray (only valid when not using --cuda_ray)")
     parser.add_argument('--update_extra_interval', type=int, default=16, help="iter interval to update extra status (only valid when using --cuda_ray)")
     parser.add_argument('--max_ray_batch', type=int, default=4096, help="batch size of rays at inference to avoid OOM (only valid when not using --cuda_ray)")
+    parser.add_argument('--albedo', action='store_true', help="only use albedo shading to train, overrides --albedo_iters")
     parser.add_argument('--albedo_iters', type=int, default=1000, help="training iters that only use albedo shading")
     parser.add_argument('--uniform_sphere_rate', type=float, default=0.5, help="likelihood of sampling camera location uniformly on the sphere surface area")
     # model options
@@ -60,7 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
-    parser.add_argument('--lambda_smooth', type=float, default=0, help="loss scale for orientation")
+    parser.add_argument('--lambda_smooth', type=float, default=0, help="loss scale for surface smoothness")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -77,20 +78,20 @@ if __name__ == '__main__':
     if opt.O:
         opt.fp16 = True
         opt.dir_text = True
-        # opt.suppress_face = True
         opt.cuda_ray = True
 
     elif opt.O2:
-        opt.fp16 = True
+        # only use fp16 if not evaluating normals (else lead to NaNs in training...)
+        if opt.albedo:
+            opt.fp16 = True
         opt.dir_text = True
-        # opt.suppress_face = True
+        opt.backbone = 'vanilla'
+
+    if opt.albedo:
+        opt.albedo_iters = opt.iters
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
-
-        opt.lambda_entropy = 0
-        opt.lambda_opacity = 1e-3
-
     elif opt.backbone == 'grid':
         from nerf.network_grid import NeRFNetwork
     else:
@@ -116,11 +117,12 @@ if __name__ == '__main__':
             gui.render()
         
         else:
-            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
-            trainer.test(test_loader)
-            
+            # don't save video again if exporting mesh
             if opt.save_mesh:
                 trainer.save_mesh(resolution=256)
+            else:
+                test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
+                trainer.test(test_loader)
     
     else:
         
@@ -156,6 +158,8 @@ if __name__ == '__main__':
             trainer.train(train_loader, valid_loader, max_epoch)
 
             # also test
+            torch.cuda.empty_cache()
+
             test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
             trainer.test(test_loader)
 

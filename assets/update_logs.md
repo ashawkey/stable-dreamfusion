@@ -1,3 +1,6 @@
+### 2022.11.15
+* Add the vanilla backbone that is pure-pytorch.
+
 ### 2022.10.9
 * The shading (partially) starts to work, at least it won't make scene empty. For some prompts, it shows better results (less severe Janus problem). The textureless rendering mode is still disabled.
 * Enable shading by default (--albedo_iters 1000).

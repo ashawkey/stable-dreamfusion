@@ -108,7 +108,8 @@ class StableDiffusion(nn.Module):
         grad = w * (noise_pred - noise)
 
         # clip grad for stable training?
-        # grad = grad.clamp(-1, 1)
+        # grad = grad.clamp(-10, 10)
+        grad = torch.nan_to_num(grad)
 
         # manually backward, since we omitted an item in grad and cannot simply autodiff.
         # _t = time.time()

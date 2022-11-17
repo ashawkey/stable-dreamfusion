@@ -652,7 +652,7 @@ class Trainer(object):
         with torch.no_grad():
             with torch.cuda.amp.autocast(enabled=self.fp16):
                 # here spp is used as perturb random seed!
-                preds, preds_depth = self.test_step(data, bg_color=bg_color, perturb=spp)
+                preds, preds_depth = self.test_step(data, bg_color=bg_color, perturb=False if spp == 1 else spp)
 
         if self.ema is not None:
             self.ema.restore()
@@ -883,9 +883,10 @@ class Trainer(object):
 
         else:    
             if len(self.stats["results"]) > 0:
-                if self.stats["best_result"] is None or self.stats["results"][-1] < self.stats["best_result"]:
-                    self.log(f"[INFO] New best result: {self.stats['best_result']} --> {self.stats['results'][-1]}")
-                    self.stats["best_result"] = self.stats["results"][-1]
+                # always save best since loss cannot reflect performance.
+                if True:
+                    # self.log(f"[INFO] New best result: {self.stats['best_result']} --> {self.stats['results'][-1]}")
+                    # self.stats["best_result"] = self.stats["results"][-1]
 
                     # save ema results 
                     if self.ema is not None:
