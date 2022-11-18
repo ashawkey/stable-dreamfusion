@@ -1,0 +1,47 @@
+name: Bug Report
+description: File a bug report
+title: "<title>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing a bug report, [search for an existing issue](https://github.com/ashawkey/stable-dreamfusion/issues).
+        
+        Also, ensure you are running the latest version.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Provide a clear and concise description of what the bug is.
+      placeholder: Description
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: List the steps needed to reproduce the issue.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: Describe what you expected to happen.
+      placeholder: |
+        The 'action' would do 'some amazing thing'.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Describe your environment.
+      placeholder: |
+        Ubuntu 22.04, PyTorch 1.13, CUDA 11.6
+    validations:
+      required: true
