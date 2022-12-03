@@ -1,5 +1,5 @@
 from transformers import CLIPTextModel, CLIPTokenizer, logging
-from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler
+from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler, DDIMScheduler
 
 # suppress partial model loading warning
 logging.set_verbosity_error()
@@ -17,7 +17,7 @@ def seed_everything(seed):
     #torch.backends.cudnn.benchmark = True
 
 class StableDiffusion(nn.Module):
-    def __init__(self, device):
+    def __init__(self, device, sd_version='2.0'):
         super().__init__()
 
         try:
@@ -29,24 +29,29 @@ class StableDiffusion(nn.Module):
             print(f'[INFO] try to load hugging face access token from the default place, make sure you have run `huggingface-cli login`.')
         
         self.device = device
-        self.num_train_timesteps = 1000
-        self.min_step = int(self.num_train_timesteps * 0.02)
-        self.max_step = int(self.num_train_timesteps * 0.98)
+        self.sd_version = sd_version
 
         print(f'[INFO] loading stable diffusion...')
-                
-        # 1. Load the autoencoder model which will be used to decode the latents into image space. 
-        self.vae = AutoencoderKL.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="vae", use_auth_token=self.token).to(self.device)
+        
+        if self.sd_version == '2.0':
+            model_key = "stabilityai/stable-diffusion-2-base"
+        elif self.sd_version == '1.5':
+            model_key = "runwayml/stable-diffusion-v1-5"
+        else:
+            raise ValueError(f'Stable-diffusion version {self.sd_version} not supported.')
 
-        # 2. Load the tokenizer and text encoder to tokenize and encode the text. 
-        self.tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
-        self.text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14").to(self.device)
+        # Create model
+        self.vae = AutoencoderKL.from_pretrained(model_key, subfolder="vae", use_auth_token=self.token).to(self.device)
+        self.tokenizer = CLIPTokenizer.from_pretrained(model_key, subfolder="tokenizer", use_auth_token=self.token)
+        self.text_encoder = CLIPTextModel.from_pretrained(model_key, subfolder="text_encoder", use_auth_token=self.token).to(self.device)
+        self.unet = UNet2DConditionModel.from_pretrained(model_key, subfolder="unet", use_auth_token=self.token).to(self.device)
+        
+        self.scheduler = DDIMScheduler.from_config(model_key, subfolder="scheduler")
+        # self.scheduler = PNDMScheduler.from_config(model_key, subfolder="scheduler")
 
-        # 3. The UNet model for generating the latents.
-        self.unet = UNet2DConditionModel.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="unet", use_auth_token=self.token).to(self.device)
-
-        # 4. Create a scheduler for inference
-        self.scheduler = PNDMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=self.num_train_timesteps)
+        self.num_train_timesteps = self.scheduler.config.num_train_timesteps
+        self.min_step = int(self.num_train_timesteps * 0.02)
+        self.max_step = int(self.num_train_timesteps * 0.98)
         self.alphas = self.scheduler.alphas_cumprod.to(self.device) # for convenience
 
         print(f'[INFO] loaded stable diffusion!')
@@ -196,6 +201,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('prompt', type=str)
     parser.add_argument('--negative', default='', type=str)
+    parser.add_argument('--sd_version', type=str, default='2.0', choices=['1.5', '2.0'], help="stable diffusion version")
     parser.add_argument('-H', type=int, default=512)
     parser.add_argument('-W', type=int, default=512)
     parser.add_argument('--seed', type=int, default=0)
@@ -206,7 +212,7 @@ if __name__ == '__main__':
 
     device = torch.device('cuda')
 
-    sd = StableDiffusion(device)
+    sd = StableDiffusion(device, opt.sd_version)
 
     imgs = sd.prompt_to_img(opt.prompt, opt.negative, opt.H, opt.W, opt.steps)
 

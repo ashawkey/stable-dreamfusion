@@ -41,7 +41,8 @@ if __name__ == '__main__':
     parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
     # network backbone
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
-    parser.add_argument('--backbone', type=str, default='grid', help="nerf backbone, choose from [grid, vanilla]")
+    parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla'], help="nerf backbone")
+    parser.add_argument('--sd_version', type=str, default='2.0', choices=['1.5', '2.0'], help="stable diffusion version")
     # rendering resolution in training, decrease this if CUDA OOM.
     parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
     parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
@@ -136,7 +137,7 @@ if __name__ == '__main__':
 
         if opt.guidance == 'stable-diffusion':
             from nerf.sd import StableDiffusion
-            guidance = StableDiffusion(device)
+            guidance = StableDiffusion(device, opt.sd_version)
         elif opt.guidance == 'clip':
             from nerf.clip import CLIP
             guidance = CLIP(device)

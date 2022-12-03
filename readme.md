@@ -4,7 +4,7 @@ A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the
 
 The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
 
-**NEW**: a **pure pytorch** version is also supported now by using `-O2` (no needs to build CUDA extensions, although needs more GPU memory).
+**NEW**: Stable-diffusion 2.0 base is supported!
 
 Colab notebooks: 
 * Instant-NGP backbone (`-O`): [![Instant-NGP Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1MXT3yfOFvO0ooKEfiUUvTKwUkrrlCHpF?usp=sharing)
@@ -26,9 +26,9 @@ This project is a **work-in-progress**, and contains lots of differences from th
 * We use the Adam optimizer.
 
 
-## TODOs
-* Alleviate the multi-face [Janus problem](https://twitter.com/poolio/status/1578045212236034048).
-* Better mesh (improve the surface quality). 
+## The multi-face [Janus problem](https://twitter.com/poolio/status/1578045212236034048).
+* This is likely to be caused by the text-to-2D model's capability, as discussed by [Magic3D](https://deepimagination.cc/Magic3D/) in Figure 4 and *Can single-stage optimization work with LDM prior?*.
+
 
 # Install
 
@@ -88,6 +88,9 @@ First time running will take some time to compile the CUDA extensions.
 # `--fp16` enables half-precision training.
 # `--dir_text` enables view-dependent prompting.
 python main.py --text "a hamburger" --workspace trial -O
+
+# choose stable-diffusion version (support 1.5 and 2.0, default is 2.0 now)
+python main.py --text "a hamburger" --workspace trial -O --sd_version 1.5
 
 # we also support negative text prompt now:
 python main.py --text "a rose" --negative "red" --workspace trial -O
@@ -198,3 +201,15 @@ latents.backward(gradient=grad, retain_graph=True)
     ```
 
 * The GUI is developed with [DearPyGui](https://github.com/hoffstadt/DearPyGui).
+
+# Citation
+
+If you find this work useful, a citation will be appreciated via:
+```
+@misc{stable-dreamfusion,
+    Author = {Jiaxiang Tang},
+    Year = {2022},
+    Note = {https://github.com/ashawkey/stable-dreamfusion},
+    Title = {Stable-dreamfusion: Text-to-3D with Stable-diffusion}
+}
+```

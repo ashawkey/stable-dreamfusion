@@ -1,3 +1,6 @@
+### 2022.12.3
+* Support Stable-diffusion 2.0 base.
+
 ### 2022.11.15
 * Add the vanilla backbone that is pure-pytorch.
 
