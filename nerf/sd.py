@@ -20,14 +20,6 @@ class StableDiffusion(nn.Module):
     def __init__(self, device, sd_version='2.0'):
         super().__init__()
 
-        try:
-            with open('./TOKEN', 'r') as f:
-                self.token = f.read().replace('\n', '') # remove the last \n!
-                print(f'[INFO] loaded hugging face access token from ./TOKEN!')
-        except FileNotFoundError as e:
-            self.token = True
-            print(f'[INFO] try to load hugging face access token from the default place, make sure you have run `huggingface-cli login`.')
-        
         self.device = device
         self.sd_version = sd_version
 
@@ -41,10 +33,10 @@ class StableDiffusion(nn.Module):
             raise ValueError(f'Stable-diffusion version {self.sd_version} not supported.')
 
         # Create model
-        self.vae = AutoencoderKL.from_pretrained(model_key, subfolder="vae", use_auth_token=self.token).to(self.device)
-        self.tokenizer = CLIPTokenizer.from_pretrained(model_key, subfolder="tokenizer", use_auth_token=self.token)
-        self.text_encoder = CLIPTextModel.from_pretrained(model_key, subfolder="text_encoder", use_auth_token=self.token).to(self.device)
-        self.unet = UNet2DConditionModel.from_pretrained(model_key, subfolder="unet", use_auth_token=self.token).to(self.device)
+        self.vae = AutoencoderKL.from_pretrained(model_key, subfolder="vae").to(self.device)
+        self.tokenizer = CLIPTokenizer.from_pretrained(model_key, subfolder="tokenizer")
+        self.text_encoder = CLIPTextModel.from_pretrained(model_key, subfolder="text_encoder").to(self.device)
+        self.unet = UNet2DConditionModel.from_pretrained(model_key, subfolder="unet").to(self.device)
         
         self.scheduler = DDIMScheduler.from_config(model_key, subfolder="scheduler")
         # self.scheduler = PNDMScheduler.from_config(model_key, subfolder="scheduler")
