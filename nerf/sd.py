@@ -10,11 +10,30 @@ import torch.nn.functional as F
 
 import time
 
+from dataclasses import dataclass
+
 def seed_everything(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     #torch.backends.cudnn.deterministic = True
     #torch.backends.cudnn.benchmark = True
+
+@dataclass
+class UNet2DConditionOutput:
+    sample: torch.FloatTensor
+
+class TracedUNet(torch.nn.Module):
+    def __init__(self, device, token):
+        super().__init__()
+        self.device = device
+        self.token = token
+        self.unet = UNet2DConditionModel.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="unet", use_auth_token=self.token).to(self.device)
+        self.in_channels = self.unet.in_channels
+        self.unet_traced = torch.jit.load("unet_traced.pt")
+
+    def forward(self, latent_model_input, t, encoder_hidden_states):
+        sample = self.unet_traced(latent_model_input, t, encoder_hidden_states)[0]
+        return UNet2DConditionOutput(sample=sample)
 
 class StableDiffusion(nn.Module):
     def __init__(self, device):
@@ -43,7 +62,8 @@ class StableDiffusion(nn.Module):
         self.text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14").to(self.device)
 
         # 3. The UNet model for generating the latents.
-        self.unet = UNet2DConditionModel.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="unet", use_auth_token=self.token).to(self.device)
+        #self.unet = UNet2DConditionModel.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="unet", use_auth_token=self.token).to(self.device)
+        self.unet = TracedUNet(self.device, self.token).to(self.device)
 
         # 4. Create a scheduler for inference
         self.scheduler = PNDMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=self.num_train_timesteps)
