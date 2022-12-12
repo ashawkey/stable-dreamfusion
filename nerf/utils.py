@@ -23,6 +23,8 @@ import torch.nn.functional as F
 import torch.distributed as dist
 from torch.utils.data import Dataset, DataLoader
 
+from torch.profiler import profile, record_function, ProfilerActivity, tensorboard_trace_handler
+
 import trimesh
 from rich.console import Console
 from torch_ema import ExponentialMovingAverage
@@ -376,6 +378,11 @@ class Trainer(object):
         
         # encode pred_rgb to latents
         # _t = time.time()
+                # _t = time.time()
+        # with profile(activities=[
+        #     ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, profile_memory=True, use_cuda=True, on_trace_ready=tensorboard_trace_handler("/home/satupili/stable-dreamfusion/"+str(_t)), with_stack=True) as prof:
+        #     loss = self.guidance.train_step(text_z, pred_rgb)
+        # prof.step()
         loss = self.guidance.train_step(text_z, pred_rgb)
         # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
 
