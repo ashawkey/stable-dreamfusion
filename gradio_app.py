@@ -12,6 +12,7 @@ print(f'[INFO] loading options..')
 # fake config object, this should not be used in CMD, only allow change from gradio UI.
 parser = argparse.ArgumentParser()
 parser.add_argument('--text', default=None, help="text prompt")
+parser.add_argument('--negative', default='', type=str, help="negative text prompt")
 # parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray --dir_text")
 # parser.add_argument('-O2', action='store_true', help="equals --fp16 --dir_text")
 parser.add_argument('--test', action='store_true', help="test mode")
