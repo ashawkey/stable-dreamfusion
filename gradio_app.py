@@ -67,6 +67,7 @@ parser.add_argument('--light_theta', type=float, default=60, help="default GUI l
 parser.add_argument('--light_phi', type=float, default=0, help="default GUI light direction in [0, 360), azimuth")
 parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
 
+parser.add_argument('--sd_ver', type=str, choices=['1.5', '2.0'], default='2.0', help="if you use hf_key, you MUST specify it's version")
 parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
 
 opt = parser.parse_args() 
@@ -93,7 +94,7 @@ print(f'[INFO] loading models..')
 
 if opt.guidance == 'stable-diffusion':
     from nerf.sd import StableDiffusion
-    guidance = StableDiffusion(device, opt.hf_key)
+    guidance = StableDiffusion(device, opt.sd_ver, opt.hf_key)
 elif opt.guidance == 'clip':
     from nerf.clip import CLIP
     guidance = CLIP(device)
