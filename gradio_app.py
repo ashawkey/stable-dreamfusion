@@ -70,6 +70,8 @@ parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sa
 parser.add_argument('--sd_ver', type=str, choices=['1.5', '2.0'], default='2.0', help="if you use hf_key, you MUST specify it's version")
 parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
 
+parser.add_argument('--need_share', type=bool, default=False, help="do you want to share gradio app to external network?")
+
 opt = parser.parse_args() 
 
 # default to use -O !!!
@@ -225,4 +227,4 @@ with gr.Blocks(css=".gradio-container {max-width: 512px; margin: auto;}") as dem
 # concurrency_count: only allow ONE running progress, else GPU will OOM.
 demo.queue(concurrency_count=1)
 
-demo.launch()
+demo.launch(share=opt.need_share)
