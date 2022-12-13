@@ -27,7 +27,7 @@ class StableDiffusion(nn.Module):
         
         if hf_key:
             model_key = hf_key
-        elifif self.sd_version == '2.0':
+        elif self.sd_version == '2.0':
             model_key = "stabilityai/stable-diffusion-2-base"
         elif self.sd_version == '1.5':
             model_key = "runwayml/stable-diffusion-v1-5"
