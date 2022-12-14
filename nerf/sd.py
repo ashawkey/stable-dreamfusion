@@ -17,7 +17,7 @@ def seed_everything(seed):
     #torch.backends.cudnn.benchmark = True
 
 class StableDiffusion(nn.Module):
-    def __init__(self, device, sd_version='2.0'):
+    def __init__(self, device, sd_version='2.0', hf_key=None):
         super().__init__()
 
         self.device = device
@@ -25,7 +25,9 @@ class StableDiffusion(nn.Module):
 
         print(f'[INFO] loading stable diffusion...')
         
-        if self.sd_version == '2.0':
+        if hf_key:
+            model_key = hf_key
+        elif self.sd_version == '2.0':
             model_key = "stabilityai/stable-diffusion-2-base"
         elif self.sd_version == '1.5':
             model_key = "runwayml/stable-diffusion-v1-5"
