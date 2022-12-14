@@ -3,7 +3,6 @@ import argparse
 
 from nerf.provider import NeRFDataset
 from nerf.utils import *
-from optimizer import Shampoo
 
 from nerf.gui import NeRFGUI
 
@@ -39,9 +38,12 @@ if __name__ == '__main__':
     # model options
     parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
     parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
+    parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the gaussian density blob")
+    parser.add_argument('--blob_radius', type=float, default=0.3, help="control the radius for the gaussian density blob")
     # network backbone
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla'], help="nerf backbone")
+    parser.add_argument('--optim', type=str, default='adan', choices=['adan', 'adam'], help="optimizor")
     parser.add_argument('--sd_version', type=str, default='2.0', choices=['1.5', '2.0'], help="stable diffusion version")
     # rendering resolution in training, decrease this if CUDA OOM.
     parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
@@ -129,8 +131,14 @@ if __name__ == '__main__':
         
         train_loader = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=100).dataloader()
 
-        optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
-        # optimizer = lambda model: Shampoo(model.get_params(opt.lr))
+        if opt.optim == 'adan':
+            from optimizer import Adan
+            # Adan usually requires a larger LR
+            optimizer = lambda model: Adan(model.get_params(5 * opt.lr), eps=1e-15)
+        elif opt.optim == 'adamw':
+            optimizer = lambda model: torch.optim.AdamW(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
+        else: # adam
+            optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
 
         scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.1 ** min(iter / opt.iters, 1))
         # scheduler = lambda optimizer: optim.lr_scheduler.OneCycleLR(optimizer, max_lr=opt.lr, total_steps=opt.iters, pct_start=0.1)
