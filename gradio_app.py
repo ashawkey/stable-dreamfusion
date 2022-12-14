@@ -12,6 +12,7 @@ print(f'[INFO] loading options..')
 # fake config object, this should not be used in CMD, only allow change from gradio UI.
 parser = argparse.ArgumentParser()
 parser.add_argument('--text', default=None, help="text prompt")
+parser.add_argument('--negative', default='', type=str, help="negative text prompt")
 # parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray --dir_text")
 # parser.add_argument('-O2', action='store_true', help="equals --fp16 --dir_text")
 parser.add_argument('--test', action='store_true', help="test mode")
@@ -32,6 +33,7 @@ parser.add_argument('--upsample_steps', type=int, default=64, help="num steps up
 parser.add_argument('--update_extra_interval', type=int, default=16, help="iter interval to update extra status (only valid when using --cuda_ray)")
 parser.add_argument('--max_ray_batch', type=int, default=4096, help="batch size of rays at inference to avoid OOM (only valid when not using --cuda_ray)")
 parser.add_argument('--albedo_iters', type=int, default=1000, help="training iters that only use albedo shading")
+parser.add_argument('--uniform_sphere_rate', type=float, default=0.5, help="likelihood of sampling camera location uniformly on the sphere surface area")
 # model options
 parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
 parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
@@ -50,12 +52,14 @@ parser.add_argument('--min_near', type=float, default=0.1, help="minimum near di
 parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
 parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 70], help="training camera fovy range")
 parser.add_argument('--dir_text', action='store_true', help="direction-encode the text prompt, by appending front/side/back/overhead view")
+parser.add_argument('--suppress_face', action='store_true', help="also use negative dir text prompt.")
 parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
 parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
 
 parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
 parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
 parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
+parser.add_argument('--lambda_smooth', type=float, default=0, help="loss scale for surface smoothness")
 
 ### GUI options
 parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -69,6 +73,8 @@ parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sa
 
 parser.add_argument('--sd_ver', type=str, choices=['1.5', '2.0'], default='2.0', help="if you use hf_key, you MUST specify it's version")
 parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
+
+parser.add_argument('--need_share', type=bool, default=False, help="do you want to share gradio app to external network?")
 
 opt = parser.parse_args() 
 
@@ -225,4 +231,4 @@ with gr.Blocks(css=".gradio-container {max-width: 512px; margin: auto;}") as dem
 # concurrency_count: only allow ONE running progress, else GPU will OOM.
 demo.queue(concurrency_count=1)
 
-demo.launch()
+demo.launch(share=opt.need_share)
