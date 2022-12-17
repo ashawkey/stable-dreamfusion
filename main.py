@@ -24,7 +24,7 @@ if __name__ == '__main__':
 
     ### training options
     parser.add_argument('--iters', type=int, default=10000, help="training iters")
-    parser.add_argument('--lr', type=float, default=1e-3, help="initial learning rate")
+    parser.add_argument('--lr', type=float, default=1e-3, help="max learning rate")
     parser.add_argument('--warm_iters', type=int, default=500, help="training iters")
     parser.add_argument('--min_lr', type=float, default=1e-4, help="initial learning rate")
     parser.add_argument('--ckpt', type=str, default='latest')
@@ -136,19 +136,21 @@ if __name__ == '__main__':
         if opt.optim == 'adan':
             from optimizer import Adan
             # Adan usually requires a larger LR
-            optimizer = lambda model: Adan(model.get_params(5 * opt.lr), eps=1e-15)
+            optimizer = lambda model: Adan(model.get_params(5 * opt.lr), eps=1e-15, weight_decay=2e-5)
         elif opt.optim == 'adamw':
             optimizer = lambda model: torch.optim.AdamW(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
         else: # adam
             optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
 
-        warm_up_with_cosine_lr = lambda iter: iter / opt.warm_iters if iter <= opt.warm_iters \
-            else max(0.5 * ( math.cos((iter - opt.warm_iters) /(opt.iters - opt.warm_iters) * math.pi) + 1), 
-                     opt.min_lr / opt.lr)
+        if opt.backbone == 'vanilla':
+            warm_up_with_cosine_lr = lambda iter: iter / opt.warm_iters if iter <= opt.warm_iters \
+                else max(0.5 * ( math.cos((iter - opt.warm_iters) /(opt.iters - opt.warm_iters) * math.pi) + 1), 
+                         opt.min_lr / opt.lr)
 
-        scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, warm_up_with_cosine_lr)
-        # scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.1 ** min(iter / opt.iters, 1))
-        # scheduler = lambda optimizer: optim.lr_scheduler.OneCycleLR(optimizer, max_lr=opt.lr, total_steps=opt.iters, pct_start=0.1)
+            scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, warm_up_with_cosine_lr)
+        else:
+            scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 1) # fixed
+            # scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.1 ** min(iter / opt.iters, 1))
 
         if opt.guidance == 'stable-diffusion':
             from nerf.sd import StableDiffusion

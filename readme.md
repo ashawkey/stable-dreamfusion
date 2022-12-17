@@ -23,7 +23,7 @@ This project is a **work-in-progress**, and contains lots of differences from th
 ## Notable differences from the paper
 * Since the Imagen model is not publicly available, we use [Stable Diffusion](https://github.com/CompVis/stable-diffusion) to replace it (implementation from [diffusers](https://github.com/huggingface/diffusers)). Different from Imagen, Stable-Diffusion is a latent diffusion model, which diffuses in a latent space instead of the original image space. Therefore, we need the loss to propagate back from the VAE's encoder part too, which introduces extra time cost in training. Currently, 10000 training steps take about 3 hours to train on a V100.
 * We use the [multi-resolution grid encoder](https://github.com/NVlabs/instant-ngp/) to implement the NeRF backbone (implementation from [torch-ngp](https://github.com/ashawkey/torch-ngp)), which enables much faster rendering (~10FPS at 800x800). The vanilla NeRF backbone is also supported now, but the Mip-NeRF backbone as the paper is still not implemented.
-* We use the Adam optimizer.
+* We use the [Adan](https://github.com/sail-sg/Adan) optimizer as default.
 
 
 ## The multi-face [Janus problem](https://twitter.com/poolio/status/1578045212236034048).

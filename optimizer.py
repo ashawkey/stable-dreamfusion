@@ -129,7 +129,6 @@ class Adan(Optimizer):
             clip_global_grad_norm = 1.0
 
         for group in self.param_groups:
-
             params_with_grad = []
             grads = []
             exp_avgs = []
@@ -219,10 +218,6 @@ def _single_tensor_adan(
     no_prox: bool,
     clip_global_grad_norm: Tensor,
 ):
-
-    if len(params) == 0:
-        return
-
     for i, param in enumerate(params):
         grad = grads[i]
         exp_avg = exp_avgs[i]
@@ -281,7 +276,6 @@ def _multi_tensor_adan(
     no_prox: bool,
     clip_global_grad_norm: Tensor,
 ):
-
     if len(params) == 0:
         return
 
