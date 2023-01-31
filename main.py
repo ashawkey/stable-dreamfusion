@@ -39,9 +39,10 @@ if __name__ == '__main__':
     parser.add_argument('--uniform_sphere_rate', type=float, default=0.5, help="likelihood of sampling camera location uniformly on the sphere surface area")
     # model options
     parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
+    parser.add_argument('--density_activation', type=str, default='softplus', choices=['softplus', 'exp'], help="density activation function")
     parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
-    parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the gaussian density blob")
-    parser.add_argument('--blob_radius', type=float, default=0.3, help="control the radius for the gaussian density blob")
+    parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the density blob")
+    parser.add_argument('--blob_radius', type=float, default=0.5, help="control the radius for the density blob")
     # network backbone
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla'], help="nerf backbone")
@@ -64,10 +65,9 @@ if __name__ == '__main__':
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
 
-    parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
+    parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
-    parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
-    parser.add_argument('--lambda_smooth', type=float, default=0, help="loss scale for surface smoothness")
+    parser.add_argument('--lambda_orient', type=float, default=0, help="loss scale for orientation")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")

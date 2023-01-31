@@ -113,11 +113,12 @@ class NeRFNetwork(NeRFRenderer):
         else:
             self.bg_net = None
 
-    def gaussian(self, x):
+    def density_blob(self, x):
         # x: [B, N, 3]
         
         d = (x ** 2).sum(-1)
-        g = self.opt.blob_density * torch.exp(- d / (self.opt.blob_radius ** 2))
+        # g = self.opt.blob_density * torch.exp(- d / (self.opt.blob_radius ** 2))
+        g = self.opt.blob_density * (1 - torch.sqrt(d) / self.opt.blob_radius)
 
         return g
 
@@ -125,11 +126,11 @@ class NeRFNetwork(NeRFRenderer):
         # x: [N, 3], in [-bound, bound]
 
         # sigma
-        h = self.encoder(x, bound=self.bound)
+        enc = self.encoder(x, bound=self.bound)
 
-        h = self.sigma_net(h)
+        h = self.sigma_net(enc)
 
-        sigma = trunc_exp(h[..., 0] + self.gaussian(x))
+        sigma = F.softplus(h[..., 0] + self.density_blob(x))
         albedo = torch.sigmoid(h[..., 1:])
 
         return sigma, albedo

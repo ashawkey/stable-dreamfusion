@@ -4,14 +4,12 @@ A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the
 
 The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
 
-**NEW**: Stable-diffusion 2.0 base is supported!
+**NEWS (2023.1.30)**: Generation quality is better with many improvements proposed by [Magic3D](https://deepimagination.cc/Magic3D/)!
 
 Colab notebooks: 
 * Instant-NGP backbone (`-O`): [![Instant-NGP Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1MXT3yfOFvO0ooKEfiUUvTKwUkrrlCHpF?usp=sharing)
 
 * Vanilla NeRF backbone (`-O2`): [![Vanilla Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1mvfxG-S_n_gZafWoattku7rLJ2kPoImL?usp=sharing) 
-
-Examples generated from text prompt `a high quality photo of a pineapple` viewed with the GUI in real time:
 
 https://user-images.githubusercontent.com/25863658/194241493-f3e68f78-aefe-479e-a4a8-001424a61b37.mp4
 
@@ -22,12 +20,10 @@ This project is a **work-in-progress**, and contains lots of differences from th
 
 ## Notable differences from the paper
 * Since the Imagen model is not publicly available, we use [Stable Diffusion](https://github.com/CompVis/stable-diffusion) to replace it (implementation from [diffusers](https://github.com/huggingface/diffusers)). Different from Imagen, Stable-Diffusion is a latent diffusion model, which diffuses in a latent space instead of the original image space. Therefore, we need the loss to propagate back from the VAE's encoder part too, which introduces extra time cost in training. Currently, 10000 training steps take about 3 hours to train on a V100.
-* We use the [multi-resolution grid encoder](https://github.com/NVlabs/instant-ngp/) to implement the NeRF backbone (implementation from [torch-ngp](https://github.com/ashawkey/torch-ngp)), which enables much faster rendering (~10FPS at 800x800). The vanilla NeRF backbone is also supported now, but the Mip-NeRF backbone as the paper is still not implemented.
+* We use the [multi-resolution grid encoder](https://github.com/NVlabs/instant-ngp/) to implement the NeRF backbone (implementation from [torch-ngp](https://github.com/ashawkey/torch-ngp)), which enables much faster rendering (~10FPS at 800x800). The surface normals are predicted with an MLP as [Magic3D](https://deepimagination.cc/Magic3D/).
+* The vanilla NeRF backbone is also supported now, but the Mip-NeRF backbone as the paper is still not implemented.
 * We use the [Adan](https://github.com/sail-sg/Adan) optimizer as default.
-
-
-## The multi-face [Janus problem](https://twitter.com/poolio/status/1578045212236034048).
-* This is likely to be caused by the text-to-2D model's capability, as discussed by [Magic3D](https://deepimagination.cc/Magic3D/) in Figure 4 and *Can single-stage optimization work with LDM prior?*.
+* The multi-face [Janus problem](https://twitter.com/poolio/status/1578045212236034048) is likely to be caused by the text-to-2D model's capability, as discussed by [Magic3D](https://deepimagination.cc/Magic3D/) in Figure 4 and *Can single-stage optimization work with LDM prior?*.
 
 
 # Install
@@ -159,7 +155,7 @@ latents.backward(gradient=grad, retain_graph=True)
     * use `--angle_overhead, --angle_front` to set the border.
     * use `--suppress_face` to add `face` as a negative prompt at all directions except `front`.
 * Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option.
-* Spatial density bias (gaussian density blob): `./nerf/network*.py > NeRFNetwork > gaussian`.
+* Spatial density bias (density blob): `./nerf/network*.py > NeRFNetwork > density_blob`.
 
 # Acknowledgement
 

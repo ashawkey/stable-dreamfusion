@@ -4,6 +4,7 @@
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // utils
+    m.def("flatten_rays", &flatten_rays, "flatten_rays (CUDA)");
     m.def("packbits", &packbits, "packbits (CUDA)");
     m.def("near_far_from_aabb", &near_far_from_aabb, "near_far_from_aabb (CUDA)");
     m.def("sph_from_ray", &sph_from_ray, "sph_from_ray (CUDA)");

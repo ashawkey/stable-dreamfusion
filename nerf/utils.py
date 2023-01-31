@@ -215,6 +215,11 @@ class Trainer(object):
         
         else:
             self.text_z = None
+        
+        # try out torch 2.0
+        if torch.__version__[0] == '2':
+            self.model = torch.compile(self.model)
+            self.guidance = torch.compile(self.guidance)
     
         if isinstance(criterion, nn.Module):
             criterion.to(self.device)
@@ -342,7 +347,6 @@ class Trainer(object):
         B, N = rays_o.shape[:2]
         H, W = data['H'], data['W']
 
-        # TODO: shading is not working right now...
         if self.global_step < self.opt.albedo_iters:
             shading = 'albedo'
             ambient_ratio = 1.0
@@ -397,10 +401,6 @@ class Trainer(object):
             loss_orient = outputs['loss_orient']
             loss = loss + self.opt.lambda_orient * loss_orient
 
-        if self.opt.lambda_smooth > 0 and 'loss_smooth' in outputs:
-            loss_smooth = outputs['loss_smooth']
-            loss = loss + self.opt.lambda_smooth * loss_smooth
-            
         return pred_rgb, pred_ws, loss
 
     def eval_step(self, data):

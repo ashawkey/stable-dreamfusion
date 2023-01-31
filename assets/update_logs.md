@@ -1,3 +1,7 @@
+### 2023.1.30
+* Use an MLP to predict the surface normals as in Magic3D to avoid finite difference / second order gradient, generation quality is greatly improved.
+* More efficient two-pass raymarching in training inspired by nerfacc.
+
 ### 2022.12.3
 * Support Stable-diffusion 2.0 base.
 

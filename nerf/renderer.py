@@ -435,11 +435,6 @@ class NeRFRenderer(nn.Module):
             loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
             results['loss_orient'] = loss_orient.sum(-1).mean()
 
-            # surface normal smoothness
-            normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2).view(N, -1, 3)
-            loss_smooth = (normals - normals_perturb).abs()
-            results['loss_smooth'] = loss_smooth.mean()
-
         # calculate weight_sum (mask)
         weights_sum = weights.sum(dim=-1) # [N]
         
@@ -453,7 +448,6 @@ class NeRFRenderer(nn.Module):
         # mix background color
         if self.bg_radius > 0:
             # use the bg model to calculate bg_color
-            # sph = raymarching.sph_from_ray(rays_o, rays_d, self.bg_radius) # [N, 2] in [-1, 1]
             bg_color = self.background(rays_d.reshape(-1, 3)) # [N, 3]
         elif bg_color is None:
             bg_color = 1
@@ -501,27 +495,17 @@ class NeRFRenderer(nn.Module):
             counter.zero_() # set to 0
             self.local_step += 1
 
-            xyzs, dirs, deltas, rays = raymarching.march_rays_train(rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, counter, self.mean_count, perturb, 128, force_all_rays, dt_gamma, max_steps)
-
-            #plot_pointcloud(xyzs.reshape(-1, 3).detach().cpu().numpy())
-            
+            xyzs, dirs, ts, rays = raymarching.march_rays_train(rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, perturb, dt_gamma, max_steps)
+            # plot_pointcloud(xyzs.reshape(-1, 3).detach().cpu().numpy())
             sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
-
-            #print(f'valid RGB query ratio: {mask.sum().item() / mask.shape[0]} (total = {mask.sum().item()})')
-
-            weights_sum, depth, image = raymarching.composite_rays_train(sigmas, rgbs, deltas, rays, T_thresh)
-
+            weights, weights_sum, depth, image = raymarching.composite_rays_train(sigmas, rgbs, ts, rays, T_thresh)
+            
             # normals related regularizations
             if normals is not None:
                 # orientation loss (not very exact in cuda ray mode)
                 weights = 1 - torch.exp(-sigmas)
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
-
-                # surface normal smoothness
-                normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2)
-                loss_smooth = (normals - normals_perturb).abs()
-                results['loss_smooth'] = loss_smooth.mean()
 
         else:
            
@@ -550,11 +534,9 @@ class NeRFRenderer(nn.Module):
                 # decide compact_steps
                 n_step = max(min(N // n_alive, 8), 1)
 
-                xyzs, dirs, deltas = raymarching.march_rays(n_alive, n_step, rays_alive, rays_t, rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, 128, perturb if step == 0 else False, dt_gamma, max_steps)
-
+                xyzs, dirs, ts = raymarching.march_rays(n_alive, n_step, rays_alive, rays_t, rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, perturb if step == 0 else False, dt_gamma, max_steps)
                 sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
-
-                raymarching.composite_rays(n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, deltas, weights_sum, depth, image, T_thresh)
+                raymarching.composite_rays(n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, ts, weights_sum, depth, image, T_thresh)
 
                 rays_alive = rays_alive[rays_alive >= 0]
                 #print(f'step = {step}, n_step = {n_step}, n_alive = {n_alive}, xyzs: {xyzs.shape}')
@@ -563,9 +545,7 @@ class NeRFRenderer(nn.Module):
 
         # mix background color
         if self.bg_radius > 0:
-            
             # use the bg model to calculate bg_color
-            # sph = raymarching.sph_from_ray(rays_o, rays_d, self.bg_radius) # [N, 2] in [-1, 1]
             bg_color = self.background(rays_d) # [N, 3]
 
         elif bg_color is None:
