@@ -16,11 +16,14 @@ parser.add_argument('--negative', default='', type=str, help="negative text prom
 # parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray --dir_text")
 # parser.add_argument('-O2', action='store_true', help="equals --fp16 --dir_text")
 parser.add_argument('--test', action='store_true', help="test mode")
-parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
 parser.add_argument('--eval_interval', type=int, default=10, help="evaluate on the valid set every interval epochs")
 parser.add_argument('--workspace', type=str, default='trial_gradio')
 parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
 parser.add_argument('--seed', type=int, default=0)
+
+parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
+parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
+parser.add_argument('--decimate_target', type=int, default=1e5, help="target face number for mesh decimation")
 
 ### training options
 parser.add_argument('--iters', type=int, default=10000, help="training iters")

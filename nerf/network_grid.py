@@ -35,10 +35,10 @@ class MLP(nn.Module):
 class NeRFNetwork(NeRFRenderer):
     def __init__(self, 
                  opt,
-                 num_layers=2,
-                 hidden_dim=32,
+                 num_layers=3,
+                 hidden_dim=64,
                  num_layers_bg=2,
-                 hidden_dim_bg=16,
+                 hidden_dim_bg=32,
                  ):
         
         super().__init__(opt)
@@ -46,7 +46,7 @@ class NeRFNetwork(NeRFRenderer):
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
 
-        self.encoder, self.in_dim = get_encoder('hashgrid', input_dim=3, log2_hashmap_size=19, desired_resolution=2048 * self.bound, interpolation='smoothstep')
+        self.encoder, self.in_dim = get_encoder('tiledgrid', input_dim=3, log2_hashmap_size=16, desired_resolution=2048 * self.bound, interpolation='smoothstep')
 
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True)
         self.normal_net = MLP(self.in_dim, 3, hidden_dim, num_layers, bias=True)
@@ -60,7 +60,6 @@ class NeRFNetwork(NeRFRenderer):
             
             # use a very simple network to avoid it learning the prompt...
             self.encoder_bg, self.in_dim_bg = get_encoder('frequency', input_dim=3, multires=4)
-
             self.bg_net = MLP(self.in_dim_bg, 3, hidden_dim_bg, num_layers_bg, bias=True)
             
         else:

@@ -456,7 +456,7 @@ class Trainer(object):
         return pred_rgb, pred_depth
 
 
-    def save_mesh(self, save_path=None, resolution=128):
+    def save_mesh(self, save_path=None):
 
         if save_path is None:
             save_path = os.path.join(self.workspace, 'mesh')
@@ -465,7 +465,7 @@ class Trainer(object):
 
         os.makedirs(save_path, exist_ok=True)
 
-        self.model.export_mesh(save_path, resolution=resolution)
+        self.model.export_mesh(save_path, resolution=self.opt.mcubes_resolution, decimate_target=self.opt.decimate_target)
 
         self.log(f"==> Finished saving mesh.")
 

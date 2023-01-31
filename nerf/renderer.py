@@ -10,6 +10,7 @@ import torch.nn.functional as F
 
 import mcubes
 import raymarching
+from meshutils import decimate_mesh, clean_mesh
 from .utils import custom_meshgrid, safe_normalize
 
 def sample_pdf(bins, weights, n_samples, det=False):
@@ -145,7 +146,7 @@ class NeRFRenderer(nn.Module):
         self.local_step = 0
 
     @torch.no_grad()
-    def export_mesh(self, path, resolution=None, S=128):
+    def export_mesh(self, path, resolution=None, decimate_target=-1, S=128):
 
         if resolution is None:
             resolution = self.grid_size
@@ -176,13 +177,19 @@ class NeRFRenderer(nn.Module):
         vertices = vertices.astype(np.float32)
         triangles = triangles.astype(np.int32)
 
-        v = torch.from_numpy(vertices).to(self.aabb_train.device)
-        f = torch.from_numpy(triangles).int().to(self.aabb_train.device)
+        # clean
+        vertices, triangles = clean_mesh(vertices, triangles)
+        
+        # decimation
+        if decimate_target > 0 and triangles.shape[0] > decimate_target:
+            vertices, triangles = decimate_mesh(vertices, triangles, decimate_target)
+
+        v = torch.from_numpy(vertices).contiguous().float().to(self.aabb_train.device)
+        f = torch.from_numpy(triangles).contiguous().int().to(self.aabb_train.device)
 
         # mesh = trimesh.Trimesh(vertices, triangles, process=False) # important, process=True leads to seg fault...
         # mesh.export(os.path.join(path, f'mesh.ply'))
 
-        # texture?
         def _export(v, f, h0=2048, w0=2048, ssaa=1, name=''):
             # v, f: torch Tensor
             device = v.device
@@ -197,7 +204,7 @@ class NeRFRenderer(nn.Module):
             from sklearn.neighbors import NearestNeighbors
             from scipy.ndimage import binary_dilation, binary_erosion
 
-            glctx = dr.RasterizeCudaContext()
+            glctx = dr.RasterizeGLContext()
 
             atlas = xatlas.Atlas()
             atlas.add_mesh(v_np, f_np)
@@ -229,42 +236,28 @@ class NeRFRenderer(nn.Module):
             xyzs = xyzs.view(-1, 3)
             mask = (mask > 0).view(-1)
             
-            sigmas = torch.zeros(h * w, device=device, dtype=torch.float32)
             feats = torch.zeros(h * w, 3, device=device, dtype=torch.float32)
 
             if mask.any():
                 xyzs = xyzs[mask] # [M, 3]
 
                 # batched inference to avoid OOM
-                all_sigmas = []
                 all_feats = []
                 head = 0
                 while head < xyzs.shape[0]:
                     tail = min(head + 640000, xyzs.shape[0])
                     results_ = self.density(xyzs[head:tail])
-                    all_sigmas.append(results_['sigma'].float())
                     all_feats.append(results_['albedo'].float())
                     head += 640000
 
-                sigmas[mask] = torch.cat(all_sigmas, dim=0)
                 feats[mask] = torch.cat(all_feats, dim=0)
             
-            sigmas = sigmas.view(h, w, 1)
             feats = feats.view(h, w, -1)
             mask = mask.view(h, w)
-
-            ### alpha mask
-            # deltas = 2 * np.sqrt(3) / 1024
-            # alphas = 1 - torch.exp(-sigmas * deltas)
-            # alphas_mask = alphas > 0.5
-            # feats = feats * alphas_mask
 
             # quantize [0.0, 1.0] to [0, 255]
             feats = feats.cpu().numpy()
             feats = (feats * 255).astype(np.uint8)
-
-            # alphas = alphas.cpu().numpy()
-            # alphas = (alphas * 255).astype(np.uint8)
 
             ### NN search as an antialiasing ...
             mask = mask.cpu().numpy()
@@ -284,14 +277,12 @@ class NeRFRenderer(nn.Module):
 
             feats[tuple(inpaint_coords.T)] = feats[tuple(search_coords[indices[:, 0]].T)]
 
-            # do ssaa after the NN search, in numpy
             feats = cv2.cvtColor(feats, cv2.COLOR_RGB2BGR)
 
+            # do ssaa after the NN search, in numpy
             if ssaa > 1:
-                # alphas = cv2.resize(alphas, (w0, h0), interpolation=cv2.INTER_NEAREST)
                 feats = cv2.resize(feats, (w0, h0), interpolation=cv2.INTER_LINEAR)
 
-            # cv2.imwrite(os.path.join(path, f'alpha.png'), alphas)
             cv2.imwrite(os.path.join(path, f'{name}albedo.png'), feats)
 
             # save obj (v, vt, f /)
