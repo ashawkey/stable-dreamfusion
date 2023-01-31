@@ -44,7 +44,7 @@ parser.add_argument('--blob_radius', type=float, default=0.3, help="control the 
 parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
 parser.add_argument('--backbone', type=str, default='grid', help="nerf backbone, choose from [grid, vanilla]")
 parser.add_argument('--optim', type=str, default='adan', choices=['adan', 'adam', 'adamw'], help="optimizer")
-parser.add_argument('--sd_version', type=str, default='2.0', choices=['1.5', '2.0'], help="stable diffusion version")
+parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
 parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
 # rendering resolution in training, decrease this if CUDA OOM.
 parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")

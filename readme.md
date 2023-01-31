@@ -151,7 +151,7 @@ latents.backward(gradient=grad, retain_graph=True)
 * Other regularizations are in `./nerf/utils.py > Trainer > train_step`. 
     * The generation seems quite sensitive to regularizations on weights_sum (alphas for each ray). The original opacity loss tends to make NeRF disappear (zero density everywhere), so we use an entropy loss to replace it for now (encourages alpha to be either 0 or 1).
 * NeRF Rendering core function: `./nerf/renderer.py > NeRFRenderer > run & run_cuda`.
-* Shading & normal evaluation: `./nerf/network*.py > NeRFNetwork > forward`. Current implementation harms training and is disabled.
+* Shading & normal evaluation: `./nerf/network*.py > NeRFNetwork > forward`.
     * light direction: current implementation use a plane light source, instead of a point light source.
 * View-dependent prompting: `./nerf/provider.py > get_view_direction`.
     * use `--angle_overhead, --angle_front` to set the border.

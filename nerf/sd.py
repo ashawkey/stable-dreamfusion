@@ -17,7 +17,7 @@ def seed_everything(seed):
     #torch.backends.cudnn.benchmark = True
 
 class StableDiffusion(nn.Module):
-    def __init__(self, device, sd_version='2.0', hf_key=None):
+    def __init__(self, device, sd_version='2.1', hf_key=None):
         super().__init__()
 
         self.device = device
@@ -28,6 +28,8 @@ class StableDiffusion(nn.Module):
         if hf_key is not None:
             print(f'[INFO] using hugging face custom model key: {hf_key}')
             model_key = hf_key
+        elif self.sd_version == '2.1':
+            model_key = "stabilityai/stable-diffusion-2-1-base"
         elif self.sd_version == '2.0':
             model_key = "stabilityai/stable-diffusion-2-base"
         elif self.sd_version == '1.5':
