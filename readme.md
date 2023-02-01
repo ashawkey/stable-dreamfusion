@@ -6,7 +6,7 @@ The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_
 
 **NEWS (2023.1.30)**: Generation quality is better with many improvements proposed by [Magic3D](https://deepimagination.cc/Magic3D/)!
 
-https://user-images.githubusercontent.com/25863658/215689459-5d2b42ad-e7f5-40cd-a411-e6734f317ffb.mp4
+https://user-images.githubusercontent.com/25863658/215996308-9fd959f5-b5c7-4a8e-a241-0fe63ec86a4a.mp4
 
 Colab notebooks: 
 * Instant-NGP backbone (`-O`): [![Instant-NGP Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1MXT3yfOFvO0ooKEfiUUvTKwUkrrlCHpF?usp=sharing)
