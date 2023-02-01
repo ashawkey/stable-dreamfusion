@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 import mcubes
 import raymarching
-from meshutils import decimate_mesh, clean_mesh
+from meshutils import decimate_mesh, clean_mesh, poisson_mesh_reconstruction
 from .utils import custom_meshgrid, safe_normalize
 
 def sample_pdf(bins, weights, n_samples, det=False):
@@ -146,38 +146,50 @@ class NeRFRenderer(nn.Module):
         self.local_step = 0
 
     @torch.no_grad()
-    def export_mesh(self, path, resolution=None, decimate_target=-1, S=128):
+    def export_mesh(self, path, points=None, normals=None, resolution=None, decimate_target=-1, S=128):
 
-        if resolution is None:
-            resolution = self.grid_size
+        if points is not None:
+            vertices, triangles = poisson_mesh_reconstruction(points, normals)
 
-        if self.cuda_ray:
-            density_thresh = min(self.mean_density, self.density_thresh)
         else:
-            density_thresh = self.density_thresh
 
-        sigmas = np.zeros([resolution, resolution, resolution], dtype=np.float32)
+            if resolution is None:
+                resolution = self.grid_size
 
-        # query
-        X = torch.linspace(-1, 1, resolution).split(S)
-        Y = torch.linspace(-1, 1, resolution).split(S)
-        Z = torch.linspace(-1, 1, resolution).split(S)
+            if self.cuda_ray:
+                density_thresh = min(self.mean_density, self.density_thresh)
+            else:
+                density_thresh = self.density_thresh
+            
+            # very empirical...
+            if self.opt.density_activation == 'softplus':
+                density_thresh = density_thresh * 100
+            
+            
+            sigmas = np.zeros([resolution, resolution, resolution], dtype=np.float32)
 
-        for xi, xs in enumerate(X):
-            for yi, ys in enumerate(Y):
-                for zi, zs in enumerate(Z):
-                    xx, yy, zz = custom_meshgrid(xs, ys, zs)
-                    pts = torch.cat([xx.reshape(-1, 1), yy.reshape(-1, 1), zz.reshape(-1, 1)], dim=-1) # [S, 3]
-                    val = self.density(pts.to(self.aabb_train.device))
-                    sigmas[xi * S: xi * S + len(xs), yi * S: yi * S + len(ys), zi * S: zi * S + len(zs)] = val['sigma'].reshape(len(xs), len(ys), len(zs)).detach().cpu().numpy() # [S, 1] --> [x, y, z]
+            # query
+            X = torch.linspace(-1, 1, resolution).split(S)
+            Y = torch.linspace(-1, 1, resolution).split(S)
+            Z = torch.linspace(-1, 1, resolution).split(S)
 
-        vertices, triangles = mcubes.marching_cubes(sigmas, density_thresh)
+            for xi, xs in enumerate(X):
+                for yi, ys in enumerate(Y):
+                    for zi, zs in enumerate(Z):
+                        xx, yy, zz = custom_meshgrid(xs, ys, zs)
+                        pts = torch.cat([xx.reshape(-1, 1), yy.reshape(-1, 1), zz.reshape(-1, 1)], dim=-1) # [S, 3]
+                        val = self.density(pts.to(self.aabb_train.device))
+                        sigmas[xi * S: xi * S + len(xs), yi * S: yi * S + len(ys), zi * S: zi * S + len(zs)] = val['sigma'].reshape(len(xs), len(ys), len(zs)).detach().cpu().numpy() # [S, 1] --> [x, y, z]
 
-        vertices = vertices / (resolution - 1.0) * 2 - 1
-        vertices = vertices.astype(np.float32)
-        triangles = triangles.astype(np.int32)
+            print(f'[INFO] marching cubes thresh: {density_thresh} ({sigmas.min()} ~ {sigmas.max()})')
+
+            vertices, triangles = mcubes.marching_cubes(sigmas, density_thresh)
+            vertices = vertices / (resolution - 1.0) * 2 - 1
+        ############
 
         # clean
+        vertices = vertices.astype(np.float32)
+        triangles = triangles.astype(np.int32)
         vertices, triangles = clean_mesh(vertices, triangles)
         
         # decimation
@@ -430,8 +442,7 @@ class NeRFRenderer(nn.Module):
         weights_sum = weights.sum(dim=-1) # [N]
         
         # calculate depth 
-        ori_z_vals = ((z_vals - nears) / (fars - nears)).clamp(0, 1)
-        depth = torch.sum(weights * ori_z_vals, dim=-1)
+        depth = torch.sum(weights * z_vals, dim=-1)
 
         # calculate color
         image = torch.sum(weights.unsqueeze(-1) * rgbs, dim=-2) # [N, 3], in [0, 1]
@@ -493,8 +504,7 @@ class NeRFRenderer(nn.Module):
             
             # normals related regularizations
             if normals is not None:
-                # orientation loss (not very exact in cuda ray mode)
-                weights = 1 - torch.exp(-sigmas)
+                # orientation loss 
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
 
@@ -545,7 +555,6 @@ class NeRFRenderer(nn.Module):
         image = image + (1 - weights_sum).unsqueeze(-1) * bg_color
         image = image.view(*prefix, 3)
 
-        depth = torch.clamp(depth - nears, min=0) / (fars - nears)
         depth = depth.view(*prefix)
 
         weights_sum = weights_sum.reshape(*prefix)

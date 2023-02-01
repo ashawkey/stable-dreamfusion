@@ -32,7 +32,7 @@ if __name__ == '__main__':
     parser.add_argument('--min_lr', type=float, default=1e-4, help="minimal learning rate")
     parser.add_argument('--ckpt', type=str, default='latest')
     parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
-    parser.add_argument('--max_steps', type=int, default=512, help="max num steps sampled per ray (only valid when using --cuda_ray)")
+    parser.add_argument('--max_steps', type=int, default=1024, help="max num steps sampled per ray (only valid when using --cuda_ray)")
     parser.add_argument('--num_steps', type=int, default=64, help="num steps sampled per ray (only valid when not using --cuda_ray)")
     parser.add_argument('--upsample_steps', type=int, default=32, help="num steps up-sampled per ray (only valid when not using --cuda_ray)")
     parser.add_argument('--update_extra_interval', type=int, default=16, help="iter interval to update extra status (only valid when using --cuda_ray)")
@@ -43,7 +43,7 @@ if __name__ == '__main__':
     # model options
     parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
     parser.add_argument('--density_activation', type=str, default='softplus', choices=['softplus', 'exp'], help="density activation function")
-    parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
+    parser.add_argument('--density_thresh', type=float, default=0.1, help="threshold for density grid to be occupied")
     parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the density blob")
     parser.add_argument('--blob_radius', type=float, default=0.5, help="control the radius for the density blob")
     # network backbone
@@ -71,6 +71,7 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
+    parser.add_argument('--lambda_tv', type=float, default=1e-7, help="loss scale for total variation")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -130,6 +131,8 @@ if __name__ == '__main__':
             trainer.test(test_loader)
             
             if opt.save_mesh:
+                # a special loader for poisson mesh reconstruction, 
+                # loader = NeRFDataset(opt, device=device, type='test', H=128, W=128, size=100).dataloader()
                 trainer.save_mesh()
     
     else:

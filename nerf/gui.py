@@ -112,9 +112,11 @@ class NeRFGUI:
 
     def prepare_buffer(self, outputs):
         if self.mode == 'image':
-            return outputs['image']
+            return outputs['image'].astype(np.float32)
         else:
-            return np.expand_dims(outputs['depth'], -1).repeat(3, -1)
+            depth = outputs['depth'].astype(np.float32)
+            depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-6)
+            return np.expand_dims(depth, -1).repeat(3, -1)
 
     
     def test_step(self):

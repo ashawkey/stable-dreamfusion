@@ -35,10 +35,10 @@ class MLP(nn.Module):
 class NeRFNetwork(NeRFRenderer):
     def __init__(self, 
                  opt,
-                 num_layers=3,
-                 hidden_dim=64,
+                 num_layers=1,
+                 hidden_dim=32,
                  num_layers_bg=2,
-                 hidden_dim_bg=32,
+                 hidden_dim_bg=16,
                  ):
         
         super().__init__(opt)
@@ -46,7 +46,7 @@ class NeRFNetwork(NeRFRenderer):
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
 
-        self.encoder, self.in_dim = get_encoder('tiledgrid', input_dim=3, log2_hashmap_size=16, desired_resolution=2048 * self.bound, interpolation='smoothstep')
+        self.encoder, self.in_dim = get_encoder('hashgrid', input_dim=3, log2_hashmap_size=19, desired_resolution=2048 * self.bound, interpolation='smoothstep')
 
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True)
         self.normal_net = MLP(self.in_dim, 3, hidden_dim, num_layers, bias=True)
@@ -76,7 +76,6 @@ class NeRFNetwork(NeRFRenderer):
         return g
 
     def common_forward(self, x):
-        # x: [N, 3], in [-bound, bound]
 
         # sigma
         enc = self.encoder(x, bound=self.bound)
@@ -86,11 +85,7 @@ class NeRFNetwork(NeRFRenderer):
         sigma = self.density_activation(h[..., 0] + self.density_blob(x))
         albedo = torch.sigmoid(h[..., 1:])
 
-        normal = self.normal_net(enc)
-        normal = safe_normalize(normal)
-        normal = torch.nan_to_num(normal)
-
-        return sigma, albedo, normal
+        return sigma, albedo, enc
     
     def forward(self, x, d, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
@@ -98,12 +93,18 @@ class NeRFNetwork(NeRFRenderer):
         # l: [3], plane light direction, nomalized in [-1, 1]
         # ratio: scalar, ambient ratio, 1 == no shading (albedo only), 0 == only shading (textureless)
 
-        sigma, albedo, normal = self.common_forward(x)
+        sigma, albedo, enc = self.common_forward(x)
 
         if shading == 'albedo':
+            normal = None
             color = albedo
         
         else: # lambertian shading
+
+            normal = self.normal_net(enc)
+            normal = safe_normalize(normal)
+            normal = torch.nan_to_num(normal)
+
             lambertian = ratio + (1 - ratio) * (normal @ l).clamp(min=0) # [N,]
 
             if shading == 'textureless':
@@ -119,12 +120,11 @@ class NeRFNetwork(NeRFRenderer):
     def density(self, x):
         # x: [N, 3], in [-bound, bound]
         
-        sigma, albedo, normal = self.common_forward(x)
+        sigma, albedo, _ = self.common_forward(x)
         
         return {
             'sigma': sigma,
             'albedo': albedo,
-            'normal': normal,
         }
 
 

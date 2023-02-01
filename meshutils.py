@@ -1,6 +1,41 @@
 import numpy as np
 import pymeshlab as pml
 
+def poisson_mesh_reconstruction(points, normals=None):
+    # points/normals: [N, 3] np.ndarray
+
+    import open3d as o3d
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+
+    # outlier removal
+    pcd, ind = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=10)
+
+    # normals
+    if normals is None:
+        pcd.estimate_normals()
+    else:
+        pcd.normals = o3d.utility.Vector3dVector(normals[ind])
+
+    # visualize
+    o3d.visualization.draw_geometries([pcd], point_show_normal=False)
+    
+    mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=9)
+    vertices_to_remove = densities < np.quantile(densities, 0.1)
+    mesh.remove_vertices_by_mask(vertices_to_remove)
+
+    # visualize
+    o3d.visualization.draw_geometries([mesh])
+
+    vertices = np.asarray(mesh.vertices)
+    triangles = np.asarray(mesh.triangles)
+
+    print(f'[INFO] poisson mesh reconstruction: {points.shape} --> {vertices.shape} / {triangles.shape}')
+
+    return vertices, triangles
+    
+
 def decimate_mesh(verts, faces, target, backend='pymeshlab', remesh=False, optimalplacement=True):
     # optimalplacement: default is True, but for flat mesh must turn False to prevent spike artifect.
 

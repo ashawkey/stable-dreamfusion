@@ -8,7 +8,6 @@ import warnings
 import tensorboardX
 
 import numpy as np
-import pandas as pd
 
 import time
 from datetime import datetime
@@ -94,7 +93,7 @@ def get_rays(poses, intrinsics, H, W, N=-1, error_map=None):
     xs = (i - cx) / fx * zs
     ys = (j - cy) / fy * zs
     directions = torch.stack((xs, ys, zs), dim=-1)
-    directions = safe_normalize(directions)
+    # directions = safe_normalize(directions)
     rays_d = directions @ poses[:, :3, :3].transpose(-1, -2) # (B, N, 3)
 
     rays_o = poses[..., :3, 3] # [B, 3]
@@ -402,6 +401,16 @@ class Trainer(object):
             loss = loss + self.opt.lambda_orient * loss_orient
 
         return pred_rgb, pred_ws, loss
+    
+    def post_train_step(self):
+
+        if self.opt.backbone == 'grid':
+
+            lambda_tv = min(1.0, self.global_step / 1000) * self.opt.lambda_tv
+            # unscale grad before modifying it!
+            # ref: https://pytorch.org/docs/stable/notes/amp_examples.html#gradient-clipping
+            self.scaler.unscale_(self.optimizer)
+            self.model.encoder.grad_total_variation(lambda_tv, None, self.model.bound)
 
     def eval_step(self, data):
 
@@ -452,11 +461,50 @@ class Trainer(object):
 
         pred_rgb = outputs['image'].reshape(B, H, W, 3)
         pred_depth = outputs['depth'].reshape(B, H, W)
+        pred_mask = outputs['weights_sum'].reshape(B, H, W) > 0.95
 
-        return pred_rgb, pred_depth
+        return pred_rgb, pred_depth, pred_mask
+
+    def generate_point_cloud(self, loader):
+
+        pbar = tqdm.tqdm(total=len(loader) * loader.batch_size, bar_format='{percentage:3.0f}% {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
+        self.model.eval()
+
+        all_points = []
+        all_normals = []
+
+        with torch.no_grad():
+
+            for i, data in enumerate(loader):
+
+                data['shading'] = 'normal' # to get normal as color
+                
+                with torch.cuda.amp.autocast(enabled=self.fp16):
+                    preds, preds_depth, preds_mask = self.test_step(data)
+
+                pred_mask = preds_mask[0].detach().cpu().numpy().reshape(-1) # [H, W], bool
+                pred_depth = preds_depth[0].detach().cpu().numpy().reshape(-1, 1) # [N, 1]
+
+                normals = preds[0].detach().cpu().numpy() * 2 - 1 # normals in [-1, 1]
+                normals = normals.reshape(-1, 3) # shape [N, 3]
+
+                rays_o = data['rays_o'][0].detach().cpu().numpy() # [N, 3]
+                rays_d = data['rays_d'][0].detach().cpu().numpy() # [N, 3]
+                points = rays_o + pred_depth * rays_d
+
+                if pred_mask.any():
+                    all_points.append(points[pred_mask])
+                    all_normals.append(normals[pred_mask])
+
+                pbar.update(loader.batch_size)
+        
+        points = np.concatenate(all_points, axis=0)
+        normals = np.concatenate(all_normals, axis=0)
+            
+        return points, normals
 
 
-    def save_mesh(self, save_path=None):
+    def save_mesh(self, loader=None, save_path=None):
 
         if save_path is None:
             save_path = os.path.join(self.workspace, 'mesh')
@@ -465,7 +513,11 @@ class Trainer(object):
 
         os.makedirs(save_path, exist_ok=True)
 
-        self.model.export_mesh(save_path, resolution=self.opt.mcubes_resolution, decimate_target=self.opt.decimate_target)
+        if loader is None: # mcubes
+            self.model.export_mesh(save_path, resolution=self.opt.mcubes_resolution, decimate_target=self.opt.decimate_target)
+        else: # poisson (TODO: not working currently...)
+            points, normals = self.generate_point_cloud(loader)
+            self.model.export_mesh(save_path, points=points, normals=normals, decimate_target=self.opt.decimate_target)
 
         self.log(f"==> Finished saving mesh.")
 
@@ -528,12 +580,13 @@ class Trainer(object):
             for i, data in enumerate(loader):
                 
                 with torch.cuda.amp.autocast(enabled=self.fp16):
-                    preds, preds_depth = self.test_step(data)
+                    preds, preds_depth, _ = self.test_step(data)
 
                 pred = preds[0].detach().cpu().numpy()
                 pred = (pred * 255).astype(np.uint8)
 
                 pred_depth = preds_depth[0].detach().cpu().numpy()
+                pred_depth = (pred_depth - pred_depth.min()) / (pred_depth.max() - pred_depth.min() + 1e-6)
                 pred_depth = (pred_depth * 255).astype(np.uint8)
 
                 if write_video:
@@ -585,6 +638,7 @@ class Trainer(object):
                 pred_rgbs, pred_ws, loss = self.train_step(data)
          
             self.scaler.scale(loss).backward()
+            self.post_train_step()
             self.scaler.step(self.optimizer)
             self.scaler.update()
             
@@ -652,7 +706,7 @@ class Trainer(object):
         with torch.no_grad():
             with torch.cuda.amp.autocast(enabled=self.fp16):
                 # here spp is used as perturb random seed!
-                preds, preds_depth = self.test_step(data, bg_color=bg_color, perturb=False if spp == 1 else spp)
+                preds, preds_depth, _ = self.test_step(data, bg_color=bg_color, perturb=False if spp == 1 else spp)
 
         if self.ema is not None:
             self.ema.restore()
@@ -706,6 +760,7 @@ class Trainer(object):
                 pred_rgbs, pred_ws, loss = self.train_step(data)
          
             self.scaler.scale(loss).backward()
+            self.post_train_step()
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
@@ -813,6 +868,7 @@ class Trainer(object):
                     pred = (pred * 255).astype(np.uint8)
 
                     pred_depth = preds_depth[0].detach().cpu().numpy()
+                    pred_depth = (pred_depth - pred_depth.min()) / (pred_depth.max() - pred_depth.min() + 1e-6)
                     pred_depth = (pred_depth * 255).astype(np.uint8)
                     
                     cv2.imwrite(save_path, cv2.cvtColor(pred, cv2.COLOR_RGB2BGR))
