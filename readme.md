@@ -138,15 +138,35 @@ Any contribution would be greatly appreciated!
 
 * The SDS loss is located at `./nerf/sd.py > StableDiffusion > train_step`:
 ```python
-# 1. we need to interpolate the NeRF rendering to 512x512, to feed it to SD's VAE.
+## 1. we need to interpolate the NeRF rendering to 512x512, to feed it to SD's VAE.
 pred_rgb_512 = F.interpolate(pred_rgb, (512, 512), mode='bilinear', align_corners=False)
-# 2. image (512x512) --- VAE --> latents (64x64), this is SD's difference from Imagen.
+## 2. image (512x512) --- VAE --> latents (64x64), this is SD's difference from Imagen.
 latents = self.encode_imgs(pred_rgb_512)
 ... # timestep sampling, noise adding and UNet noise predicting
-# 3. the SDS loss, since UNet part is ignored and cannot simply audodiff, we manually set the grad for latents.
+## 3. the SDS loss
 w = (1 - self.alphas[t])
 grad = w * (noise_pred - noise)
+# since UNet part is ignored and cannot simply audodiff, we have two ways to set the grad:
+# 3.1. call backward and set the grad now (need to retain graph since we will call a second backward for the other losses later)
 latents.backward(gradient=grad, retain_graph=True)
+return 0 # dummy loss
+# 3.2. use a custom function to set a hook in backward, so we only call backward once (credits to @elliottzheng)
+class SpecifyGradient(torch.autograd.Function):
+    @staticmethod
+    @custom_fwd
+    def forward(ctx, input_tensor, gt_grad):
+        ctx.save_for_backward(gt_grad) 
+        return torch.zeros([1], device=input_tensor.device, dtype=input_tensor.dtype) # dummy loss
+
+    @staticmethod
+    @custom_bwd
+    def backward(ctx, grad):
+        gt_grad, = ctx.saved_tensors
+        batch_size = len(gt_grad)
+        return gt_grad / batch_size, None
+
+loss = SpecifyGradient.apply(latents, grad)
+return loss # functional loss      
 ```
 * Other regularizations are in `./nerf/utils.py > Trainer > train_step`. 
     * The generation seems quite sensitive to regularizations on weights_sum (alphas for each ray). The original opacity loss tends to make NeRF disappear (zero density everywhere), so we use an entropy loss to replace it for now (encourages alpha to be either 0 or 1).
