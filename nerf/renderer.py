@@ -216,8 +216,6 @@ class NeRFRenderer(nn.Module):
             from sklearn.neighbors import NearestNeighbors
             from scipy.ndimage import binary_dilation, binary_erosion
 
-            glctx = dr.RasterizeGLContext()
-
             atlas = xatlas.Atlas()
             atlas.add_mesh(v_np, f_np)
             chart_options = xatlas.ChartOptions()
@@ -239,6 +237,11 @@ class NeRFRenderer(nn.Module):
                 w = int(w0 * ssaa)
             else:
                 h, w = h0, w0
+            
+            if h <= 2048 and w <= 2048:
+                glctx = dr.RasterizeCudaContext()
+            else:
+                glctx = dr.RasterizeGLContext()
 
             rast, _ = dr.rasterize(glctx, uv.unsqueeze(0), ft, (h, w)) # [1, h, w, 4]
             xyzs, _ = dr.interpolate(v.unsqueeze(0), rast, f) # [1, h, w, 3]
