@@ -82,7 +82,7 @@ First time running will take some time to compile the CUDA extensions.
 # `--dir_text` enables view-dependent prompting.
 python main.py --text "a hamburger" --workspace trial -O
 
-# choose stable-diffusion version (support 1.5 and 2.0, default is 2.0 now)
+# choose stable-diffusion version (support 1.5, 2.0 and 2.1, default is 2.1 now)
 python main.py --text "a hamburger" --workspace trial -O --sd_version 1.5
 
 # we also support negative text prompt now:
