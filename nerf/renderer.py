@@ -462,12 +462,10 @@ class NeRFRenderer(nn.Module):
         image = image.view(*prefix, 3)
         depth = depth.view(*prefix)
 
-        mask = (nears < fars).reshape(*prefix)
-
         results['image'] = image
         results['depth'] = depth
+        results['weights'] = weights
         results['weights_sum'] = weights_sum
-        results['mask'] = mask
 
         return results
 
@@ -510,6 +508,9 @@ class NeRFRenderer(nn.Module):
                 # orientation loss 
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
+            
+            # weights normalization
+            results['weights'] = weights
 
         else:
            
@@ -562,13 +563,10 @@ class NeRFRenderer(nn.Module):
 
         weights_sum = weights_sum.reshape(*prefix)
 
-        mask = (nears < fars).reshape(*prefix)
-
         results['image'] = image
         results['depth'] = depth
         results['weights_sum'] = weights_sum
-        results['mask'] = mask
-
+        
         return results
 
 

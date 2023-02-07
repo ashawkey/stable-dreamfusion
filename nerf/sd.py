@@ -18,9 +18,7 @@ class SpecifyGradient(torch.autograd.Function):
     @custom_fwd
     def forward(ctx, input_tensor, gt_grad):
         ctx.save_for_backward(gt_grad) 
-        
-        # dummy loss value
-        return torch.zeros([1], device=input_tensor.device, dtype=input_tensor.dtype)
+        return torch.zeros([1], device=input_tensor.device, dtype=input_tensor.dtype) # dummy loss value
 
     @staticmethod
     @custom_bwd
@@ -217,7 +215,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('prompt', type=str)
     parser.add_argument('--negative', default='', type=str)
-    parser.add_argument('--sd_version', type=str, default='2.0', choices=['1.5', '2.0'], help="stable diffusion version")
+    parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
+    parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
     parser.add_argument('-H', type=int, default=512)
     parser.add_argument('-W', type=int, default=512)
     parser.add_argument('--seed', type=int, default=0)
@@ -228,7 +227,7 @@ if __name__ == '__main__':
 
     device = torch.device('cuda')
 
-    sd = StableDiffusion(device, opt.sd_version)
+    sd = StableDiffusion(device, opt.sd_version, opt.hf_key)
 
     imgs = sd.prompt_to_img(opt.prompt, opt.negative, opt.H, opt.W, opt.steps)
 

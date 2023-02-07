@@ -365,6 +365,7 @@ class Trainer(object):
         bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
         outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
         pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
+        pred_depth = outputs['depth'].reshape(B, 1, H, W)
         # torch.cuda.synchronize(); print(f'[TIME] nerf render {time.time() - _t:.4f}s')
         
         # print(shading)
@@ -382,15 +383,13 @@ class Trainer(object):
         loss = self.guidance.train_step(text_z, pred_rgb)
         # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
 
-        # occupancy loss
-        pred_ws = outputs['weights_sum'].reshape(B, 1, H, W)
-
+        # regularizations
         if self.opt.lambda_opacity > 0:
-            loss_opacity = (pred_ws ** 2).mean()
+            loss_opacity = (outputs['weights'] ** 2).mean()
             loss = loss + self.opt.lambda_opacity * loss_opacity
 
         if self.opt.lambda_entropy > 0:
-            alphas = (pred_ws).clamp(1e-5, 1 - 1e-5)
+            alphas = outputs['weights'].clamp(1e-5, 1 - 1e-5)
             # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
             loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
                     
@@ -400,7 +399,7 @@ class Trainer(object):
             loss_orient = outputs['loss_orient']
             loss = loss + self.opt.lambda_orient * loss_orient
 
-        return pred_rgb, pred_ws, loss
+        return pred_rgb, pred_depth, loss
     
     def post_train_step(self):
 
@@ -427,17 +426,9 @@ class Trainer(object):
         outputs = self.model.render(rays_o, rays_d, staged=True, perturb=False, bg_color=None, light_d=light_d, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
         pred_rgb = outputs['image'].reshape(B, H, W, 3)
         pred_depth = outputs['depth'].reshape(B, H, W)
-        pred_ws = outputs['weights_sum'].reshape(B, H, W)
-        # mask_ws = outputs['mask'].reshape(B, H, W) # near < far
 
-        # loss_ws = pred_ws.sum() / mask_ws.sum()
-        # loss_ws = pred_ws.mean()
-
-        alphas = (pred_ws).clamp(1e-5, 1 - 1e-5)
-        # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
-        loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
-                
-        loss = self.opt.lambda_entropy * loss_entropy
+        # dummy 
+        loss = torch.zeros([1], device=pred_rgb.device, dtype=pred_rgb.dtype)
 
         return pred_rgb, pred_depth, loss
 
@@ -635,7 +626,7 @@ class Trainer(object):
             self.optimizer.zero_grad()
 
             with torch.cuda.amp.autocast(enabled=self.fp16):
-                pred_rgbs, pred_ws, loss = self.train_step(data)
+                pred_rgbs, pred_depths, loss = self.train_step(data)
          
             self.scaler.scale(loss).backward()
             self.post_train_step()
@@ -757,7 +748,7 @@ class Trainer(object):
             self.optimizer.zero_grad()
 
             with torch.cuda.amp.autocast(enabled=self.fp16):
-                pred_rgbs, pred_ws, loss = self.train_step(data)
+                pred_rgbs, pred_depths, loss = self.train_step(data)
          
             self.scaler.scale(loss).backward()
             self.post_train_step()
