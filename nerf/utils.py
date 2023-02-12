@@ -89,9 +89,9 @@ def get_rays(poses, intrinsics, H, W, N=-1, error_map=None):
     else:
         inds = torch.arange(H*W, device=device).expand([B, H*W])
 
-    zs = torch.ones_like(i)
+    zs = - torch.ones_like(i)
     xs = (i - cx) / fx * zs
-    ys = (j - cy) / fy * zs
+    ys = - (j - cy) / fy * zs
     directions = torch.stack((xs, ys, zs), dim=-1)
     # directions = safe_normalize(directions)
     rays_d = directions @ poses[:, :3, :3].transpose(-1, -2) # (B, N, 3)
@@ -361,14 +361,11 @@ class Trainer(object):
                 shading = 'lambertian'
                 ambient_ratio = 0.1
 
-        # _t = time.time()
         bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
         outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
         pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
         pred_depth = outputs['depth'].reshape(B, 1, H, W)
-        # torch.cuda.synchronize(); print(f'[TIME] nerf render {time.time() - _t:.4f}s')
         
-        # print(shading)
         # torch_vis_2d(pred_rgb[0])
         
         # text embeddings
@@ -379,9 +376,7 @@ class Trainer(object):
             text_z = self.text_z
         
         # encode pred_rgb to latents
-        # _t = time.time()
         loss = self.guidance.train_step(text_z, pred_rgb)
-        # torch.cuda.synchronize(); print(f'[TIME] total guiding {time.time() - _t:.4f}s')
 
         # regularizations
         if self.opt.lambda_opacity > 0:

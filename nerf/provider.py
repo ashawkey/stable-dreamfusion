@@ -34,10 +34,10 @@ def visualize_poses(poses, dirs, size=0.1):
     for pose, dir in zip(poses, dirs):
         # a camera is visualized with 8 line segments.
         pos = pose[:3, 3]
-        a = pos + size * pose[:3, 0] + size * pose[:3, 1] + size * pose[:3, 2]
-        b = pos - size * pose[:3, 0] + size * pose[:3, 1] + size * pose[:3, 2]
-        c = pos - size * pose[:3, 0] - size * pose[:3, 1] + size * pose[:3, 2]
-        d = pos + size * pose[:3, 0] - size * pose[:3, 1] + size * pose[:3, 2]
+        a = pos + size * pose[:3, 0] + size * pose[:3, 1] - size * pose[:3, 2]
+        b = pos - size * pose[:3, 0] + size * pose[:3, 1] - size * pose[:3, 2]
+        c = pos - size * pose[:3, 0] - size * pose[:3, 1] - size * pose[:3, 2]
+        d = pos + size * pose[:3, 0] - size * pose[:3, 1] - size * pose[:3, 2]
 
         segs = np.array([[pos, a], [pos, b], [pos, c], [pos, d], [a, b], [b, c], [c, d], [d, a]])
         segs = trimesh.load_path(segs)
@@ -118,8 +118,8 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 120], phi_ra
         targets = targets + torch.randn_like(centers) * 0.2
 
     # lookat
-    forward_vector = safe_normalize(targets - centers)
-    up_vector = torch.FloatTensor([0, -1, 0]).to(device).unsqueeze(0).repeat(size, 1)
+    forward_vector = - safe_normalize(targets - centers)
+    up_vector = torch.FloatTensor([0, 1, 0]).to(device).unsqueeze(0).repeat(size, 1)
     right_vector = safe_normalize(torch.cross(forward_vector, up_vector, dim=-1))
     
     if jitter:
@@ -158,8 +158,8 @@ def circle_poses(device, radius=1.25, theta=60, phi=0, return_dirs=False, angle_
     ], dim=-1) # [B, 3]
 
     # lookat
-    forward_vector = - safe_normalize(centers)
-    up_vector = torch.FloatTensor([0, -1, 0]).to(device).unsqueeze(0)
+    forward_vector = safe_normalize(centers)
+    up_vector = torch.FloatTensor([0, 1, 0]).to(device).unsqueeze(0)
     right_vector = safe_normalize(torch.cross(forward_vector, up_vector, dim=-1))
     up_vector = safe_normalize(torch.cross(right_vector, forward_vector, dim=-1))
 
