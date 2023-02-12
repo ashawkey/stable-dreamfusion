@@ -149,6 +149,7 @@ def srgb_to_linear(x):
 
 class Trainer(object):
     def __init__(self, 
+		         argv, # command line args
                  name, # name of this experiment
                  opt, # extra conf
                  model, # network 
@@ -174,6 +175,7 @@ class Trainer(object):
                  scheduler_update_every_step=False, # whether to call scheduler.step() after every train step
                  ):
         
+        self.argv = argv
         self.name = name
         self.opt = opt
         self.mute = mute
@@ -267,7 +269,8 @@ class Trainer(object):
             self.ckpt_path = os.path.join(self.workspace, 'checkpoints')
             self.best_path = f"{self.ckpt_path}/{self.name}.pth"
             os.makedirs(self.ckpt_path, exist_ok=True)
-            
+        
+        self.log(f'[INFO] Cmdline: {self.argv}')
         self.log(f'[INFO] Trainer: {self.name} | {self.time_stamp} | {self.device} | {"fp16" if self.fp16 else "fp32"} | {self.workspace}')
         self.log(f'[INFO] #parameters: {sum([p.numel() for p in model.parameters() if p.requires_grad])}')
 
