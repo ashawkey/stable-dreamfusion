@@ -90,7 +90,7 @@ def get_rays(poses, intrinsics, H, W, N=-1, error_map=None):
         inds = torch.arange(H*W, device=device).expand([B, H*W])
 
     zs = - torch.ones_like(i)
-    xs = (i - cx) / fx * zs
+    xs = - (i - cx) / fx * zs
     ys = (j - cy) / fy * zs
     directions = torch.stack((xs, ys, zs), dim=-1)
     # directions = safe_normalize(directions)

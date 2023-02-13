@@ -161,9 +161,9 @@ class NeRFRenderer(nn.Module):
             else:
                 density_thresh = self.density_thresh
             
-            # very empirical...
+            # TODO: use a larger thresh to extract a surface mesh from the density field, but this value is very empirical...
             if self.opt.density_activation == 'softplus':
-                density_thresh = density_thresh * 20
+                density_thresh = density_thresh * 25
             
             
             sigmas = np.zeros([resolution, resolution, resolution], dtype=np.float32)
