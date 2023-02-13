@@ -163,7 +163,7 @@ class NeRFRenderer(nn.Module):
             
             # very empirical...
             if self.opt.density_activation == 'softplus':
-                density_thresh = density_thresh * 100
+                density_thresh = density_thresh * 20
             
             
             sigmas = np.zeros([resolution, resolution, resolution], dtype=np.float32)
@@ -185,7 +185,6 @@ class NeRFRenderer(nn.Module):
 
             vertices, triangles = mcubes.marching_cubes(sigmas, density_thresh)
             vertices = vertices / (resolution - 1.0) * 2 - 1
-        ############
 
         # clean
         vertices = vertices.astype(np.float32)
@@ -219,7 +218,7 @@ class NeRFRenderer(nn.Module):
             atlas = xatlas.Atlas()
             atlas.add_mesh(v_np, f_np)
             chart_options = xatlas.ChartOptions()
-            chart_options.max_iterations = 0 # disable merge_chart for faster unwrap...
+            chart_options.max_iterations = 4 # for faster unwrap...
             atlas.generate(chart_options=chart_options)
             vmapping, ft_np, vt_np = atlas[0] # [N], [M, 3], [N, 2]
 

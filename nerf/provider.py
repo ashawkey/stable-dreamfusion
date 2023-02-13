@@ -118,7 +118,7 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 120], phi_ra
         targets = targets + torch.randn_like(centers) * 0.2
 
     # lookat
-    forward_vector = - safe_normalize(targets - centers)
+    forward_vector = safe_normalize(centers - targets)
     up_vector = torch.FloatTensor([0, 1, 0]).to(device).unsqueeze(0).repeat(size, 1)
     right_vector = safe_normalize(torch.cross(forward_vector, up_vector, dim=-1))
     
@@ -207,8 +207,6 @@ class NeRFDataset:
 
             # random focal
             fov = random.random() * (self.opt.fovy_range[1] - self.opt.fovy_range[0]) + self.opt.fovy_range[0]
-            focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
-            intrinsics = np.array([focal, focal, self.cx, self.cy])
         else:
             # circle pose
             phi = (index[0] / self.size) * 360
@@ -216,10 +214,10 @@ class NeRFDataset:
 
             # fixed focal
             fov = (self.opt.fovy_range[1] + self.opt.fovy_range[0]) / 2
-            focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
-            intrinsics = np.array([focal, focal, self.cx, self.cy])
 
-
+        focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
+        intrinsics = np.array([focal, focal, self.cx, self.cy])
+        
         # sample a low-resolution but full image
         rays = get_rays(poses, intrinsics, self.H, self.W, -1)
 

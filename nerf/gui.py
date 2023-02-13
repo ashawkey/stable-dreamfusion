@@ -41,7 +41,7 @@ class OrbitCamera:
         # rotate along camera up/side axis!
         side = self.rot.as_matrix()[:3, 0] # why this is side --> ? # already normalized.
         rotvec_x = self.up * np.deg2rad(0.1 * dx)
-        rotvec_y = side * np.deg2rad(0.1 * dy)
+        rotvec_y = side * np.deg2rad(-0.1 * dy)
         self.rot = R.from_rotvec(rotvec_x) * R.from_rotvec(rotvec_y) * self.rot
 
     def scale(self, delta):
