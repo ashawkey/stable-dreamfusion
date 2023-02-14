@@ -21,6 +21,7 @@ if __name__ == '__main__':
     parser.add_argument('--workspace', type=str, default='workspace')
     parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--deterministic', action='store_true', help="make the training more deterministic, but slower")
 
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
@@ -111,7 +112,7 @@ if __name__ == '__main__':
 
     print(opt)
 
-    seed_everything(opt.seed)
+    seed_everything(opt.seed, deterministic = opt.deterministic)
 
     model = NeRFNetwork(opt)
 
@@ -160,7 +161,7 @@ if __name__ == '__main__':
 
         if opt.guidance == 'stable-diffusion':
             from nerf.sd import StableDiffusion
-            guidance = StableDiffusion(device, opt.sd_version, opt.hf_key)
+            guidance = StableDiffusion(opt, device, opt.sd_version, opt.hf_key)
         elif opt.guidance == 'clip':
             from nerf.clip import CLIP
             guidance = CLIP(device)

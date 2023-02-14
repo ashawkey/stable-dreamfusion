@@ -105,14 +105,17 @@ def get_rays(poses, intrinsics, H, W, N=-1, error_map=None):
     return results
 
 
-def seed_everything(seed):
+def seed_everything(seed, deterministic=False):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    #torch.backends.cudnn.deterministic = True
-    #torch.backends.cudnn.benchmark = True
+    if deterministic:
+        os.environ['CUBLAS_WORKSPACE_CONFIG'] = ":4096:8" # https://discuss.pytorch.org/t/random-seed-with-external-gpu/102260/3 https://docs.nvidia.com/cuda/cublas/index.html#cublasApi_reproducibility
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False # https://pytorch.org/docs/stable/notes/randomness.html#cuda-convolution-benchmarking
+        torch.use_deterministic_algorithms(True) # will raise error when nondeterministic functions are used.
 
 
 def torch_vis_2d(x, renormalize=False):

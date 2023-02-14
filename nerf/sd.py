@@ -1,6 +1,7 @@
 from transformers import CLIPTextModel, CLIPTokenizer, logging
 from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler, DDIMScheduler
 from diffusers.utils.import_utils import is_xformers_available
+import functools
 
 # suppress partial model loading warning
 logging.set_verbosity_error()
@@ -25,6 +26,30 @@ class SpecifyGradient(torch.autograd.Function):
         batch_size = len(gt_grad)
         return gt_grad / batch_size, None
 
+class DeterministicInterpolate(nn.Module): 
+    # https://github.com/open-mmlab/mmsegmentation/issues/255
+    # this is a deterministic version of nn.functional.interpolate bilinear mode
+    def __init__(self, channel: int, scale_factor: int):
+        super().__init__()
+        # assert 'mode' not in kwargs and 'align_corners' not in kwargs and 'size' not in kwargs
+        assert isinstance(scale_factor, int) and scale_factor > 1 and scale_factor % 2 == 0
+        self.scale_factor = scale_factor
+        kernel_size = scale_factor + 1  # keep kernel size being odd
+        self.weight = nn.Parameter(
+            torch.empty((1, 1, kernel_size, kernel_size), dtype=torch.float32).expand(channel, -1, -1, -1)
+        )
+        self.conv = functools.partial(
+            F.conv2d, weight=self.weight, bias=None, padding=scale_factor // 2, groups=channel
+        )
+        with torch.no_grad():
+            self.weight.fill_(1 / (kernel_size * kernel_size))
+            self.weight.requires_grad_(False)
+
+    def forward(self, t):
+        if t is None:
+            return t
+        return self.conv(F.interpolate(t, scale_factor=self.scale_factor, mode='nearest'))
+
 def seed_everything(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -32,9 +57,9 @@ def seed_everything(seed):
     #torch.backends.cudnn.benchmark = True
 
 class StableDiffusion(nn.Module):
-    def __init__(self, device, sd_version='2.1', hf_key=None):
+    def __init__(self, opt, device, sd_version='2.1', hf_key=None):
         super().__init__()
-
+        self.opt = opt
         self.device = device
         self.sd_version = sd_version
 
@@ -63,6 +88,12 @@ class StableDiffusion(nn.Module):
         
         self.scheduler = DDIMScheduler.from_pretrained(model_key, subfolder="scheduler")
         # self.scheduler = PNDMScheduler.from_pretrained(model_key, subfolder="scheduler")
+
+        if opt.deterministic:
+            assert opt.h == opt.w
+            self.interpolate = DeterministicInterpolate(channel=3, scale_factor=512//opt.w).to(self.device)
+        else:
+            self.interpolate = functools.partial(F.interpolate, size=(512, 512), mode='bilinear', align_corners=False)
 
         self.num_train_timesteps = self.scheduler.config.num_train_timesteps
         self.min_step = int(self.num_train_timesteps * 0.02)
@@ -95,7 +126,7 @@ class StableDiffusion(nn.Module):
         
         # interp to 512x512 to be fed into vae.
 
-        pred_rgb_512 = F.interpolate(pred_rgb, (512, 512), mode='bilinear', align_corners=False)
+        pred_rgb_512 = self.interpolate(pred_rgb)
 
         # timestep ~ U(0.02, 0.98) to avoid very high/low noise level
         t = torch.randint(self.min_step, self.max_step + 1, [1], dtype=torch.long, device=self.device)
@@ -220,7 +251,7 @@ if __name__ == '__main__':
 
     device = torch.device('cuda')
 
-    sd = StableDiffusion(device, opt.sd_version, opt.hf_key)
+    sd = StableDiffusion(opt, device, opt.sd_version, opt.hf_key)
 
     imgs = sd.prompt_to_img(opt.prompt, opt.negative, opt.H, opt.W, opt.steps)
 
