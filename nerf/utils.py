@@ -866,8 +866,8 @@ class Trainer(object):
                         t_pred_depth = torch.from_numpy(pred_depth).unsqueeze(0)
                     
                         #add as image
-                        self.writer.add_image(f'{self.name}_{self.local_step:04d}_rgb', t_pred, self.epoch, dataformats='NCHW')
-                        self.writer.add_image(f'{self.name}_{self.local_step:04d}_depth', t_pred_depth, self.epoch)                    
+                        self.writer.add_image(f'{self.name}/{self.local_step:04d}_rgb', t_pred, self.epoch, dataformats='NCHW')
+                        self.writer.add_image(f'{self.name}/{self.local_step:04d}_depth', t_pred_depth, self.epoch)                    
                     
                     cv2.imwrite(save_path, cv2.cvtColor(pred, cv2.COLOR_RGB2BGR))
                     cv2.imwrite(save_path_depth, pred_depth)
