@@ -849,8 +849,10 @@ class Trainer(object):
                 if self.local_rank == 0:
 
                     # save image
-                    save_path = os.path.join(self.workspace, 'validation', f'{name}_{self.local_step:04d}_rgb.png')
-                    save_path_depth = os.path.join(self.workspace, 'validation', f'{name}_{self.local_step:04d}_depth.png')
+                    save_path = os.path.join(self.workspace, f'{self.name}')
+                    save_path = os.path.join(save_path, 'validation', f'{name}_{self.local_step:04d}_rgb.png')
+                    save_path_depth = os.path.join(self.workspace, f'{self.name}')
+                    save_path_depth = os.path.join(save_path_depth, 'validation', f'{name}_{self.local_step:04d}_depth.png')
 
                     #self.log(f"==> Saving validation image to {save_path}")
                     os.makedirs(os.path.dirname(save_path), exist_ok=True)
