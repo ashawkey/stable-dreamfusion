@@ -859,6 +859,15 @@ class Trainer(object):
                     pred_depth = preds_depth[0].detach().cpu().numpy()
                     pred_depth = (pred_depth - pred_depth.min()) / (pred_depth.max() - pred_depth.min() + 1e-6)
                     pred_depth = (pred_depth * 255).astype(np.uint8)
+
+                    if tensorboardX:
+                        #convert to tensor
+                        t_pred = torch.from_numpy(pred).permute(2, 0, 1).unsqueeze(0)
+                        t_pred_depth = torch.from_numpy(pred_depth).unsqueeze(0)
+                    
+                        #add as image
+                        self.writer.add_image(f'{self.name}_{self.local_step:04d}_rgb', t_pred, self.epoch, dataformats='NCHW')
+                        self.writer.add_image(f'{self.name}_{self.local_step:04d}_depth', t_pred_depth, self.epoch)                    
                     
                     cv2.imwrite(save_path, cv2.cvtColor(pred, cv2.COLOR_RGB2BGR))
                     cv2.imwrite(save_path_depth, pred_depth)
