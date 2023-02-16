@@ -21,6 +21,7 @@ if __name__ == '__main__':
     parser.add_argument('--workspace', type=str, default='workspace')
     parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--name', type=str, default='df')
 
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
@@ -122,7 +123,7 @@ if __name__ == '__main__':
     if opt.test:
         guidance = None # no need to load guidance model at test
 
-        trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, fp16=opt.fp16, use_checkpoint=opt.ckpt)
+        trainer = Trainer(' '.join(sys.argv), opt.name, opt, model, guidance, device=device, workspace=opt.workspace, fp16=opt.fp16, use_checkpoint=opt.ckpt)
 
         if opt.gui:
             gui = NeRFGUI(opt, trainer)
@@ -167,7 +168,7 @@ if __name__ == '__main__':
         else:
             raise NotImplementedError(f'--guidance {opt.guidance} is not implemented.')
 
-        trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
+        trainer = Trainer(' '.join(sys.argv), opt.name, opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
 
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer
