@@ -20,6 +20,7 @@ parser.add_argument('--eval_interval', type=int, default=10, help="evaluate on t
 parser.add_argument('--workspace', type=str, default='trial_gradio')
 parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
 parser.add_argument('--seed', type=int, default=0)
+parser.add_argument('--deterministic', action='store_true', help="make the training deterministic, but slower")
 
 parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
 parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
@@ -39,7 +40,7 @@ parser.add_argument('--albedo_iters', type=int, default=1000, help="training ite
 parser.add_argument('--uniform_sphere_rate', type=float, default=0.5, help="likelihood of sampling camera location uniformly on the sphere surface area")
 # model options
 parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
-parser.add_argument('--density_activation', type=str, default='softplus', choices=['softplus', 'exp'] help="density activation function")
+parser.add_argument('--density_activation', type=str, default='softplus', choices=['softplus', 'exp'], help="density activation function")
 parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
 parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the density blob")
 parser.add_argument('--blob_radius', type=float, default=0.3, help="control the radius for the density blob")
@@ -106,7 +107,7 @@ print(f'[INFO] loading models..')
 
 if opt.guidance == 'stable-diffusion':
     from nerf.sd import StableDiffusion
-    guidance = StableDiffusion(device, opt.sd_version, opt.hf_key)
+    guidance = StableDiffusion(opt, device, opt.sd_version, opt.hf_key)
 elif opt.guidance == 'clip':
     from nerf.clip import CLIP
     guidance = CLIP(device)
