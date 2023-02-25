@@ -73,7 +73,7 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
-    parser.add_argument('--lambda_tv', type=float, default=1e-7, help="loss scale for total variation")
+    parser.add_argument('--lambda_tv', type=float, default=0, help="loss scale for total variation")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -159,7 +159,7 @@ if __name__ == '__main__':
             # scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.1 ** min(iter / opt.iters, 1))
 
         if opt.guidance == 'stable-diffusion':
-            from nerf.sd import StableDiffusion
+            from sd import StableDiffusion
             guidance = StableDiffusion(device, opt.sd_version, opt.hf_key)
         elif opt.guidance == 'clip':
             from nerf.clip import CLIP

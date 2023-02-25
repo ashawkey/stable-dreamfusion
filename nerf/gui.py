@@ -430,7 +430,7 @@ class NeRFGUI:
         with dpg.handler_registry():
             dpg.add_mouse_drag_handler(button=dpg.mvMouseButton_Left, callback=callback_camera_drag_rotate)
             dpg.add_mouse_wheel_handler(callback=callback_camera_wheel_scale)
-            dpg.add_mouse_drag_handler(button=dpg.mvMouseButton_Middle, callback=callback_camera_drag_pan)
+            dpg.add_mouse_drag_handler(button=dpg.mvMouseButton_Right, callback=callback_camera_drag_pan)
 
         
         dpg.create_viewport(title='torch-ngp', width=self.W, height=self.H, resizable=False)

@@ -401,7 +401,7 @@ class Trainer(object):
     
     def post_train_step(self):
 
-        if self.opt.backbone == 'grid':
+        if self.opt.backbone == 'grid' and self.opt.lambda_tv > 0:
 
             lambda_tv = min(1.0, self.global_step / 1000) * self.opt.lambda_tv
             # unscale grad before modifying it!

@@ -105,7 +105,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'[INFO] loading models..')
 
 if opt.guidance == 'stable-diffusion':
-    from nerf.sd import StableDiffusion
+    from sd import StableDiffusion
     guidance = StableDiffusion(device, opt.sd_version, opt.hf_key)
 elif opt.guidance == 'clip':
     from nerf.clip import CLIP
