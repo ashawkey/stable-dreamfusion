@@ -140,7 +140,7 @@ __global__ void kernel_grid(
     
     // calculate coordinate (always use float for precision!)
     float pos[D];
-    float pos_deriv[D] = {1.0f}; // linear deriv is default to 1
+    float pos_deriv[D];
     uint32_t pos_grid[D];
 
     #pragma unroll
@@ -152,6 +152,8 @@ __global__ void kernel_grid(
         if (interp == 1) {
             pos_deriv[d] = smoothstep_derivative(pos[d]);
             pos[d] = smoothstep(pos[d]);
+        } else {
+            pos_deriv[d] = 1.0f;
         }
     }
 
