@@ -33,6 +33,7 @@ if __name__ == '__main__':
     parser.add_argument('--min_lr', type=float, default=1e-4, help="minimal learning rate")
     parser.add_argument('--ckpt', type=str, default='latest')
     parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
+    parser.add_argument('--taichi_ray', action='store_true', help="use taichi raymarching")
     parser.add_argument('--max_steps', type=int, default=1024, help="max num steps sampled per ray (only valid when using --cuda_ray)")
     parser.add_argument('--num_steps', type=int, default=64, help="num steps sampled per ray (only valid when not using --cuda_ray)")
     parser.add_argument('--upsample_steps', type=int, default=32, help="num steps up-sampled per ray (only valid when not using --cuda_ray)")
@@ -50,7 +51,7 @@ if __name__ == '__main__':
     parser.add_argument('--blob_radius', type=float, default=0.5, help="control the radius for the density blob")
     # network backbone
     parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
-    parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla'], help="nerf backbone")
+    parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla', 'grid_taichi'], help="nerf backbone")
     parser.add_argument('--optim', type=str, default='adan', choices=['adan', 'adam'], help="optimizer")
     parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
     parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
@@ -106,6 +107,13 @@ if __name__ == '__main__':
         from nerf.network import NeRFNetwork
     elif opt.backbone == 'grid':
         from nerf.network_grid import NeRFNetwork
+    elif opt.backbone == 'grid_taichi':
+        print("select grid taichi.")
+        opt.cuda_ray = False
+        opt.taichi_ray = True
+        import taichi as ti
+        from nerf.network_grid_taichi import NeRFNetwork
+        ti.init(arch=ti.cuda, device_memory_GB=4)
     else:
         raise NotImplementedError(f'--backbone {opt.backbone} is not implemented!')
 
@@ -116,6 +124,8 @@ if __name__ == '__main__':
     model = NeRFNetwork(opt)
 
     print(model)
+    for i in model.encoder.parameters():
+        print(i.shape)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
