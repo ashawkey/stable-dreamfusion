@@ -70,7 +70,7 @@ def get_encoder(encoding, input_dim=3,
         encoder = GridEncoder(input_dim=input_dim, num_levels=num_levels, level_dim=level_dim, base_resolution=base_resolution, log2_hashmap_size=log2_hashmap_size, desired_resolution=desired_resolution, gridtype='tiled', align_corners=align_corners, interpolation=interpolation)
     
     elif encoding == 'hashgrid_taichi':
-        from taichi_models.taichi_modules.hash_encoder import HashEncoder
+        from taichi_modules.hash_encoder import HashEncoder
         encoder = HashEncoder(batch_size=4096) #TODO: hard encoded batch size
 
     else:

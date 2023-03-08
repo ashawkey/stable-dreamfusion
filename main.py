@@ -108,12 +108,15 @@ if __name__ == '__main__':
     elif opt.backbone == 'grid':
         from nerf.network_grid import NeRFNetwork
     elif opt.backbone == 'grid_taichi':
-        print("select grid taichi.")
         opt.cuda_ray = False
         opt.taichi_ray = True
         import taichi as ti
         from nerf.network_grid_taichi import NeRFNetwork
-        ti.init(arch=ti.cuda, device_memory_GB=4)
+        taichi_half2_opt = True
+        taichi_init_args = {"arch": ti.cuda, "device_memory_GB": 4.0}
+        if taichi_half2_opt:
+            taichi_init_args["half2_vectorization"] = True
+        ti.init(**taichi_init_args)
     else:
         raise NotImplementedError(f'--backbone {opt.backbone} is not implemented!')
 

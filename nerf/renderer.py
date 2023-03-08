@@ -13,11 +13,11 @@ import mcubes
 import raymarching
 from meshutils import decimate_mesh, clean_mesh, poisson_mesh_reconstruction
 from .utils import custom_meshgrid, safe_normalize
-from taichi_models.taichi_modules import RayMarcher as RayMarcherTaichi
-from taichi_models.taichi_modules import VolumeRendererTaichi
-from taichi_models.taichi_modules import RayAABBIntersector
-from taichi_models.taichi_modules import raymarching_test as raymarching_test_taichi
-from taichi_models.taichi_modules import composite_test as composite_test_fw
+from taichi_modules import RayMarcher as RayMarcherTaichi
+from taichi_modules import VolumeRenderer as VolumeRendererTaichi
+from taichi_modules import RayAABBIntersector
+from taichi_modules import raymarching_test as raymarching_test_taichi
+from taichi_modules import composite_test as composite_test_fw
 
 
 def sample_pdf(bins, weights, n_samples, det=False):
