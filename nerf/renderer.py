@@ -132,6 +132,8 @@ class NeRFRenderer(nn.Module):
             self.local_step = 0
         
         if self.taichi_ray:
+            from taichi_modules import packbits as packbits_taichi
+            self.packbits_taichi = packbits_taichi
             self.ray_marching = RayMarcherTaichi(batch_size=4096) # TODO: hard encoded batch size
             self.render_func = VolumeRendererTaichi(batch_size=4096) # TODO: hard encoded batch size
             # density grid
@@ -767,7 +769,10 @@ class NeRFRenderer(nn.Module):
 
         # convert to bitfield
         density_thresh = min(self.mean_density, self.density_thresh)
-        self.density_bitfield = raymarching.packbits(self.density_grid, density_thresh, self.density_bitfield)
+        if self.cuda_ray:
+            self.density_bitfield = raymarching.packbits(self.density_grid, density_thresh, self.density_bitfield)
+        elif self.taichi_ray:
+            self.packbits_taichi(self.density_grid.reshape(-1).contiguous(), density_thresh, self.density_bitfield)
 
         ### update step counter
         total_step = min(16, self.local_step)
