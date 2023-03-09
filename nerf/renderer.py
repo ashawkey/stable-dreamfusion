@@ -3,7 +3,6 @@ import math
 import cv2
 import trimesh
 import numpy as np
-from einops import rearrange
 
 import torch
 import torch.nn as nn
@@ -13,11 +12,6 @@ import mcubes
 import raymarching
 from meshutils import decimate_mesh, clean_mesh, poisson_mesh_reconstruction
 from .utils import custom_meshgrid, safe_normalize
-from taichi_modules import RayMarcher as RayMarcherTaichi
-from taichi_modules import VolumeRenderer as VolumeRendererTaichi
-from taichi_modules import RayAABBIntersector
-from taichi_modules import raymarching_test as raymarching_test_taichi
-from taichi_modules import composite_test as composite_test_fw
 
 
 def sample_pdf(bins, weights, n_samples, det=False):
@@ -132,10 +126,20 @@ class NeRFRenderer(nn.Module):
             self.local_step = 0
         
         if self.taichi_ray:
+            from einops import rearrange
+            from taichi_modules import RayMarcher as RayMarcherTaichi
+            from taichi_modules import VolumeRenderer as VolumeRendererTaichi
+            from taichi_modules import RayAABBIntersector as RayAABBIntersectorTaichi
+            from taichi_modules import raymarching_test as raymarching_test_taichi
+            from taichi_modules import composite_test as composite_test_fw
             from taichi_modules import packbits as packbits_taichi
+            self.rearrange = rearrange
             self.packbits_taichi = packbits_taichi
+            self.ray_aabb_intersector = RayAABBIntersectorTaichi
+            self.raymarching_test_taichi = raymarching_test_taichi
+            self.composite_test_fw = composite_test_fw
             self.ray_marching = RayMarcherTaichi(batch_size=4096) # TODO: hard encoded batch size
-            self.render_func = VolumeRendererTaichi(batch_size=4096) # TODO: hard encoded batch size
+            self.volume_render = VolumeRendererTaichi(batch_size=4096) # TODO: hard encoded batch size
             # density grid
             density_grid = torch.zeros([self.cascade, self.grid_size ** 3]) # [CAS, H * H * H]
             density_bitfield = torch.zeros(self.cascade * self.grid_size ** 3 // 8, dtype=torch.uint8) # [CAS * H * H * H // 8]
@@ -605,13 +609,12 @@ class NeRFRenderer(nn.Module):
         device = rays_o.device
 
         # pre-calculate near far
-        # nears, fars = raymarching.near_far_from_aabb(rays_o, rays_d, self.aabb_train if self.training else self.aabb_infer)
         exp_step_factor = kwargs.get('exp_step_factor', 0.)
         MAX_SAMPLES = 1024
         NEAR_DISTANCE = 0.01
         center = torch.zeros(1, 3)
         half_size = torch.ones(1, 3)
-        _, hits_t, _ = RayAABBIntersector.apply(rays_o, rays_d, center, half_size, 1)
+        _, hits_t, _ = self.ray_aabb_intersector.apply(rays_o, rays_d, center, half_size, 1)
         hits_t[(hits_t[:, 0, 0] >= 0) & (hits_t[:, 0, 0] < NEAR_DISTANCE), 0, 0] = NEAR_DISTANCE
 
         # random sample light_d if not provided
@@ -630,7 +633,7 @@ class NeRFRenderer(nn.Module):
             rays_a, xyzs, dirs, deltas, ts, _ = self.ray_marching(rays_o, rays_d, hits_t[:, 0], self.density_bitfield, self.cascade, self.bound, exp_step_factor, self.grid_size, MAX_SAMPLES)
             # plot_pointcloud(xyzs.reshape(-1, 3).detach().cpu().numpy())
             sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
-            _, weights_sum, depth, image, weights = self.render_func(sigmas, rgbs, deltas, ts, rays_a, kwargs.get('T_threshold', 1e-4))
+            _, weights_sum, depth, image, weights = self.volume_render(sigmas, rgbs, deltas, ts, rays_a, kwargs.get('T_threshold', 1e-4))
             
             # normals related regularizations
             if normals is not None:
@@ -671,13 +674,13 @@ class NeRFRenderer(nn.Module):
                 n_step = max(min(N // n_alive, 64), min_samples)
 
                 xyzs, dirs, deltas, ts, N_eff_samples = \
-                raymarching_test_taichi(rays_o, rays_d, hits_t[:, 0], rays_alive,
+                self.raymarching_test_taichi(rays_o, rays_d, hits_t[:, 0], rays_alive,
                                     self.density_bitfield, self.cascade,
                                     self.bound, exp_step_factor,
                                     self.grid_size, MAX_SAMPLES, n_step)
-                # print(f"[Test] Ray marching after xyzs {xyzs.shape}, dirs {dirs.shape}, ts {ts.shape}")
-                xyzs = rearrange(xyzs, 'n1 n2 c -> (n1 n2) c')
-                dirs = rearrange(dirs, 'n1 n2 c -> (n1 n2) c')
+
+                xyzs = self.rearrange(xyzs, 'n1 n2 c -> (n1 n2) c')
+                dirs = self.rearrange(dirs, 'n1 n2 c -> (n1 n2) c')
                 valid_mask = ~torch.all(dirs == 0, dim=1)
                 if valid_mask.sum() == 0:
                     break
@@ -686,16 +689,14 @@ class NeRFRenderer(nn.Module):
                 rgbs = torch.zeros(len(xyzs), 3, device=device)
                 normals = torch.zeros(len(xyzs), 3, device=device)
 
-                # xyzs, dirs, ts = raymarching.march_rays(n_alive, n_step, rays_alive, rays_t, rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, perturb if step == 0 else False, dt_gamma, max_steps)
                 sigmas[valid_mask], _rgbs, normals = self(xyzs[valid_mask], dirs[valid_mask], light_d, ratio=ambient_ratio, shading=shading)
                 rgbs[valid_mask] = _rgbs.float()
-                sigmas = rearrange(sigmas, '(n1 n2) -> n1 n2', n2=n_step)
-                rgbs = rearrange(rgbs, '(n1 n2) c -> n1 n2 c', n2=n_step)
+                sigmas = self.rearrange(sigmas, '(n1 n2) -> n1 n2', n2=n_step)
+                rgbs = self.rearrange(rgbs, '(n1 n2) c -> n1 n2 c', n2=n_step)
                 if normals is not None:
-                    normals = rearrange(normals, '(n1 n2) c -> n1 n2 c', n2=n_step)
+                    normals = self.rearrange(normals, '(n1 n2) c -> n1 n2 c', n2=n_step)
 
-                # raymarching.composite_rays(n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, ts, weights_sum, depth, image, T_thresh)
-                composite_test_fw(sigmas, rgbs, deltas, ts, hits_t[:,0], rays_alive,
+                self.composite_test_fw(sigmas, rgbs, deltas, ts, hits_t[:,0], rays_alive,
                                     kwargs.get('T_threshold', 1e-4), N_eff_samples,
                                     weights_sum, depth, image)
 
@@ -711,7 +712,7 @@ class NeRFRenderer(nn.Module):
         elif bg_color is None:
             bg_color = 1
 
-        image = image + rearrange(1 - weights_sum, 'n -> n 1') * bg_color
+        image = image + self.rearrange(1 - weights_sum, 'n -> n 1') * bg_color
         image = image.view(*prefix, 3)
 
         depth = depth.view(*prefix)
