@@ -132,7 +132,7 @@ class VolumeRenderer(torch.nn.Module):
         self.T = ti.field(dtype=data_type,
                           shape=(batch_size * 1024),
                           needs_grad=True)
-        # self.a = ti.field(dtype=data_type, shape=(8192*1024), needs_grad=True)
+
         # rays level
         self.rays_a_fields = ti.field(dtype=ti.i64, shape=(batch_size, 3))
         self.total_samples_fields = ti.field(dtype=ti.i64,
@@ -146,8 +146,6 @@ class VolumeRenderer(torch.nn.Module):
         self.rgb_fields = ti.field(dtype=data_type,
                                    shape=(batch_size, 3),
                                    needs_grad=True)
-
-        # self.T = ti.field(dtype=data_type, shape=(8192, 1024), needs_grad=True)
 
         # preallocate tensor
         self.register_buffer('total_samples',
@@ -175,25 +173,8 @@ class VolumeRenderer(torch.nn.Module):
                 # If no output gradient is provided, no need to
                 # automatically materialize it as torch.zeros.
 
-                # ctx.set_materialize_grads(False) # maybe not needed
                 ctx.T_threshold = T_threshold
-                rays_size = rays_a.shape[0]
-                # ctx.rays_size = rays_size
                 ctx.samples_size = sigmas.shape[0]
-                # total_samples = torch.zeros(rays_size,
-                #                             dtype=torch.int64,
-                #                             device=rays_a.device)
-                # rgb = torch.zeros(rays_size,
-                #                   3,
-                #                   dtype=torch_type,
-                #                   device=rays_a.device)
-                # opacity = torch.zeros(rays_size,
-                #                       dtype=torch_type,
-                #                       device=rays_a.device)
-                # depth = torch.zeros(rays_size,
-                #                     dtype=torch_type,
-                #                     device=rays_a.device)
-                # ws = torch.zeros_like(sigmas)
 
                 ws = self.ws[:sigmas.shape[0]]
 
@@ -212,15 +193,10 @@ class VolumeRenderer(torch.nn.Module):
                 ti2torch(self.opacity_fields, self.opacity)
                 ti2torch(self.depth_fields, self.depth)
                 ti2torch(self.rgb_fields, self.rgb)
-                # ti2torch(self.total_samples_fields, total_samples)
-                # ti2torch(self.opacity_fields, opacity)
-                # ti2torch(self.depth_fields, depth)
-                # ti2torch(self.rgb_fields, rgb)
-                # ti2torch(self.ws_fields, ws)
+
 
                 return self.total_samples.sum(
                 ), self.opacity, self.depth, self.rgb, ws
-                # return total_samples.sum(), opacity, depth, rgb, ws
 
             @staticmethod
             @custom_bwd
@@ -228,16 +204,7 @@ class VolumeRenderer(torch.nn.Module):
                          dL_drgb, dL_dws):
 
                 T_threshold = ctx.T_threshold
-                # rays_size = ctx.rays_size
                 samples_size = ctx.samples_size
-                # create new tensor for saving sigma and rgb gradient from taichi field
-                # sigma_grad = torch.zeros(samples_size,
-                #                          dtype=torch_type,
-                #                          device=dL_dws.device)
-                # rgb_grad = torch.zeros(samples_size,
-                #                        3,
-                #                        dtype=torch_type,
-                #                        device=dL_dws.device)
 
                 sigma_grad = self.sigma_grad[:samples_size].contiguous()
                 rgb_grad = self.rgb_grad[:samples_size].contiguous()
@@ -262,18 +229,10 @@ class VolumeRenderer(torch.nn.Module):
         self._module_function = _module_function
 
     def zero_grad(self):
-
         self.sigmas_fields.grad.fill(0.)
         self.rgbs_fields.grad.fill(0.)
-        # self.deltas_fields.grad.fill(0.)
-        # self.ts_fields.grad.fill(0.)
-        # self.ws_fields.grad.fill(0.)
         self.T.grad.fill(0.)
-        # rays level
-        # self.opacity_fields.grad.fill(0.)
-        # self.depth_fields.grad.fill(0.)
-        # self.rgb_fields.grad.fill(0.)
-        # self.ws_fields.grad.fill(0.)
+
 
     def forward(self, sigmas, rgbs, deltas, ts, rays_a, T_threshold):
         return self._module_function.apply(sigmas, rgbs, deltas, ts, rays_a,

@@ -61,16 +61,8 @@ class RayAABBIntersector(torch.autograd.Function):
         hits_t = (torch.zeros(
             rays_o.size(0), 1, 2, device=rays_o.device, dtype=torch.float32) -
                   1).contiguous()
-        # hits_voxel_idx = (torch.zeros(rays_o.size(0), max_hits, device=rays_o.device, dtype=torch.int64) - 1).contiguous()
-        # hit_cnt = torch.empty(rays_o.size(0), device=rays_o.device)
-        # taichi_kernel.ray_aabb_intersec_taichi_forward(hits_t, hits_voxel_idx, hit_cnt, rays_o, rays_d, center, half_size, max_hits)
+
         simple_ray_aabb_intersec_taichi_forward(hits_t, rays_o, rays_d, center,
                                                 half_size)
-
-        # ti.sync()
-
-        # hits_order = torch.sort(hits_t[..., 0])[1]
-        # hits_voxel_idx = torch.gather(hits_voxel_idx, 1, hits_order)
-        # hits_t = torch.gather(hits_t, 1, hits_order.unsqueeze(-1).tile((1, 1, 2)))
 
         return None, hits_t, None
