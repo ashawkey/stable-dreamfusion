@@ -127,8 +127,6 @@ if __name__ == '__main__':
     model = NeRFNetwork(opt)
 
     print(model)
-    for i in model.encoder.parameters():
-        print(i.shape)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
