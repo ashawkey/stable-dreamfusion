@@ -22,3 +22,4 @@ imageio-ffmpeg
 accelerate
 tensorboard
 pymeshlab
+einops
