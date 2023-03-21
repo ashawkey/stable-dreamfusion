@@ -8,11 +8,11 @@ from .utils import NEAR_DISTANCE
 
 @ti.kernel
 def simple_ray_aabb_intersec_taichi_forward(
-        hits_t: ti.types.ndarray(field_dim=2),
-        rays_o: ti.types.ndarray(field_dim=2),
-        rays_d: ti.types.ndarray(field_dim=2),
-        centers: ti.types.ndarray(field_dim=2),
-        half_sizes: ti.types.ndarray(field_dim=2)):
+        hits_t: ti.types.ndarray(ndim=2),
+        rays_o: ti.types.ndarray(ndim=2),
+        rays_d: ti.types.ndarray(ndim=2),
+        centers: ti.types.ndarray(ndim=2),
+        half_sizes: ti.types.ndarray(ndim=2)):
 
     for r in ti.ndrange(hits_t.shape[0]):
         ray_o = vec3([rays_o[r, 0], rays_o[r, 1], rays_o[r, 2]])
