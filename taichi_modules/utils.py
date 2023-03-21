@@ -86,8 +86,8 @@ def __morton3D_invert(x):
 
 
 @ti.kernel
-def morton3D_invert_kernel(indices: ti.types.ndarray(field_dim=1),
-                           coords: ti.types.ndarray(field_dim=2)):
+def morton3D_invert_kernel(indices: ti.types.ndarray(ndim=1),
+                           coords: ti.types.ndarray(ndim=2)):
     for i in indices:
         ind = ti.uint32(indices[i])
         coords[i, 0] = __morton3D_invert(ind >> 0)
@@ -106,8 +106,8 @@ def morton3D_invert(indices):
 
 
 @ti.kernel
-def morton3D_kernel(xyzs: ti.types.ndarray(field_dim=2),
-                    indices: ti.types.ndarray(field_dim=1)):
+def morton3D_kernel(xyzs: ti.types.ndarray(ndim=2),
+                    indices: ti.types.ndarray(ndim=1)):
     for s in indices:
         xyz = uvec3([xyzs[s, 0], xyzs[s, 1], xyzs[s, 2]])
         indices[s] = ti.cast(__morton3D(xyz), ti.int32)
@@ -123,9 +123,9 @@ def morton3D(coords1):
 
 
 @ti.kernel
-def packbits(density_grid: ti.types.ndarray(field_dim=1),
+def packbits(density_grid: ti.types.ndarray(ndim=1),
              density_threshold: float,
-             density_bitfield: ti.types.ndarray(field_dim=1)):
+             density_bitfield: ti.types.ndarray(ndim=1)):
 
     for n in density_bitfield:
         bits = ti.uint8(0)
