@@ -524,7 +524,7 @@ class Trainer(object):
         for epoch in range(self.epoch + 1, max_epochs + 1):
             self.epoch = epoch
 
-            self.train_one_epoch(train_loader)
+            self.train_one_epoch(train_loader, max_epochs)
 
             if self.workspace is not None and self.local_rank == 0:
                 self.save_checkpoint(full=True, best=False)
@@ -713,8 +713,8 @@ class Trainer(object):
 
         return outputs
 
-    def train_one_epoch(self, loader):
-        self.log(f"==> Start Training {self.workspace} Epoch {self.epoch}, lr={self.optimizer.param_groups[0]['lr']:.6f} ...")
+    def train_one_epoch(self, loader, max_epochs):
+        self.log(f"==> Start Training {self.workspace} Epoch {self.epoch}/{max_epochs}, lr={self.optimizer.param_groups[0]['lr']:.6f} ...")
 
         total_loss = 0
         if self.local_rank == 0 and self.report_metric_at_train:
@@ -795,7 +795,7 @@ class Trainer(object):
             else:
                 self.lr_scheduler.step()
 
-        self.log(f"==> Finished Epoch {self.epoch}.")
+        self.log(f"==> Finished Epoch {self.epoch}/{max_epochs}.")
 
 
     def evaluate_one_epoch(self, loader, name=None):
