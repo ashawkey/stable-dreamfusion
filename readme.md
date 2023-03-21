@@ -90,6 +90,11 @@ First time running will take some time to compile the CUDA extensions.
 # `--dir_text` enables view-dependent prompting.
 python main.py --text "a hamburger" --workspace trial -O
 
+# If the above gives you CUDA out of memory errors, try the memory saving config.
+# It makes torch use float16 precision for weights, which might trade away some output quality.
+# It also enables attention slicing which might trade away some execution speed.
+# Tested to run fine on 8GB VRAM (Nvidia 3070 Ti).
+python main.py --text "a hamburger" --workspace trial -O --memory_saving_sd_config
 # use CUDA-free Taichi backend with `--backbone grid_taichi`
 python3 main.py --text "a hamburger" --workspace trial -O --backbone grid_taichi
 

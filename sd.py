@@ -33,7 +33,7 @@ def seed_everything(seed):
     #torch.backends.cudnn.benchmark = True
 
 class StableDiffusion(nn.Module):
-    def __init__(self, device, sd_version='2.1', hf_key=None):
+    def __init__(self, device, memory_saving_sd_config, sd_version='2.1', hf_key=None):
         super().__init__()
 
         self.device = device
@@ -54,10 +54,17 @@ class StableDiffusion(nn.Module):
             raise ValueError(f'Stable-diffusion version {self.sd_version} not supported.')
 
         # Create model
-        self.vae = AutoencoderKL.from_pretrained(model_key, subfolder="vae").to(self.device)
-        self.tokenizer = CLIPTokenizer.from_pretrained(model_key, subfolder="tokenizer")
-        self.text_encoder = CLIPTextModel.from_pretrained(model_key, subfolder="text_encoder").to(self.device)
-        self.unet = UNet2DConditionModel.from_pretrained(model_key, subfolder="unet").to(self.device)
+        if memory_saving_sd_config:
+            self.vae = AutoencoderKL.from_pretrained(model_key, subfolder="vae", torch_dtype=torch.float16).to(self.device)
+            self.tokenizer = CLIPTokenizer.from_pretrained(model_key, subfolder="tokenizer", torch_dtype=torch.float16)
+            self.text_encoder = CLIPTextModel.from_pretrained(model_key, subfolder="text_encoder", torch_dtype=torch.float16).to(self.device)
+            self.unet = UNet2DConditionModel.from_pretrained(model_key, subfolder="unet", torch_dtype=torch.float16).to(self.device)
+            self.unet.set_attention_slice("auto")
+        else:
+            self.vae = AutoencoderKL.from_pretrained(model_key, subfolder="vae").to(self.device)
+            self.tokenizer = CLIPTokenizer.from_pretrained(model_key, subfolder="tokenizer")
+            self.text_encoder = CLIPTextModel.from_pretrained(model_key, subfolder="text_encoder").to(self.device)
+            self.unet = UNet2DConditionModel.from_pretrained(model_key, subfolder="unet").to(self.device)
 
         if is_xformers_available():
             self.unet.enable_xformers_memory_efficient_attention()
@@ -211,6 +218,7 @@ if __name__ == '__main__':
     parser.add_argument('--negative', default='', type=str)
     parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
     parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
+    parser.add_argument('--memory_saving_sd_config', action='store_true', help="prioritize VRAM savings when configuring Stable Diffusion")
     parser.add_argument('-H', type=int, default=512)
     parser.add_argument('-W', type=int, default=512)
     parser.add_argument('--seed', type=int, default=0)
@@ -221,7 +229,7 @@ if __name__ == '__main__':
 
     device = torch.device('cuda')
 
-    sd = StableDiffusion(device, opt.sd_version, opt.hf_key)
+    sd = StableDiffusion(device, opt.memory_saving_sd_config, opt.sd_version, opt.hf_key)
 
     imgs = sd.prompt_to_img(opt.prompt, opt.negative, opt.H, opt.W, opt.steps)
 

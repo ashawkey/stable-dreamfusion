@@ -106,7 +106,7 @@ print(f'[INFO] loading models..')
 
 if opt.guidance == 'stable-diffusion':
     from sd import StableDiffusion
-    guidance = StableDiffusion(device, opt.sd_version, opt.hf_key)
+    guidance = StableDiffusion(device, opt.memory_saving_sd_config, opt.sd_version, opt.hf_key)
 elif opt.guidance == 'clip':
     from nerf.clip import CLIP
     guidance = CLIP(device)
