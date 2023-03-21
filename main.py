@@ -56,8 +56,8 @@ if __name__ == '__main__':
     parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
     parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
     # try this if CUDA OOM
-    parser.add_argument('--memory_saving_sd_config', action='store_true', help="prioritize VRAM savings when configuring Stable Diffusion")
-    # rendering resolution in training, decrease this if CUDA still OOM even if --memory_saving_sd_config is enabled.
+    parser.add_argument('--vram_O', type=int, default=0, choices=[0, 1, 2], help="VRAM optimization level for configuring Stable Diffusion")
+    # rendering resolution in training, decrease this if CUDA still OOM even if --vram_O is 2.
     parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
     parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
     
@@ -90,7 +90,7 @@ if __name__ == '__main__':
 
     opt = parser.parse_args()
 
-    if opt.memory_saving_sd_config:
+    if opt.vram_O > 0:
         opt.fp16 = True
 
     if opt.O:
@@ -176,7 +176,7 @@ if __name__ == '__main__':
 
         if opt.guidance == 'stable-diffusion':
             from sd import StableDiffusion
-            guidance = StableDiffusion(device, opt.memory_saving_sd_config, opt.sd_version, opt.hf_key)
+            guidance = StableDiffusion(device, opt.vram_O, opt.sd_version, opt.hf_key)
         elif opt.guidance == 'clip':
             from nerf.clip import CLIP
             guidance = CLIP(device)
