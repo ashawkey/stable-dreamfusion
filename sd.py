@@ -1,6 +1,7 @@
 from transformers import CLIPTextModel, CLIPTokenizer, logging
 from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler, DDIMScheduler, StableDiffusionPipeline
 from diffusers.utils.import_utils import is_xformers_available
+from os.path import isfile
 
 # suppress partial model loading warning
 logging.set_verbosity_error()
@@ -9,15 +10,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch.cuda.amp import custom_bwd, custom_fwd 
+from torch.cuda.amp import custom_bwd, custom_fwd
+from dataclasses import dataclass
+
 
 class SpecifyGradient(torch.autograd.Function):
     @staticmethod
     @custom_fwd
     def forward(ctx, input_tensor, gt_grad):
-        ctx.save_for_backward(gt_grad) 
+        ctx.save_for_backward(gt_grad)
         # we return a dummy value 1, which will be scaled by amp's scaler so we get the scale in backward.
-        return torch.ones([1], device=input_tensor.device, dtype=input_tensor.dtype) 
+        return torch.ones([1], device=input_tensor.device, dtype=input_tensor.dtype)
 
     @staticmethod
     @custom_bwd
@@ -32,6 +35,10 @@ def seed_everything(seed):
     #torch.backends.cudnn.deterministic = True
     #torch.backends.cudnn.benchmark = True
 
+@dataclass
+class UNet2DConditionOutput:
+    sample: torch.FloatTensor
+
 class StableDiffusion(nn.Module):
     def __init__(self, device, vram_O, sd_version='2.1', hf_key=None):
         super().__init__()
@@ -40,7 +47,7 @@ class StableDiffusion(nn.Module):
         self.sd_version = sd_version
 
         print(f'[INFO] loading stable diffusion...')
-        
+
         if hf_key is not None:
             print(f'[INFO] using hugging face custom model key: {hf_key}')
             model_key = hf_key
@@ -58,6 +65,8 @@ class StableDiffusion(nn.Module):
             pipe = StableDiffusionPipeline.from_pretrained(model_key, torch_dtype=torch.float16)
             if vram_O > 1:
                 pipe.enable_sequential_cpu_offload()
+                pipe.enable_vae_slicing()
+                pipe.unet.to(memory_format=torch.channels_last)
             pipe.enable_attention_slicing(1)
             self.vae = pipe.vae
             self.tokenizer = pipe.tokenizer
@@ -73,6 +82,21 @@ class StableDiffusion(nn.Module):
 
         if is_xformers_available():
             self.unet.enable_xformers_memory_efficient_attention()
+
+        if isfile('./unet_traced.pt'):
+            # use jitted unet
+            unet_traced = torch.jit.load('./unet_traced.pt')
+            class TracedUNet(torch.nn.Module):
+                def __init__(self):
+                    super().__init__()
+                    self.in_channels = pipe.unet.in_channels
+                    self.device = pipe.unet.device
+
+                def forward(self, latent_model_input, t, encoder_hidden_states):
+                    sample = unet_traced(latent_model_input, t, encoder_hidden_states)[0]
+                    return UNet2DConditionOutput(sample=sample)
+            pipe.unet = TracedUNet()
+
 
         self.num_train_timesteps = self.scheduler.config.num_train_timesteps
         self.min_step = int(self.num_train_timesteps * 0.02)
@@ -120,6 +144,10 @@ class StableDiffusion(nn.Module):
             latents_noisy = self.scheduler.add_noise(latents, noise, t)
             # pred noise
             latent_model_input = torch.cat([latents_noisy] * 2)
+            # Save input tensors for UNet
+            #torch.save(latent_model_input, "train_latent_model_input.pt")
+            #torch.save(t, "train_t.pt")
+            #torch.save(text_embeddings, "train_text_embeddings.pt")
             noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
 
         # perform guidance (high scale from paper!)
@@ -136,7 +164,7 @@ class StableDiffusion(nn.Module):
         grad = torch.nan_to_num(grad)
 
         # since we omitted an item in grad, we need to use the custom function to specify the gradient
-        loss = SpecifyGradient.apply(latents, grad) 
+        loss = SpecifyGradient.apply(latents, grad)
 
         return loss 
 
@@ -152,6 +180,10 @@ class StableDiffusion(nn.Module):
                 # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
                 latent_model_input = torch.cat([latents] * 2)
 
+                # Save input tensors for UNet
+                #torch.save(latent_model_input, "produce_latents_latent_model_input.pt")
+                #torch.save(t, "produce_latents_t.pt")
+                #torch.save(text_embeddings, "produce_latents_text_embeddings.pt")
                 # predict the noise residual
                 with torch.no_grad():
                     noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings)['sample']
