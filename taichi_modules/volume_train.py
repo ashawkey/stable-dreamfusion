@@ -109,10 +109,10 @@ def check_value(
             checker[I] = 1
 
 
-class VolumeRenderer(torch.nn.Module):
+class VolumeRendererTaichi(torch.nn.Module):
 
     def __init__(self, batch_size=8192, data_type=data_type):
-        super(VolumeRenderer, self).__init__()
+        super(VolumeRendererTaichi, self).__init__()
         # samples level
         self.sigmas_fields = ti.field(dtype=data_type,
                                       shape=(batch_size * 1024, ),

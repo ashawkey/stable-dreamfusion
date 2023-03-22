@@ -163,14 +163,14 @@ def hash_encode_kernel_half2(
         xyzs_embedding[i, level] = local_feature
 
 
-class HashEncoder(torch.nn.Module):
+class HashEncoderTaichi(torch.nn.Module):
 
     def __init__(self,
                  b=1.3195079565048218,
                  batch_size=8192,
                  data_type=data_type,
                  half2_opt=False):
-        super(HashEncoder, self).__init__()
+        super(HashEncoderTaichi, self).__init__()
 
         self.per_level_scale = b
         if batch_size < 2048:

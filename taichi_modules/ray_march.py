@@ -142,10 +142,10 @@ def raymarching_train_backword(segments: ti.types.ndarray(ndim=2),
         dL_drays_d[s] = dxyz * ts[index] + ddir
 
 
-class RayMarcher(torch.nn.Module):
+class RayMarcherTaichi(torch.nn.Module):
 
     def __init__(self, batch_size=8192):
-        super(RayMarcher, self).__init__()
+        super(RayMarcherTaichi, self).__init__()
 
         self.register_buffer('rays_a',
                              torch.zeros(batch_size, 3, dtype=torch.int32))

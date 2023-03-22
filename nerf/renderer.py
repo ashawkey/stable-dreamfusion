@@ -127,8 +127,8 @@ class NeRFRenderer(nn.Module):
         
         if self.taichi_ray:
             from einops import rearrange
-            from taichi_modules import RayMarcher as RayMarcherTaichi
-            from taichi_modules import VolumeRenderer as VolumeRendererTaichi
+            from taichi_modules import RayMarcherTaichi
+            from taichi_modules import VolumeRendererTaichi
             from taichi_modules import RayAABBIntersector as RayAABBIntersectorTaichi
             from taichi_modules import raymarching_test as raymarching_test_taichi
             from taichi_modules import composite_test as composite_test_fw

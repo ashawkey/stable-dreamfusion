@@ -46,8 +46,6 @@ class NeRFNetwork(NeRFRenderer):
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
 
-        # print("get the hashgrid taichi encoder")
-
         self.encoder, self.in_dim = get_encoder('hashgrid_taichi', input_dim=3, log2_hashmap_size=19, desired_resolution=2048 * self.bound, interpolation='smoothstep')
 
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True)
@@ -57,11 +55,10 @@ class NeRFNetwork(NeRFRenderer):
 
         # background network
         if self.bg_radius > 0:
-            self.num_layers_bg = num_layers_bg   
+            self.num_layers_bg = num_layers_bg
             self.hidden_dim_bg = hidden_dim_bg
-            
             # use a very simple network to avoid it learning the prompt...
-            self.encoder_bg, self.in_dim_bg = get_encoder('frequency', input_dim=3, multires=4)
+            self.encoder_bg, self.in_dim_bg = get_encoder('frequency_torch', input_dim=3, multires=4) # TODO: freq encoder can be replaced by a Taichi implementation
             self.bg_net = MLP(self.in_dim_bg, 3, hidden_dim_bg, num_layers_bg, bias=True)
             
         else:
