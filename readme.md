@@ -63,7 +63,7 @@ pip install ./raymarching # install to python path (you still need the raymarchi
 ### Taichi backend (optional)
 Use [Taichi](https://github.com/taichi-dev/taichi) backend for Instant-NGP. It achieves comparable performance to CUDA implementation while **No CUDA** build is required. Install Taichi with pip: 
 ```bash
-pip install taichi
+pip install -i https://pypi.taichi.graphics/simple/ taichi-nightly
 ```
 
 ### Tested environments
