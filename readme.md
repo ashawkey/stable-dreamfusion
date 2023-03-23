@@ -86,19 +86,13 @@ First time running will take some time to compile the CUDA extensions.
 ## train with text prompt (with the default settings)
 # `-O` equals `--cuda_ray --fp16 --dir_text`
 # `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
-# `--fp16` enables half-precision training.
+# `--vram_O` enables various vram saving measures. Details [here](https://huggingface.co/docs/diffusers/optimization/fp16).
 # `--dir_text` enables view-dependent prompting.
 python main.py --text "a hamburger" --workspace trial -O
 
-# If the above gives you CUDA out of memory errors, try vram optimization level 1.
-# It makes torch use float16 precision for weights, which might trade away some output quality.
-# It also enables attention slicing which might trade away some execution speed.
 # Tested to run fine on 8GB VRAM (Nvidia 3070 Ti).
-python main.py --text "a hamburger" --workspace trial -O --vram_O 1
-# To further trade away time for more vram, try vram optimization level 2
-# Might allow larger --w and --h, which gives slower but higher quality results.
-# Tested to run fine on 8GB VRAM (Nvidia 3070 Ti).
-python main.py --text "a hamburger" --workspace trial -O --vram_O 1 --w 128 --h 128
+python main.py --text "a hamburger" --workspace trial -O --w 300 --h 300
+
 # use CUDA-free Taichi backend with `--backbone grid_taichi`
 python3 main.py --text "a hamburger" --workspace trial -O --backbone grid_taichi
 
@@ -175,9 +169,9 @@ class SpecifyGradient(torch.autograd.Function):
     @staticmethod
     @custom_fwd
     def forward(ctx, input_tensor, gt_grad):
-        ctx.save_for_backward(gt_grad) 
+        ctx.save_for_backward(gt_grad)
         # we return a dummy value 1, which will be scaled by amp's scaler so we get the scale in backward.
-        return torch.ones([1], device=input_tensor.device, dtype=input_tensor.dtype) 
+        return torch.ones([1], device=input_tensor.device, dtype=input_tensor.dtype)
 
     @staticmethod
     @custom_bwd
@@ -187,9 +181,9 @@ class SpecifyGradient(torch.autograd.Function):
         return gt_grad, None
 
 loss = SpecifyGradient.apply(latents, grad)
-return loss # functional loss      
+return loss # functional loss
 ```
-* Other regularizations are in `./nerf/utils.py > Trainer > train_step`. 
+* Other regularizations are in `./nerf/utils.py > Trainer > train_step`.
     * The generation seems quite sensitive to regularizations on weights_sum (alphas for each ray). The original opacity loss tends to make NeRF disappear (zero density everywhere), so we use an entropy loss to replace it for now (encourages alpha to be either 0 or 1).
 * NeRF Rendering core function: `./nerf/renderer.py > NeRFRenderer > run & run_cuda`.
 * Shading & normal evaluation: `./nerf/network*.py > NeRFNetwork > forward`.
@@ -199,6 +193,31 @@ return loss # functional loss
     * use `--suppress_face` to add `face` as a negative prompt at all directions except `front`.
 * Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option.
 * Spatial density bias (density blob): `./nerf/network*.py > NeRFNetwork > density_blob`.
+
+# Speeding Things Up with Tracing
+
+Torch lets us trade away some vram for some ~30% speed gains if we step through a process called tracing first.
+If you'd like to try here's how:
+ 1. In `sd.py` you'll find these three lines commented out:
+ ```python
+            #torch.save(latent_model_input, "train_latent_model_input.pt")
+            #torch.save(t, "train_t.pt")
+            #torch.save(text_embeddings, "train_text_embeddings.pt")
+ ```
+ remove the `#` to make the program write those three `.pt` files to your disk next time you start a standard run, for example
+ ```bash
+ python main.py --text "a hamburger" --workspace trial -O --w 200 --h 200
+ ```
+ You only need to let it run for a few seconds, until you've confirmed that three `.pt` files have been created.
+ 2. Run the tracer script, which creates a `unet_traced.pt` file for you:
+ ```bash
+ python trace.py
+ ```
+ 3. Comment out the three `torch.save` lines in `sd.py` again, and (re)-start another standard run. This time you should see a siginificant speed-up and maybe a bit
+    higher vram usage than before.
+
+The tracing functionality has only been tested in combination with the `-O` option. Using it without `--vram_O` will require some changes inside `trace.py`.
+
 
 # Acknowledgement
 

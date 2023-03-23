@@ -37,7 +37,7 @@ def seed_everything(seed):
 
 @dataclass
 class UNet2DConditionOutput:
-    sample: torch.FloatTensor
+    sample: torch.HalfTensor # Not sure how to check what unet_traced.pt contains, and user wants. HalfTensor or FloatTensor
 
 class StableDiffusion(nn.Module):
     def __init__(self, device, vram_O, sd_version='2.1', hf_key=None):
@@ -60,29 +60,10 @@ class StableDiffusion(nn.Module):
         else:
             raise ValueError(f'Stable-diffusion version {self.sd_version} not supported.')
 
+        precision_t = torch.float16 if vram_O else torch.float32
+
         # Create model
-        if vram_O > 0:
-            pipe = StableDiffusionPipeline.from_pretrained(model_key, torch_dtype=torch.float16)
-            if vram_O > 1:
-                pipe.enable_sequential_cpu_offload()
-                pipe.enable_vae_slicing()
-                pipe.unet.to(memory_format=torch.channels_last)
-            pipe.enable_attention_slicing(1)
-            self.vae = pipe.vae
-            self.tokenizer = pipe.tokenizer
-            self.text_encoder = pipe.text_encoder
-            self.unet = pipe.unet
-            self.scheduler = DDIMScheduler.from_pretrained(model_key, subfolder="scheduler", torch_dtype=torch.float16)
-        else:
-            self.vae = AutoencoderKL.from_pretrained(model_key, subfolder="vae").to(self.device)
-            self.tokenizer = CLIPTokenizer.from_pretrained(model_key, subfolder="tokenizer")
-            self.text_encoder = CLIPTextModel.from_pretrained(model_key, subfolder="text_encoder").to(self.device)
-            self.unet = UNet2DConditionModel.from_pretrained(model_key, subfolder="unet").to(self.device)
-            self.scheduler = DDIMScheduler.from_pretrained(model_key, subfolder="scheduler")
-
-        if is_xformers_available():
-            self.unet.enable_xformers_memory_efficient_attention()
-
+        pipe = StableDiffusionPipeline.from_pretrained(model_key, torch_dtype=precision_t)
         if isfile('./unet_traced.pt'):
             # use jitted unet
             unet_traced = torch.jit.load('./unet_traced.pt')
@@ -96,7 +77,21 @@ class StableDiffusion(nn.Module):
                     sample = unet_traced(latent_model_input, t, encoder_hidden_states)[0]
                     return UNet2DConditionOutput(sample=sample)
             pipe.unet = TracedUNet()
+        if vram_O:
+            pipe.enable_sequential_cpu_offload()
+            pipe.enable_vae_slicing()
+            pipe.unet.to(memory_format=torch.channels_last)
+            pipe.enable_attention_slicing(1)
+        else:
+            if is_xformers_available():
+                pipe.enable_xformers_memory_efficient_attention()
 
+        self.vae = pipe.vae
+        self.tokenizer = pipe.tokenizer
+        self.text_encoder = pipe.text_encoder
+        self.unet = pipe.unet
+
+        self.scheduler = DDIMScheduler.from_pretrained(model_key, subfolder="scheduler", torch_dtype=precision_t)
 
         self.num_train_timesteps = self.scheduler.config.num_train_timesteps
         self.min_step = int(self.num_train_timesteps * 0.02)

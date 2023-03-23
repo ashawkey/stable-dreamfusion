@@ -16,16 +16,15 @@ unet_runs_per_experiment = 50
 pipe = StableDiffusionPipeline.from_pretrained(
     "stabilityai/stable-diffusion-2-1-base",
     torch_dtype=torch.float16
-).to("cuda")
-# pipe.enable_sequential_cpu_offload()
-# pipe.enable_vae_slicing()
-# del pipe.vae.decoder
-# pipe.enable_attention_slicing(1)
-# if is_xformers_available():
-#     pipe.enable_xformers_memory_efficient_attention()
+)#.to("cuda")
+pipe.enable_sequential_cpu_offload()
+pipe.enable_vae_slicing()
+pipe.unet.to(memory_format=torch.channels_last)
+pipe.enable_attention_slicing(1)
+#if is_xformers_available(): # xformers seem to use more vram...
+#    pipe.enable_xformers_memory_efficient_attention()
 unet = pipe.unet
 unet.eval()
-unet.to(memory_format=torch.channels_last)  # use channels_last memory format
 unet.forward = functools.partial(unet.forward, return_dict=False)  # set return_dict=False as default
 
 # load inputs
