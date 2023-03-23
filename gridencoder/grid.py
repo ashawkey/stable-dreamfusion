@@ -24,7 +24,7 @@ _interp_to_id = {
 class _grid_encode(Function):
     @staticmethod
     @custom_fwd
-    def forward(ctx, inputs, embeddings, offsets, per_level_scale, base_resolution, calc_grad_inputs=False, gridtype=0, align_corners=False, interpolation=0):
+    def forward(ctx, inputs, embeddings, offsets, per_level_scale, base_resolution, calc_grad_inputs=False, gridtype=0, align_corners=False, interpolation=0, max_level=None):
         # inputs: [B, D], float in [0, 1]
         # embeddings: [sO, C], float
         # offsets: [L + 1], int
@@ -38,6 +38,8 @@ class _grid_encode(Function):
         S = np.log2(per_level_scale) # resolution multiplier at each level, apply log2 for later CUDA exp2f
         H = base_resolution # base resolution
 
+        max_level = L if max_level is None else min(max_level, L)
+
         # manually handle autocast (only use half precision embeddings, inputs must be float for enough precision)
         # if C % 2 != 0, force float, since half for atomicAdd is very slow.
         if torch.is_autocast_enabled() and C % 2 == 0:
@@ -46,18 +48,22 @@ class _grid_encode(Function):
         # L first, optimize cache for cuda kernel, but needs an extra permute later
         outputs = torch.empty(L, B, C, device=inputs.device, dtype=embeddings.dtype)
 
+        # zero init if we only calculate partial levels
+        if max_level < L: outputs.zero_()
+
         if calc_grad_inputs:
             dy_dx = torch.empty(B, L * D * C, device=inputs.device, dtype=embeddings.dtype)
+            if max_level < L: dy_dx.zero_()
         else:
             dy_dx = None
 
-        _backend.grid_encode_forward(inputs, embeddings, offsets, outputs, B, D, C, L, S, H, dy_dx, gridtype, align_corners, interpolation)
+        _backend.grid_encode_forward(inputs, embeddings, offsets, outputs, B, D, C, L, max_level, S, H, dy_dx, gridtype, align_corners, interpolation)
 
         # permute back to [B, L * C]
         outputs = outputs.permute(1, 0, 2).reshape(B, L * C)
 
         ctx.save_for_backward(inputs, embeddings, offsets, dy_dx)
-        ctx.dims = [B, D, C, L, S, H, gridtype, interpolation]
+        ctx.dims = [B, D, C, L, S, H, gridtype, interpolation, max_level]
         ctx.align_corners = align_corners
 
         return outputs
@@ -68,7 +74,7 @@ class _grid_encode(Function):
     def backward(ctx, grad):
 
         inputs, embeddings, offsets, dy_dx = ctx.saved_tensors
-        B, D, C, L, S, H, gridtype, interpolation = ctx.dims
+        B, D, C, L, S, H, gridtype, interpolation, max_level = ctx.dims
         align_corners = ctx.align_corners
 
         # grad: [B, L * C] --> [L, B, C]
@@ -81,12 +87,12 @@ class _grid_encode(Function):
         else:
             grad_inputs = None
 
-        _backend.grid_encode_backward(grad, inputs, embeddings, offsets, grad_embeddings, B, D, C, L, S, H, dy_dx, grad_inputs, gridtype, align_corners, interpolation)
+        _backend.grid_encode_backward(grad, inputs, embeddings, offsets, grad_embeddings, B, D, C, L, max_level, S, H, dy_dx, grad_inputs, gridtype, align_corners, interpolation)
 
         if dy_dx is not None:
             grad_inputs = grad_inputs.to(inputs.dtype)
 
-        return grad_inputs, grad_embeddings, None, None, None, None, None, None, None
+        return grad_inputs, grad_embeddings, None, None, None, None, None, None, None, None
         
 
 
@@ -142,8 +148,9 @@ class GridEncoder(nn.Module):
     def __repr__(self):
         return f"GridEncoder: input_dim={self.input_dim} num_levels={self.num_levels} level_dim={self.level_dim} resolution={self.base_resolution} -> {int(round(self.base_resolution * self.per_level_scale ** (self.num_levels - 1)))} per_level_scale={self.per_level_scale:.4f} params={tuple(self.embeddings.shape)} gridtype={self.gridtype} align_corners={self.align_corners} interpolation={self.interpolation}"
     
-    def forward(self, inputs, bound=1):
+    def forward(self, inputs, bound=1, max_level=None):
         # inputs: [..., input_dim], normalized real world positions in [-bound, bound]
+        # max_level: only calculate first max_level levels (None will use all levels)
         # return: [..., num_levels * level_dim]
 
         inputs = (inputs + bound) / (2 * bound) # map to [0, 1]
@@ -153,7 +160,7 @@ class GridEncoder(nn.Module):
         prefix_shape = list(inputs.shape[:-1])
         inputs = inputs.view(-1, self.input_dim)
 
-        outputs = grid_encode(inputs, self.embeddings, self.offsets, self.per_level_scale, self.base_resolution, inputs.requires_grad, self.gridtype_id, self.align_corners, self.interp_id)
+        outputs = grid_encode(inputs, self.embeddings, self.offsets, self.per_level_scale, self.base_resolution, inputs.requires_grad, self.gridtype_id, self.align_corners, self.interp_id, max_level)
         outputs = outputs.view(prefix_shape + [self.output_dim])
 
         #print('outputs', outputs.shape, outputs.dtype, outputs.min().item(), outputs.max().item())

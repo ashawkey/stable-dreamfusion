@@ -59,6 +59,7 @@ bash scripts/install_ext.sh
 # if you want to install manually, here is an example:
 pip install ./raymarching # install to python path (you still need the raymarching/ folder, since this only installs the built extension.)
 ```
+NOTE: if you use `setup.py` to install the extensions, do not forget to rerun installation after updating the source code! (in cases like `TypeError: grid_encode_forward(): incompatible function arguments`)
 
 ### Taichi backend (optional)
 Use [Taichi](https://github.com/taichi-dev/taichi) backend for Instant-NGP. It achieves comparable performance to CUDA implementation while **No CUDA** build is required. Install Taichi with pip:
@@ -85,14 +86,16 @@ First time running will take some time to compile the CUDA extensions.
 # - worse surface quality
 
 ## train with text prompt (with the default settings)
-# `-O` equals `--cuda_ray --vram_O --dir_text`
+# `-O` equals `--cuda_ray --fp16 --dir_text`
 # `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
-# `--vram_O` enables various vram saving measures. Details [here](https://huggingface.co/docs/diffusers/optimization/fp16).
 # `--dir_text` enables view-dependent prompting.
 python main.py --text "a hamburger" --workspace trial -O
 
-# Tested to run fine on 8GB VRAM (Nvidia 3070 Ti).
-python main.py --text "a hamburger" --workspace trial -O --w 300 --h 300
+# reduce stable-diffusion memory usage with `--vram_O` 
+# enable various vram savings (https://huggingface.co/docs/diffusers/optimization/fp16).
+python main.py --text "a hamburger" --workspace trial -O --vram_O
+# this makes it possible to train with larger rendering resolution, which leads to better quality (see https://github.com/ashawkey/stable-dreamfusion/pull/174)
+python main.py --text "a hamburger" --workspace trial -O --vram_O --w 300 --h 300 # Tested to run fine on 8GB VRAM (Nvidia 3070 Ti).
 
 # use CUDA-free Taichi backend with `--backbone grid_taichi`
 python3 main.py --text "a hamburger" --workspace trial -O --backbone grid_taichi

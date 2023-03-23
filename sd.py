@@ -40,7 +40,7 @@ class UNet2DConditionOutput:
     sample: torch.HalfTensor # Not sure how to check what unet_traced.pt contains, and user wants. HalfTensor or FloatTensor
 
 class StableDiffusion(nn.Module):
-    def __init__(self, device, vram_O, sd_version='2.1', hf_key=None):
+    def __init__(self, device, fp16, vram_O, sd_version='2.1', hf_key=None):
         super().__init__()
 
         self.device = device
@@ -60,10 +60,11 @@ class StableDiffusion(nn.Module):
         else:
             raise ValueError(f'Stable-diffusion version {self.sd_version} not supported.')
 
-        precision_t = torch.float16 if vram_O else torch.float32
+        precision_t = torch.float16 if fp16 else torch.float32
 
         # Create model
         pipe = StableDiffusionPipeline.from_pretrained(model_key, torch_dtype=precision_t)
+
         if isfile('./unet_traced.pt'):
             # use jitted unet
             unet_traced = torch.jit.load('./unet_traced.pt')
@@ -77,15 +78,19 @@ class StableDiffusion(nn.Module):
                     sample = unet_traced(latent_model_input, t, encoder_hidden_states)[0]
                     return UNet2DConditionOutput(sample=sample)
             pipe.unet = TracedUNet()
+
+        if is_xformers_available():
+            pipe.enable_xformers_memory_efficient_attention()
+
         if vram_O:
             pipe.enable_sequential_cpu_offload()
             pipe.enable_vae_slicing()
             pipe.unet.to(memory_format=torch.channels_last)
             pipe.enable_attention_slicing(1)
+            # pipe.enable_model_cpu_offload()
         else:
-            if is_xformers_available():
-                pipe.enable_xformers_memory_efficient_attention()
-
+            pipe.to(device)
+        
         self.vae = pipe.vae
         self.tokenizer = pipe.tokenizer
         self.text_encoder = pipe.text_encoder
@@ -247,7 +252,8 @@ if __name__ == '__main__':
     parser.add_argument('--negative', default='', type=str)
     parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
     parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
-    parser.add_argument('--vram_O', type=int, default=0, choices=[0, 1, 2], help="VRAM optimization level for configuring Stable Diffusion")
+    parser.add_argument('--fp16', action='store_true', help="use float16 for training")
+    parser.add_argument('--vram_O', action='store_true', help="optimization for low VRAM usage")
     parser.add_argument('-H', type=int, default=512)
     parser.add_argument('-W', type=int, default=512)
     parser.add_argument('--seed', type=int, default=0)
@@ -258,7 +264,7 @@ if __name__ == '__main__':
 
     device = torch.device('cuda')
 
-    sd = StableDiffusion(device, opt.vram_O, opt.sd_version, opt.hf_key)
+    sd = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key)
 
     imgs = sd.prompt_to_img(opt.prompt, opt.negative, opt.H, opt.W, opt.steps)
 
