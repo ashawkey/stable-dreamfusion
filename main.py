@@ -14,7 +14,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--text', default=None, help="text prompt")
     parser.add_argument('--negative', default='', type=str, help="negative text prompt")
-    parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray --dir_text")
+    parser.add_argument('-O', action='store_true', help="equals --vram_O --cuda_ray --dir_text")
     parser.add_argument('-O2', action='store_true', help="equals --backbone vanilla --dir_text")
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--eval_interval', type=int, default=1, help="evaluate on the valid set every interval epochs")
@@ -50,15 +50,16 @@ if __name__ == '__main__':
     parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the density blob")
     parser.add_argument('--blob_radius', type=float, default=0.5, help="control the radius for the density blob")
     # network backbone
-    parser.add_argument('--fp16', action='store_true', help="use amp mixed precision training")
     parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla', 'grid_taichi'], help="nerf backbone")
     parser.add_argument('--optim', type=str, default='adan', choices=['adan', 'adam'], help="optimizer")
     parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
     parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
-    # rendering resolution in training, decrease this if CUDA OOM.
+    # try this if CUDA OOM
+    parser.add_argument('--vram_O', action='store_true', help="optimization for low VRAM usage")
+    # rendering resolution in training, decrease this if CUDA still OOM even if --vram_O enabled.
     parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
     parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
-    
+
     ### dataset options
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
     parser.add_argument('--dt_gamma', type=float, default=0, help="dt_gamma (>=0) for adaptive ray marching. set to 0 to disable, >0 to accelerate rendering (but usually with worse quality)")
@@ -89,14 +90,14 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     if opt.O:
-        opt.fp16 = True
+        opt.vram_O = True
         opt.dir_text = True
         opt.cuda_ray = True
 
     elif opt.O2:
-        # only use fp16 if not evaluating normals (else lead to NaNs in training...)
+        # only use vram_O if not evaluating normals (else lead to NaNs in training...)
         if opt.albedo:
-            opt.fp16 = True
+            opt.vram_O = True
         opt.dir_text = True
         opt.backbone = 'vanilla'
 
@@ -133,23 +134,23 @@ if __name__ == '__main__':
     if opt.test:
         guidance = None # no need to load guidance model at test
 
-        trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, fp16=opt.fp16, use_checkpoint=opt.ckpt)
+        trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, fp16=opt.vram_O, use_checkpoint=opt.ckpt)
 
         if opt.gui:
             gui = NeRFGUI(opt, trainer)
             gui.render()
-        
+
         else:
             test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
             trainer.test(test_loader)
-            
+
             if opt.save_mesh:
-                # a special loader for poisson mesh reconstruction, 
+                # a special loader for poisson mesh reconstruction,
                 # loader = NeRFDataset(opt, device=device, type='test', H=128, W=128, size=100).dataloader()
                 trainer.save_mesh()
-    
+
     else:
-        
+
         train_loader = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=100).dataloader()
 
         if opt.optim == 'adan':
@@ -171,21 +172,21 @@ if __name__ == '__main__':
 
         if opt.guidance == 'stable-diffusion':
             from sd import StableDiffusion
-            guidance = StableDiffusion(device, opt.sd_version, opt.hf_key)
+            guidance = StableDiffusion(device, opt.vram_O, opt.sd_version, opt.hf_key)
         elif opt.guidance == 'clip':
             from nerf.clip import CLIP
             guidance = CLIP(device)
         else:
             raise NotImplementedError(f'--guidance {opt.guidance} is not implemented.')
 
-        trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
+        trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.vram_O, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
 
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer
 
             gui = NeRFGUI(opt, trainer)
             gui.render()
-        
+
         else:
             valid_loader = NeRFDataset(opt, device=device, type='val', H=opt.H, W=opt.W, size=5).dataloader()
 

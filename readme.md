@@ -10,17 +10,17 @@ The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_
 
 https://user-images.githubusercontent.com/25863658/215996308-9fd959f5-b5c7-4a8e-a241-0fe63ec86a4a.mp4
 
-Colab notebooks: 
+Colab notebooks:
 * Instant-NGP backbone (`-O`): [![Instant-NGP Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1MXT3yfOFvO0ooKEfiUUvTKwUkrrlCHpF?usp=sharing)
 
-* Vanilla NeRF backbone (`-O2`): [![Vanilla Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1mvfxG-S_n_gZafWoattku7rLJ2kPoImL?usp=sharing) 
+* Vanilla NeRF backbone (`-O2`): [![Vanilla Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1mvfxG-S_n_gZafWoattku7rLJ2kPoImL?usp=sharing)
 
 https://user-images.githubusercontent.com/25863658/194241493-f3e68f78-aefe-479e-a4a8-001424a61b37.mp4
 
 ### [Gallery](https://github.com/ashawkey/stable-dreamfusion/issues/1) | [Update Logs](assets/update_logs.md)
 
 # Important Notice
-This project is a **work-in-progress**, and contains lots of differences from the paper. Also, many features are still not implemented now. **The current generation quality cannot match the results from the original paper, and many prompts still fail badly!** 
+This project is a **work-in-progress**, and contains lots of differences from the paper. Also, many features are still not implemented now. **The current generation quality cannot match the results from the original paper, and many prompts still fail badly!**
 
 ## Notable differences from the paper
 * Since the Imagen model is not publicly available, we use [Stable Diffusion](https://github.com/CompVis/stable-diffusion) to replace it (implementation from [diffusers](https://github.com/huggingface/diffusers)). Different from Imagen, Stable-Diffusion is a latent diffusion model, which diffuses in a latent space instead of the original image space. Therefore, we need the loss to propagate back from the VAE's encoder part too, which introduces extra time cost in training. Currently, 10000 training steps take about 3 hours to train on a V100.
@@ -61,13 +61,14 @@ pip install ./raymarching # install to python path (you still need the raymarchi
 ```
 
 ### Taichi backend (optional)
-Use [Taichi](https://github.com/taichi-dev/taichi) backend for Instant-NGP. It achieves comparable performance to CUDA implementation while **No CUDA** build is required. Install Taichi with pip: 
+Use [Taichi](https://github.com/taichi-dev/taichi) backend for Instant-NGP. It achieves comparable performance to CUDA implementation while **No CUDA** build is required. Install Taichi with pip:
 ```bash
 pip install -i https://pypi.taichi.graphics/simple/ taichi-nightly
 ```
 
 ### Tested environments
 * Ubuntu 22 with torch 1.12 & CUDA 11.6 on a V100.
+* Ubuntu 22 with torch 1.14 & CUDA 11.7 on a 3070.
 
 
 # Usage
@@ -77,18 +78,21 @@ First time running will take some time to compile the CUDA extensions.
 ```bash
 #### stable-dreamfusion setting
 
-### Instant-NGP NeRF Backbone 
+### Instant-NGP NeRF Backbone
 # + faster rendering speed
 # + less GPU memory (~16G)
 # - need to build CUDA extensions (a CUDA-free Taichi backend is available)
 # - worse surface quality
 
 ## train with text prompt (with the default settings)
-# `-O` equals `--cuda_ray --fp16 --dir_text`
+# `-O` equals `--cuda_ray --vram_O --dir_text`
 # `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
-# `--fp16` enables half-precision training.
+# `--vram_O` enables various vram saving measures. Details [here](https://huggingface.co/docs/diffusers/optimization/fp16).
 # `--dir_text` enables view-dependent prompting.
 python main.py --text "a hamburger" --workspace trial -O
+
+# Tested to run fine on 8GB VRAM (Nvidia 3070 Ti).
+python main.py --text "a hamburger" --workspace trial -O --w 300 --h 300
 
 # use CUDA-free Taichi backend with `--backbone grid_taichi`
 python3 main.py --text "a hamburger" --workspace trial -O --backbone grid_taichi
@@ -143,7 +147,7 @@ python main.py --workspace trial2 -O2 --test --gui # not recommended, FPS will b
 
 # Code organization & Advanced tips
 
-This is a simple description of the most important implementation details. 
+This is a simple description of the most important implementation details.
 If you are interested in improving this repo, this might be a starting point.
 Any contribution would be greatly appreciated!
 
@@ -166,9 +170,9 @@ class SpecifyGradient(torch.autograd.Function):
     @staticmethod
     @custom_fwd
     def forward(ctx, input_tensor, gt_grad):
-        ctx.save_for_backward(gt_grad) 
+        ctx.save_for_backward(gt_grad)
         # we return a dummy value 1, which will be scaled by amp's scaler so we get the scale in backward.
-        return torch.ones([1], device=input_tensor.device, dtype=input_tensor.dtype) 
+        return torch.ones([1], device=input_tensor.device, dtype=input_tensor.dtype)
 
     @staticmethod
     @custom_bwd
@@ -178,9 +182,9 @@ class SpecifyGradient(torch.autograd.Function):
         return gt_grad, None
 
 loss = SpecifyGradient.apply(latents, grad)
-return loss # functional loss      
+return loss # functional loss
 ```
-* Other regularizations are in `./nerf/utils.py > Trainer > train_step`. 
+* Other regularizations are in `./nerf/utils.py > Trainer > train_step`.
     * The generation seems quite sensitive to regularizations on weights_sum (alphas for each ray). The original opacity loss tends to make NeRF disappear (zero density everywhere), so we use an entropy loss to replace it for now (encourages alpha to be either 0 or 1).
 * NeRF Rendering core function: `./nerf/renderer.py > NeRFRenderer > run & run_cuda`.
 * Shading & normal evaluation: `./nerf/network*.py > NeRFNetwork > forward`.
@@ -190,6 +194,34 @@ return loss # functional loss
     * use `--suppress_face` to add `face` as a negative prompt at all directions except `front`.
 * Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option.
 * Spatial density bias (density blob): `./nerf/network*.py > NeRFNetwork > density_blob`.
+
+# Speeding Things Up with Tracing
+
+Torch lets us trade away some vram for some ~30% speed gains if we step through a process called tracing first.
+If you'd like to try here's how:
+
+ 1. In `sd.py` you'll find these three lines commented out:
+ ```python
+            #torch.save(latent_model_input, "train_latent_model_input.pt")
+            #torch.save(t, "train_t.pt")
+            #torch.save(text_embeddings, "train_text_embeddings.pt")
+ ```
+ remove the `#` to make the program write those three `.pt` files to your disk next time you start a standard run, for example
+ ```bash
+ python main.py --text "a hamburger" --workspace trial -O --w 200 --h 200
+ ```
+ You only need to let it run for a few seconds, until you've confirmed that three `.pt` files have been created.
+
+ 2. Run the tracer script, which creates a `unet_traced.pt` file for you:
+ ```bash
+ python trace.py
+ ```
+
+ 3. Comment out the three `torch.save` lines in `sd.py` again, and (re)-start another standard run. This time you should see a siginificant speed-up and maybe a bit
+    higher vram usage than before.
+
+The tracing functionality has only been tested in combination with the `-O` option. Using it without `--vram_O` would probably require some changes inside `trace.py`.
+
 
 # Acknowledgement
 
@@ -203,11 +235,11 @@ return loss # functional loss
     }
     ```
 
-* Huge thanks to the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) and the [diffusers](https://github.com/huggingface/diffusers) library. 
+* Huge thanks to the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) and the [diffusers](https://github.com/huggingface/diffusers) library.
 
     ```
     @misc{rombach2021highresolution,
-        title={High-Resolution Image Synthesis with Latent Diffusion Models}, 
+        title={High-Resolution Image Synthesis with Latent Diffusion Models},
         author={Robin Rombach and Andreas Blattmann and Dominik Lorenz and Patrick Esser and Björn Ommer},
         year={2021},
         eprint={2112.10752},
