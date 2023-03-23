@@ -68,6 +68,7 @@ pip install taichi
 
 ### Tested environments
 * Ubuntu 22 with torch 1.12 & CUDA 11.6 on a V100.
+* Ubuntu 22 with torch 1.14 & CUDA 11.7 on a 3070.
 
 
 # Usage
@@ -84,7 +85,7 @@ First time running will take some time to compile the CUDA extensions.
 # - worse surface quality
 
 ## train with text prompt (with the default settings)
-# `-O` equals `--cuda_ray --fp16 --dir_text`
+# `-O` equals `--cuda_ray --vram_O --dir_text`
 # `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
 # `--vram_O` enables various vram saving measures. Details [here](https://huggingface.co/docs/diffusers/optimization/fp16).
 # `--dir_text` enables view-dependent prompting.
