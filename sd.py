@@ -79,9 +79,6 @@ class StableDiffusion(nn.Module):
                     return UNet2DConditionOutput(sample=sample)
             pipe.unet = TracedUNet()
 
-        if is_xformers_available():
-            pipe.enable_xformers_memory_efficient_attention()
-
         if vram_O:
             pipe.enable_sequential_cpu_offload()
             pipe.enable_vae_slicing()
@@ -89,8 +86,10 @@ class StableDiffusion(nn.Module):
             pipe.enable_attention_slicing(1)
             # pipe.enable_model_cpu_offload()
         else:
+            if is_xformers_available():
+                pipe.enable_xformers_memory_efficient_attention()
             pipe.to(device)
-        
+
         self.vae = pipe.vae
         self.tokenizer = pipe.tokenizer
         self.text_encoder = pipe.text_encoder
