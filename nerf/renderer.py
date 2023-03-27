@@ -186,7 +186,8 @@ class NeRFRenderer(nn.Module):
                 resolution = self.grid_size
 
             if self.cuda_ray:
-                density_thresh = min(self.mean_density, self.density_thresh)
+                density_thresh = min(self.mean_density, self.density_thresh) \
+                    if np.greater(self.mean_density, 0) else self.density_thresh
             else:
                 density_thresh = self.density_thresh
             
