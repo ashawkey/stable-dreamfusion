@@ -489,6 +489,7 @@ class NeRFRenderer(nn.Module):
 
         image = image.view(*prefix, 3)
         depth = depth.view(*prefix)
+        weights_sum = weights_sum.reshape(*prefix)
 
         results['image'] = image
         results['depth'] = depth
@@ -579,7 +580,6 @@ class NeRFRenderer(nn.Module):
         if self.bg_radius > 0:
             # use the bg model to calculate bg_color
             bg_color = self.background(rays_d) # [N, 3]
-
         elif bg_color is None:
             bg_color = 1
 

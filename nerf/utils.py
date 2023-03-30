@@ -349,12 +349,13 @@ class Trainer(object):
         B, N = rays_o.shape[:2]
         H, W = data['H'], data['W']
 
-        if self.global_step < self.opt.albedo_iters:
-            shading = 'albedo'
+        if self.global_step < self.opt.warmup_iters:
             ambient_ratio = 1.0
+            shading = 'normal'
+            as_latent = True
         else: 
             rand = random.random()
-            if rand > 0.8: 
+            if rand > 0.6: 
                 shading = 'albedo'
                 ambient_ratio = 1.0
             elif rand > 0.4: 
@@ -363,11 +364,17 @@ class Trainer(object):
             else: 
                 shading = 'lambertian'
                 ambient_ratio = 0.1
+            as_latent = False
 
-        bg_color = torch.rand((B * N, 3), device=rays_o.device) # pixel-wise random
+        bg_color = None
+        # bg_color = torch.rand((B * N, 3), device=rays_o.device) 
         outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
-        pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
         pred_depth = outputs['depth'].reshape(B, 1, H, W)
+
+        if as_latent:
+            pred_rgb = torch.cat([outputs['image'], outputs['weights_sum'].unsqueeze(-1)], dim=-1).reshape(B, H, W, 4).permute(0, 3, 1, 2).contiguous() # [1, 4, H, W]
+        else:
+            pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
         
         # torch_vis_2d(pred_rgb[0])
         
@@ -379,7 +386,8 @@ class Trainer(object):
             text_z = self.text_z
         
         # encode pred_rgb to latents
-        loss = self.guidance.train_step(text_z, pred_rgb)
+        grad_clip = 2 + 6 * min(1, self.global_step / self.opt.iters)
+        loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent, grad_clip=grad_clip)
 
         # regularizations
         if self.opt.lambda_opacity > 0:

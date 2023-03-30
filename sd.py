@@ -124,17 +124,18 @@ class StableDiffusion(nn.Module):
         return text_embeddings
 
 
-    def train_step(self, text_embeddings, pred_rgb, guidance_scale=100):
+    def train_step(self, text_embeddings, pred_rgb, guidance_scale=100, as_latent=False, grad_clip=None):
         
-        # interp to 512x512 to be fed into vae.
-
-        pred_rgb_512 = F.interpolate(pred_rgb, (512, 512), mode='bilinear', align_corners=False)
+        if as_latent:
+            latents = F.interpolate(pred_rgb, (64, 64), mode='bilinear', align_corners=False) * 2 - 1
+        else:
+            # interp to 512x512 to be fed into vae.
+            pred_rgb_512 = F.interpolate(pred_rgb, (512, 512), mode='bilinear', align_corners=False)
+            # encode image into latents with vae, requires grad!
+            latents = self.encode_imgs(pred_rgb_512)
 
         # timestep ~ U(0.02, 0.98) to avoid very high/low noise level
         t = torch.randint(self.min_step, self.max_step + 1, [1], dtype=torch.long, device=self.device)
-
-        # encode image into latents with vae, requires grad!
-        latents = self.encode_imgs(pred_rgb_512)
 
         # predict the noise residual with unet, NO grad!
         with torch.no_grad():
@@ -159,7 +160,8 @@ class StableDiffusion(nn.Module):
         grad = w * (noise_pred - noise)
 
         # clip grad for stable training?
-        # grad = grad.clamp(-10, 10)
+        if grad_clip is not None:
+            grad = grad.clamp(-grad_clip, grad_clip)
         grad = torch.nan_to_num(grad)
 
         # since we omitted an item in grad, we need to use the custom function to specify the gradient
@@ -198,7 +200,7 @@ class StableDiffusion(nn.Module):
 
     def decode_latents(self, latents):
 
-        latents = 1 / 0.18215 * latents
+        latents = 1 / self.vae.config.scaling_factor * latents
 
         with torch.no_grad():
             imgs = self.vae.decode(latents).sample
@@ -213,7 +215,7 @@ class StableDiffusion(nn.Module):
         imgs = 2 * imgs - 1
 
         posterior = self.vae.encode(imgs).latent_dist
-        latents = posterior.sample() * 0.18215
+        latents = posterior.sample() * self.vae.config.scaling_factor
 
         return latents
 

@@ -39,8 +39,7 @@ if __name__ == '__main__':
     parser.add_argument('--upsample_steps', type=int, default=32, help="num steps up-sampled per ray (only valid when not using --cuda_ray)")
     parser.add_argument('--update_extra_interval', type=int, default=16, help="iter interval to update extra status (only valid when using --cuda_ray)")
     parser.add_argument('--max_ray_batch', type=int, default=4096, help="batch size of rays at inference to avoid OOM (only valid when not using --cuda_ray)")
-    parser.add_argument('--albedo', action='store_true', help="only use albedo shading to train, overrides --albedo_iters")
-    parser.add_argument('--albedo_iters', type=int, default=1000, help="training iters that only use albedo shading")
+    parser.add_argument('--warmup_iters', type=int, default=2000, help="training iters that only use albedo shading")
     parser.add_argument('--jitter_pose', action='store_true', help="add jitters to the randomly sampled camera poses")
     parser.add_argument('--uniform_sphere_rate', type=float, default=0.5, help="likelihood of sampling camera location uniformly on the sphere surface area")
     # model options
@@ -96,14 +95,9 @@ if __name__ == '__main__':
         opt.cuda_ray = True
 
     elif opt.O2:
-        # only use fp16 if not evaluating normals (else lead to NaNs in training...)
-        if opt.albedo:
-            opt.fp16 = True
+        opt.fp16 = True
         opt.dir_text = True
         opt.backbone = 'vanilla'
-
-    if opt.albedo:
-        opt.albedo_iters = opt.iters
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
