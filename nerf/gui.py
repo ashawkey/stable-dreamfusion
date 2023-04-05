@@ -16,6 +16,8 @@ class OrbitCamera:
         self.center = np.array([0, 0, 0], dtype=np.float32) # look at this point
         self.rot = R.from_matrix(np.eye(3))
         self.up = np.array([0, 1, 0], dtype=np.float32) # need to be normalized!
+        self.near = 0.001
+        self.far = 1000
 
     # pose
     @property
@@ -36,6 +38,18 @@ class OrbitCamera:
     def intrinsics(self):
         focal = self.H / (2 * np.tan(np.deg2rad(self.fovy) / 2))
         return np.array([focal, focal, self.W // 2, self.H // 2])
+
+    @property
+    def mvp(self):
+        focal = self.H / (2 * np.tan(np.deg2rad(self.fovy) / 2))
+        projection = np.array([
+            [2*focal/self.W, 0, 0, 0], 
+            [0, -2*focal/self.H, 0, 0],
+            [0, 0, -(self.far+self.near)/(self.far-self.near), -(2*self.far*self.near)/(self.far-self.near)],
+            [0, 0, -1, 0]
+        ], dtype=np.float32)
+
+        return projection @ np.linalg.inv(self.pose) # [4, 4]
     
     def orbit(self, dx, dy):
         # rotate along camera up/side axis!
@@ -72,7 +86,7 @@ class NeRFGUI:
         self.mode = 'image' # choose from ['image', 'depth']
         self.shading = 'albedo'
 
-        self.dynamic_resolution = True
+        self.dynamic_resolution = True if not self.opt.dmtet else False
         self.downscale = 1
         self.train_steps = 16
 
@@ -126,7 +140,7 @@ class NeRFGUI:
             starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
             starter.record()
 
-            outputs = self.trainer.test_gui(self.cam.pose, self.cam.intrinsics, self.W, self.H, self.bg_color, self.spp, self.downscale, self.light_dir, self.ambient_ratio, self.shading)
+            outputs = self.trainer.test_gui(self.cam.pose, self.cam.intrinsics, self.cam.mvp, self.W, self.H, self.bg_color, self.spp, self.downscale, self.light_dir, self.ambient_ratio, self.shading)
 
             ender.record()
             torch.cuda.synchronize()

@@ -345,6 +345,7 @@ class Trainer(object):
 
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
+        mvp = data['mvp'] # [B, 4, 4]
 
         B, N = rays_o.shape[:2]
         H, W = data['H'], data['W']
@@ -354,21 +355,16 @@ class Trainer(object):
             shading = 'normal'
             as_latent = True
         else: 
+            ambient_ratio = 0.1 + 0.9 * random.random()
             rand = random.random()
-            if rand > 0.6: 
-                shading = 'albedo'
-                ambient_ratio = 1.0
-            elif rand > 0.4: 
+            if rand > 0.8: 
                 shading = 'textureless'
-                ambient_ratio = 0.1
             else: 
                 shading = 'lambertian'
-                ambient_ratio = 0.1
             as_latent = False
-
+        
         bg_color = None
-        # bg_color = torch.rand((B * N, 3), device=rays_o.device) 
-        outputs = self.model.render(rays_o, rays_d, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
+        outputs = self.model.render(rays_o, rays_d, mvp, H, W, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading)
         pred_depth = outputs['depth'].reshape(B, 1, H, W)
 
         if as_latent:
@@ -386,8 +382,7 @@ class Trainer(object):
             text_z = self.text_z
         
         # encode pred_rgb to latents
-        grad_clip = 2 + 6 * min(1, self.global_step / self.opt.iters)
-        loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent, grad_clip=grad_clip)
+        loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent)
 
         # regularizations
         if self.opt.lambda_opacity > 0:
@@ -404,6 +399,10 @@ class Trainer(object):
         if self.opt.lambda_orient > 0 and 'loss_orient' in outputs:
             loss_orient = outputs['loss_orient']
             loss = loss + self.opt.lambda_orient * loss_orient
+        
+        if self.opt.dmtet and self.opt.lambda_sdf_smooth > 0:
+            loss_sdf = outputs['sdf_smooth']
+            loss = loss + self.opt.lambda_sdf_smooth * loss_sdf
 
         return pred_rgb, pred_depth, loss
     
@@ -421,6 +420,7 @@ class Trainer(object):
 
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
+        mvp = data['mvp']
 
         B, N = rays_o.shape[:2]
         H, W = data['H'], data['W']
@@ -429,7 +429,7 @@ class Trainer(object):
         ambient_ratio = data['ambient_ratio'] if 'ambient_ratio' in data else 1.0
         light_d = data['light_d'] if 'light_d' in data else None
 
-        outputs = self.model.render(rays_o, rays_d, staged=True, perturb=False, bg_color=None, light_d=light_d, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, **vars(self.opt))
+        outputs = self.model.render(rays_o, rays_d, mvp, H, W, staged=True, perturb=False, bg_color=None, light_d=light_d, ambient_ratio=ambient_ratio, shading=shading)
         pred_rgb = outputs['image'].reshape(B, H, W, 3)
         pred_depth = outputs['depth'].reshape(B, H, W)
 
@@ -441,65 +441,25 @@ class Trainer(object):
     def test_step(self, data, bg_color=None, perturb=False):  
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
+        mvp = data['mvp']
 
         B, N = rays_o.shape[:2]
         H, W = data['H'], data['W']
 
         if bg_color is not None:
             bg_color = bg_color.to(rays_o.device)
-        else:
-            bg_color = torch.ones(3, device=rays_o.device) # [3]
 
         shading = data['shading'] if 'shading' in data else 'albedo'
         ambient_ratio = data['ambient_ratio'] if 'ambient_ratio' in data else 1.0
         light_d = data['light_d'] if 'light_d' in data else None
 
-        outputs = self.model.render(rays_o, rays_d, staged=True, perturb=perturb, light_d=light_d, ambient_ratio=ambient_ratio, shading=shading, force_all_rays=True, bg_color=bg_color, **vars(self.opt))
+        outputs = self.model.render(rays_o, rays_d, mvp, H, W, staged=True, perturb=perturb, light_d=light_d, ambient_ratio=ambient_ratio, shading=shading, bg_color=bg_color)
 
         pred_rgb = outputs['image'].reshape(B, H, W, 3)
         pred_depth = outputs['depth'].reshape(B, H, W)
-        pred_mask = outputs['weights_sum'].reshape(B, H, W) > 0.95
+        # pred_mask = outputs['weights_sum'].reshape(B, H, W) > 0.95
 
-        return pred_rgb, pred_depth, pred_mask
-
-    def generate_point_cloud(self, loader):
-
-        pbar = tqdm.tqdm(total=len(loader) * loader.batch_size, bar_format='{percentage:3.0f}% {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
-        self.model.eval()
-
-        all_points = []
-        all_normals = []
-
-        with torch.no_grad():
-
-            for i, data in enumerate(loader):
-
-                data['shading'] = 'normal' # to get normal as color
-                
-                with torch.cuda.amp.autocast(enabled=self.fp16):
-                    preds, preds_depth, preds_mask = self.test_step(data)
-
-                pred_mask = preds_mask[0].detach().cpu().numpy().reshape(-1) # [H, W], bool
-                pred_depth = preds_depth[0].detach().cpu().numpy().reshape(-1, 1) # [N, 1]
-
-                normals = preds[0].detach().cpu().numpy() * 2 - 1 # normals in [-1, 1]
-                normals = normals.reshape(-1, 3) # shape [N, 3]
-
-                rays_o = data['rays_o'][0].detach().cpu().numpy() # [N, 3]
-                rays_d = data['rays_d'][0].detach().cpu().numpy() # [N, 3]
-                points = rays_o + pred_depth * rays_d
-
-                if pred_mask.any():
-                    all_points.append(points[pred_mask])
-                    all_normals.append(normals[pred_mask])
-
-                pbar.update(loader.batch_size)
-        
-        points = np.concatenate(all_points, axis=0)
-        normals = np.concatenate(all_normals, axis=0)
-            
-        return points, normals
-
+        return pred_rgb, pred_depth, None
 
     def save_mesh(self, loader=None, save_path=None):
 
@@ -510,12 +470,8 @@ class Trainer(object):
 
         os.makedirs(save_path, exist_ok=True)
 
-        if loader is None: # mcubes
-            self.model.export_mesh(save_path, resolution=self.opt.mcubes_resolution, decimate_target=self.opt.decimate_target)
-        else: # poisson (TODO: not working currently...)
-            points, normals = self.generate_point_cloud(loader)
-            self.model.export_mesh(save_path, points=points, normals=normals, decimate_target=self.opt.decimate_target)
-
+        self.model.export_mesh(save_path, resolution=self.opt.mcubes_resolution, decimate_target=self.opt.decimate_target)
+        
         self.log(f"==> Finished saving mesh.")
 
     ### ------------------------------
@@ -664,7 +620,7 @@ class Trainer(object):
 
     
     # [GUI] test on a single image
-    def test_gui(self, pose, intrinsics, W, H, bg_color=None, spp=1, downscale=1, light_d=None, ambient_ratio=1.0, shading='albedo'):
+    def test_gui(self, pose, intrinsics, mvp, W, H, bg_color=None, spp=1, downscale=1, light_d=None, ambient_ratio=1.0, shading='albedo'):
         
         # render resolution (may need downscale to for better frame rate)
         rH = int(H * downscale)
@@ -672,6 +628,7 @@ class Trainer(object):
         intrinsics = intrinsics * downscale
 
         pose = torch.from_numpy(pose).unsqueeze(0).to(self.device)
+        mvp = torch.from_numpy(mvp).unsqueeze(0).to(self.device)
 
         rays = get_rays(pose, intrinsics, rH, rW, -1)
 
@@ -687,6 +644,7 @@ class Trainer(object):
         data = {
             'rays_o': rays['rays_o'],
             'rays_d': rays['rays_d'],
+            'mvp': mvp,
             'H': rH,
             'W': rW,
             'light_d': light_d,
@@ -909,7 +867,6 @@ class Trainer(object):
         }
 
         if self.model.cuda_ray:
-            state['mean_count'] = self.model.mean_count
             state['mean_density'] = self.model.mean_density
 
         if full:
@@ -987,8 +944,6 @@ class Trainer(object):
                 self.log("[WARN] failed to loaded EMA.")
 
         if self.model.cuda_ray:
-            if 'mean_count' in checkpoint_dict:
-                self.model.mean_count = checkpoint_dict['mean_count']
             if 'mean_density' in checkpoint_dict:
                 self.model.mean_density = checkpoint_dict['mean_density']
 
