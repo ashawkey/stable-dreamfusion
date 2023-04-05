@@ -59,10 +59,10 @@ def get_view_direction(thetas, phis, overhead, front):
     # bottom = 5                            [180-overhead, 180]
     res = torch.zeros(thetas.shape[0], dtype=torch.long)
     # first determine by phis
-    res[(phis < front)] = 0
-    res[(phis >= front) & (phis < np.pi)] = 1
-    res[(phis >= np.pi) & (phis < (np.pi + front))] = 2
-    res[(phis >= (np.pi + front))] = 3
+    res[(phis < front / 2) | (phis >= 2 * np.pi - front / 2)] = 0
+    res[(phis >= front / 2) & (phis < np.pi - front / 2)] = 1
+    res[(phis >= np.pi - front / 2) & (phis < np.pi + front / 2)] = 2
+    res[(phis >= np.pi + front / 2) & (phis < 2 * np.pi - front / 2)] = 3
     # override by thetas
     res[thetas <= overhead] = 4
     res[thetas >= (np.pi - overhead)] = 5
@@ -192,6 +192,9 @@ class NeRFDataset:
         self.cx = self.H / 2
         self.cy = self.W / 2
 
+        self.near = self.opt.min_near
+        self.far = 1000 # infinite
+
         # [debug] visualize poses
         # poses, dirs = rand_poses(100, self.device, radius_range=self.opt.radius_range, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose, uniform_sphere_rate=1)
         # visualize_poses(poses.detach().cpu().numpy(), dirs.detach().cpu().numpy())
@@ -217,6 +220,15 @@ class NeRFDataset:
 
         focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
         intrinsics = np.array([focal, focal, self.cx, self.cy])
+
+        projection = torch.tensor([
+            [2*focal/self.W, 0, 0, 0], 
+            [0, -2*focal/self.H, 0, 0],
+            [0, 0, -(self.far+self.near)/(self.far-self.near), -(2*self.far*self.near)/(self.far-self.near)],
+            [0, 0, -1, 0]
+        ], dtype=torch.float32, device=self.device).unsqueeze(0)
+
+        mvp = projection @ torch.inverse(poses) # [1, 4, 4]
         
         # sample a low-resolution but full image
         rays = get_rays(poses, intrinsics, self.H, self.W, -1)
@@ -227,6 +239,7 @@ class NeRFDataset:
             'rays_o': rays['rays_o'],
             'rays_d': rays['rays_d'],
             'dir': dirs,
+            'mvp': mvp,
         }
 
         return data

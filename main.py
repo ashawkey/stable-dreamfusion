@@ -26,6 +26,10 @@ if __name__ == '__main__':
     parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
     parser.add_argument('--decimate_target', type=int, default=1e5, help="target face number for mesh decimation")
 
+    parser.add_argument('--dmtet', action='store_true', help="use dmtet")
+    parser.add_argument('--tet_grid_size', type=int, default=128, help="tet grid size")
+    parser.add_argument('--tet_scale', type=float, default=2.1, help="tet grid scale, originally in [-0.5, 0.5], default is 2.1 so it covers [-1, 1]")
+
     ### training options
     parser.add_argument('--iters', type=int, default=10000, help="training iters")
     parser.add_argument('--lr', type=float, default=1e-3, help="max learning rate")
@@ -70,12 +74,14 @@ if __name__ == '__main__':
     parser.add_argument('--suppress_face', action='store_true', help="also use negative dir text prompt.")
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
+    parser.add_argument('--t_range', type=float, nargs='*', default=[0.02, 0.98], help="stable diffusion time steps range")
 
     ### regularizations
     parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
     parser.add_argument('--lambda_tv', type=float, default=0, help="loss scale for total variation")
+    parser.add_argument('--lambda_sdf_smooth', type=float, default=1e-1, help="loss scale for depth smoothness")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -98,6 +104,13 @@ if __name__ == '__main__':
         opt.fp16 = True
         opt.dir_text = True
         opt.backbone = 'vanilla'
+    
+    if opt.dmtet:
+        # parameters for finetuning
+        opt.h = 512
+        opt.w = 512
+        opt.t_range = [0.02, 0.50]
+        opt.fovy_range = [60, 90]
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
@@ -167,7 +180,7 @@ if __name__ == '__main__':
 
         if opt.guidance == 'stable-diffusion':
             from sd import StableDiffusion
-            guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key)
+            guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key, opt.t_range)
         elif opt.guidance == 'clip':
             from nerf.clip import CLIP
             guidance = CLIP(device)
