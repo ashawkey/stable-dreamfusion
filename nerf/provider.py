@@ -216,7 +216,7 @@ class NeRFDataset:
             poses, dirs = circle_poses(self.device, radius=self.opt.radius_range[1] * 1.2, theta=60, phi=phi, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front)
 
             # fixed focal
-            fov = (self.opt.fovy_range[1] + self.opt.fovy_range[0]) / 2
+            fov = 60 # (self.opt.fovy_range[1] + self.opt.fovy_range[0]) / 2
 
         focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
         intrinsics = np.array([focal, focal, self.cx, self.cy])

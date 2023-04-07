@@ -69,7 +69,7 @@ if __name__ == '__main__':
     parser.add_argument('--dt_gamma', type=float, default=0, help="dt_gamma (>=0) for adaptive ray marching. set to 0 to disable, >0 to accelerate rendering (but usually with worse quality)")
     parser.add_argument('--min_near', type=float, default=0.1, help="minimum near distance for camera")
     parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
-    parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 70], help="training camera fovy range")
+    parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 80], help="training camera fovy range")
     parser.add_argument('--dir_text', action='store_true', help="direction-encode the text prompt, by appending front/side/back/overhead view")
     parser.add_argument('--suppress_face', action='store_true', help="also use negative dir text prompt.")
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
@@ -112,7 +112,7 @@ if __name__ == '__main__':
         opt.w = 512
         opt.warmup_iters = 0
         opt.t_range = [0.02, 0.50]
-        opt.fovy_range = [60, 90]
+        opt.fovy_range = [20, 60]
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
@@ -134,7 +134,7 @@ if __name__ == '__main__':
     print(opt)
 
     if opt.seed is not None:
-        seed_everything(opt.seed)
+        seed_everything(int(opt.seed))
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
