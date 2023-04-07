@@ -21,14 +21,14 @@ to generate a tet grid
 def generate_tetrahedron_grid_file(res=32, root='..'):
     frac = 1.0 / res
     command = 'cd %s/quartet; ' % (root) + \
-                './quartet meshes/cube.obj %f meshes/cube_%f_tet.tet -s meshes/cube_boundary_%f.obj' % (frac, res, res)
+                './quartet_release meshes/cube.obj %f meshes/cube_%f_tet.tet -s meshes/cube_boundary_%f.obj' % (frac, res, res)
     os.system(command)
 
 
 '''
 This code segment shows how to convert from a quartet .tet file to compressed npz file
 '''
-def convert_from_quartet_to_npz(quartetfile = 'cube_32_tet.tet', npzfile = '32_tets'):
+def convert_from_quartet_to_npz(quartetfile = 'cube_32_tet.tet', npzfile = '32_tets.npz'):
 
     file1 = open(quartetfile, 'r')
     header = file1.readline()
@@ -38,10 +38,21 @@ def convert_from_quartet_to_npz(quartetfile = 'cube_32_tet.tet', npzfile = '32_t
 
     # load vertices
     vertices = np.loadtxt(quartetfile, skiprows=1, max_rows=numvertices)
-    print(vertices.shape)
+    vertices = vertices - 0.5
+    print(vertices.shape, vertices.min(), vertices.max())
 
     # load indices
     indices = np.loadtxt(quartetfile, dtype=int, skiprows=1+numvertices, max_rows=numtets)
     print(indices.shape)
 
     np.savez_compressed(npzfile, vertices=vertices, indices=indices)
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--res', type=int, default=32)
+    parser.add_argument('--root', type=str, default='..')
+    args = parser.parse_args()
+
+    generate_tetrahedron_grid_file(res=args.res, root=args.root)
+    convert_from_quartet_to_npz(quartetfile=os.path.join(args.root, 'quartet', 'meshes', f'cube_{args.res}.000000_tet.tet'), npzfile=os.path.join('./tets', f'{args.res}_tets.npz'))

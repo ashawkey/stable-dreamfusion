@@ -20,15 +20,15 @@ if __name__ == '__main__':
     parser.add_argument('--eval_interval', type=int, default=1, help="evaluate on the valid set every interval epochs")
     parser.add_argument('--workspace', type=str, default='workspace')
     parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
-    parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--seed', default=None)
 
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
-    parser.add_argument('--decimate_target', type=int, default=1e5, help="target face number for mesh decimation")
+    parser.add_argument('--decimate_target', type=int, default=5e4, help="target face number for mesh decimation")
 
-    parser.add_argument('--dmtet', action='store_true', help="use dmtet")
+    parser.add_argument('--dmtet', action='store_true', help="use dmtet finetuning")
     parser.add_argument('--tet_grid_size', type=int, default=128, help="tet grid size")
-    parser.add_argument('--tet_scale', type=float, default=2.1, help="tet grid scale, originally in [-0.5, 0.5], default is 2.1 so it covers [-1, 1]")
+    parser.add_argument('--init_ckpt', type=str, default='', help="ckpt to init dmtet")
 
     ### training options
     parser.add_argument('--iters', type=int, default=10000, help="training iters")
@@ -77,11 +77,12 @@ if __name__ == '__main__':
     parser.add_argument('--t_range', type=float, nargs='*', default=[0.02, 0.98], help="stable diffusion time steps range")
 
     ### regularizations
-    parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
+    parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
     parser.add_argument('--lambda_tv', type=float, default=0, help="loss scale for total variation")
-    parser.add_argument('--lambda_sdf_smooth', type=float, default=1e-1, help="loss scale for depth smoothness")
+    parser.add_argument('--lambda_normal', type=float, default=0, help="loss scale for mesh normal smoothness")
+    parser.add_argument('--lambda_lap', type=float, default=0.2, help="loss scale for mesh laplacian")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -109,6 +110,7 @@ if __name__ == '__main__':
         # parameters for finetuning
         opt.h = 512
         opt.w = 512
+        opt.warmup_iters = 0
         opt.t_range = [0.02, 0.50]
         opt.fovy_range = [60, 90]
 
@@ -131,13 +133,22 @@ if __name__ == '__main__':
 
     print(opt)
 
-    seed_everything(opt.seed)
-
-    model = NeRFNetwork(opt)
-
-    print(model)
+    if opt.seed is not None:
+        seed_everything(opt.seed)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    model = NeRFNetwork(opt).to(device)
+
+    if opt.dmtet and opt.init_ckpt != '':
+        # load pretrained weights to init dmtet
+        state_dict = torch.load(opt.init_ckpt, map_location=device)
+        model.load_state_dict(state_dict['model'], strict=False)
+        if opt.cuda_ray:
+            model.mean_density = state_dict['mean_density']
+        model.init_tet()
+
+    print(model)
 
     if opt.test:
         guidance = None # no need to load guidance model at test

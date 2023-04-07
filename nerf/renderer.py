@@ -221,6 +221,47 @@ def normal_consistency(face_normals, t_pos_idx):
     return torch.mean(torch.abs(term))
 
 
+def laplacian_uniform(verts, faces):
+    """
+    Compute the uniform laplacian
+    Parameters
+    ----------
+    verts : torch.Tensor
+        Vertex positions.
+    faces : torch.Tensor
+        array of triangle faces.
+    """
+    V = verts.shape[0]
+    F = faces.shape[0]
+
+    # Neighbor indices
+    ii = faces[:, [1, 2, 0]].flatten()
+    jj = faces[:, [2, 0, 1]].flatten()
+    adj = torch.stack([torch.cat([ii, jj]), torch.cat([jj, ii])], dim=0).unique(dim=1)
+    adj_values = torch.ones(adj.shape[1], device=verts.device, dtype=torch.float)
+
+    # Diagonal indices
+    diag_idx = adj[0]
+
+    # Build the sparse matrix
+    idx = torch.cat((adj, torch.stack((diag_idx, diag_idx), dim=0)), dim=1)
+    values = torch.cat((-adj_values, adj_values))
+
+    # The coalesce operation sums the duplicate indices, resulting in the
+    # correct diagonal
+    return torch.sparse_coo_tensor(idx, values, (V,V)).coalesce()
+
+
+@torch.cuda.amp.autocast(enabled=False)
+def laplacian_smooth_loss(verts, faces):
+    with torch.no_grad():
+        L = laplacian_uniform(verts, faces.long())
+    loss = L.mm(verts)
+    loss = loss.norm(dim=1)
+    loss = loss.mean()
+    return loss
+
+
 class NeRFRenderer(nn.Module):
     def __init__(self, opt):
         super().__init__()
@@ -257,8 +298,9 @@ class NeRFRenderer(nn.Module):
         if self.opt.dmtet:
             # load dmtet vertices
             tets = np.load('tets/{}_tets.npz'.format(self.opt.tet_grid_size))
-            self.verts = torch.tensor(tets['vertices'], dtype=torch.float32, device='cuda') * self.opt.tet_scale
+            self.verts = torch.tensor(tets['vertices'], dtype=torch.float32, device='cuda') * 2 # covers [-1, 1]
             self.indices  = torch.tensor(tets['indices'], dtype=torch.long, device='cuda')
+            self.tet_scale = 1
             self.dmtet = DMTet('cuda')
 
             # vert sdf and deform
@@ -323,14 +365,7 @@ class NeRFRenderer(nn.Module):
 
         if self.opt.dmtet:
 
-            sigma = self.density(self.verts)['sigma']
-
-            density_thresh = min(self.mean_density, self.density_thresh)
-            if self.opt.density_activation == 'softplus':
-                density_thresh = density_thresh * 25
-
-            sdf = self.sdf + sigma - density_thresh
-
+            sdf = self.sdf
             deform = torch.tanh(self.deform) / self.opt.tet_grid_size
 
             vertices, triangles = self.dmtet(self.verts + deform, sdf, self.indices)
@@ -376,7 +411,7 @@ class NeRFRenderer(nn.Module):
         # clean
         vertices = vertices.astype(np.float32)
         triangles = triangles.astype(np.int32)
-        vertices, triangles = clean_mesh(vertices, triangles)
+        vertices, triangles = clean_mesh(vertices, triangles, remesh=True, remesh_size=0.01)
         
         # decimation
         if decimate_target > 0 and triangles.shape[0] > decimate_target:
@@ -659,7 +694,7 @@ class NeRFRenderer(nn.Module):
         return results
 
 
-    def run_cuda(self, rays_o, rays_d, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, perturb=False, force_all_rays=False, T_thresh=1e-4, **kwargs):
+    def run_cuda(self, rays_o, rays_d, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, perturb=False, T_thresh=1e-4, binarize=False, **kwargs):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # return: image: [B, N, 3], depth: [B, N]
 
@@ -685,7 +720,7 @@ class NeRFRenderer(nn.Module):
             xyzs, dirs, ts, rays = raymarching.march_rays_train(rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, perturb, self.opt.dt_gamma, self.opt.max_steps)
             # plot_pointcloud(xyzs.reshape(-1, 3).detach().cpu().numpy())
             sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
-            weights, weights_sum, depth, image = raymarching.composite_rays_train(sigmas, rgbs, ts, rays, T_thresh)
+            weights, weights_sum, depth, image = raymarching.composite_rays_train(sigmas, rgbs, ts, rays, T_thresh, binarize)
             
             # normals related regularizations
             if self.opt.lambda_orient > 0 and normals is not None:
@@ -725,7 +760,7 @@ class NeRFRenderer(nn.Module):
 
                 xyzs, dirs, ts = raymarching.march_rays(n_alive, n_step, rays_alive, rays_t, rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, perturb if step == 0 else False, self.opt.dt_gamma, self.opt.max_steps)
                 sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
-                raymarching.composite_rays(n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, ts, weights_sum, depth, image, T_thresh)
+                raymarching.composite_rays(n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, ts, weights_sum, depth, image, T_thresh, binarize)
 
                 rays_alive = rays_alive[rays_alive >= 0]
                 #print(f'step = {step}, n_step = {n_step}, n_alive = {n_alive}, xyzs: {xyzs.shape}')
@@ -753,6 +788,31 @@ class NeRFRenderer(nn.Module):
         
         return results
 
+    @torch.no_grad()
+    def init_tet(self):
+
+        if self.cuda_ray:
+            density_thresh = min(self.mean_density, self.density_thresh)
+        else:
+            density_thresh = self.density_thresh
+    
+        if self.opt.density_activation == 'softplus':
+            density_thresh = density_thresh * 25
+
+        # init scale
+        sigma = self.density(self.verts)['sigma'] # verts covers [-1, 1] now
+        mask = sigma > density_thresh
+        valid_verts = self.verts[mask]
+        self.tet_scale = valid_verts.abs().max() + 1e-1
+        self.verts = self.verts * self.tet_scale
+
+        # init sigma
+        sigma = self.density(self.verts)['sigma'] # new verts
+        self.sdf.data = self.sdf.data + (sigma - density_thresh).clamp(-1, 1)
+
+        print(f'[INFO] init dmtet: scale = {self.tet_scale}')
+
+
     def run_dmtet(self, rays_d, mvp, h, w, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, **kwargs):
         # mvp: [B, 4, 4]
 
@@ -768,14 +828,7 @@ class NeRFRenderer(nn.Module):
         results = {}
 
         # get mesh
-        sigma = self.density(self.verts)['sigma']
-
-        density_thresh = min(self.mean_density, self.density_thresh)
-        if self.opt.density_activation == 'softplus':
-            density_thresh = density_thresh * 25
-
-        sdf = self.sdf + sigma - density_thresh
-
+        sdf = self.sdf
         deform = torch.tanh(self.deform) / self.opt.tet_grid_size
 
         verts, faces = self.dmtet(self.verts + deform, sdf, self.indices)
@@ -845,9 +898,12 @@ class NeRFRenderer(nn.Module):
         results['image'] = color
         results['weights_sum'] = alpha.squeeze(-1)
         
-        # sdf reg
-        if self.training and self.opt.lambda_sdf_smooth > 0:
-            results['sdf_smooth'] = normal_consistency(face_normals, faces)
+        # regularizations
+        if self.training:
+            if self.opt.lambda_normal > 0:
+                results['normal_loss'] = normal_consistency(face_normals, faces)
+            if self.opt.lambda_lap > 0:
+                results['lap_loss'] = laplacian_smooth_loss(verts, faces)
 
         return results
 
