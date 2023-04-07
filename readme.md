@@ -4,9 +4,9 @@ A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the
 
 The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
 
-**NEWS (2023.3.12)**: A [Taichi](https://github.com/taichi-dev/taichi) backend is available for Instant-NGP. **No CUDA** build is requied while it achieves comparable performance!
+**NEWS (2023.4.7)**: Improvement on Mesh Quality & DMTet finetuning support!
 
-https://user-images.githubusercontent.com/25863658/215996308-9fd959f5-b5c7-4a8e-a241-0fe63ec86a4a.mp4
+
 
 Colab notebooks:
 * Instant-NGP backbone (`-O`): [![Instant-NGP Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1MXT3yfOFvO0ooKEfiUUvTKwUkrrlCHpF?usp=sharing)
@@ -144,6 +144,16 @@ python main.py --text "a hotdog" --workspace trial2 -O2 --num_steps 64 --upsampl
 python main.py --workspace trial2 -O2 --test
 python main.py --workspace trial2 -O2 --test --save_mesh
 python main.py --workspace trial2 -O2 --test --gui # not recommended, FPS will be low.
+
+### DMTet finetuning
+# use --dmtet and --init_ckpt <nerf checkpoint> to finetune the mesh
+python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_ckpt trial/checkpoints/df.pth
+
+# test & export the mesh
+python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_ckpt trial/checkpoints/df.pth --test --save_mesh
+
+# gui to visualize dmtet
+python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_ckpt trial/checkpoints/df.pth --test --gui
 ```
 
 # Code organization & Advanced tips

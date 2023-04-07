@@ -89,10 +89,10 @@ class MLP(nn.Module):
 class NeRFNetwork(NeRFRenderer):
     def __init__(self, 
                  opt,
-                 num_layers=4, # 5 in paper
-                 hidden_dim=96, # 128 in paper
+                 num_layers=3, # 5 in paper
+                 hidden_dim=64, # 128 in paper
                  num_layers_bg=2, # 3 in paper
-                 hidden_dim_bg=64, # 64 in paper
+                 hidden_dim_bg=32, # 64 in paper
                  encoding='frequency_torch', # pure pytorch
                  ):
         
@@ -241,5 +241,9 @@ class NeRFNetwork(NeRFRenderer):
         if self.opt.bg_radius > 0:
             # params.append({'params': self.encoder_bg.parameters(), 'lr': lr * 10})
             params.append({'params': self.bg_net.parameters(), 'lr': lr})
+        
+        if self.opt.dmtet:
+            params.append({'params': self.sdf, 'lr': lr})
+            params.append({'params': self.deform, 'lr': lr})
 
         return params

@@ -168,5 +168,9 @@ class NeRFNetwork(NeRFRenderer):
         if self.opt.bg_radius > 0:
             # params.append({'params': self.encoder_bg.parameters(), 'lr': lr * 10})
             params.append({'params': self.bg_net.parameters(), 'lr': lr})
+        
+        if self.opt.dmtet:
+            params.append({'params': self.sdf, 'lr': lr})
+            params.append({'params': self.deform, 'lr': lr})
 
         return params

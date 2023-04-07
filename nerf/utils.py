@@ -354,6 +354,7 @@ class Trainer(object):
             ambient_ratio = 1.0
             shading = 'normal'
             as_latent = True
+            bg_color = None
         else: 
             ambient_ratio = 0.1 + 0.9 * random.random()
             rand = random.random()
@@ -363,17 +364,22 @@ class Trainer(object):
                 shading = 'lambertian'
             as_latent = False
         
-        bg_color = None
-        outputs = self.model.render(rays_o, rays_d, mvp, H, W, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading)
+            if random.random() > 0.5:
+                bg_color = None # use bg_net
+            else:
+                bg_color = torch.rand(3).to(self.device) # single color random bg
+
+        # TODO: binarize is not working properly... should supervise both binarized/non-binarized image at the same time...
+        binarize = False # if self.global_step < self.opt.iters * 0.5 else True
+        
+        outputs = self.model.render(rays_o, rays_d, mvp, H, W, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, binarize=binarize)
         pred_depth = outputs['depth'].reshape(B, 1, H, W)
 
         if as_latent:
             pred_rgb = torch.cat([outputs['image'], outputs['weights_sum'].unsqueeze(-1)], dim=-1).reshape(B, H, W, 4).permute(0, 3, 1, 2).contiguous() # [1, 4, H, W]
         else:
             pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
-        
-        # torch_vis_2d(pred_rgb[0])
-        
+
         # text embeddings
         if self.opt.dir_text:
             dirs = data['dir'] # [B,]
@@ -385,24 +391,30 @@ class Trainer(object):
         loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent)
 
         # regularizations
-        if self.opt.lambda_opacity > 0:
-            loss_opacity = (outputs['weights_sum'] ** 2).mean()
-            loss = loss + self.opt.lambda_opacity * loss_opacity
+        if not self.opt.dmtet:
+            if self.opt.lambda_opacity > 0:
+                loss_opacity = (outputs['weights_sum'] ** 2).mean()
+                loss = loss + self.opt.lambda_opacity * loss_opacity
 
-        if self.opt.lambda_entropy > 0:
-            alphas = outputs['weights_sum'].clamp(1e-5, 1 - 1e-5)
-            # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
-            loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
-                    
-            loss = loss + self.opt.lambda_entropy * loss_entropy
+            if self.opt.lambda_entropy > 0:
 
-        if self.opt.lambda_orient > 0 and 'loss_orient' in outputs:
-            loss_orient = outputs['loss_orient']
-            loss = loss + self.opt.lambda_orient * loss_orient
-        
-        if self.opt.dmtet and self.opt.lambda_sdf_smooth > 0:
-            loss_sdf = outputs['sdf_smooth']
-            loss = loss + self.opt.lambda_sdf_smooth * loss_sdf
+                alphas = outputs['weights'].clamp(1e-5, 1 - 1e-5)
+                # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
+                loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
+
+                lambda_entropy = self.opt.lambda_entropy * min(1, 2 * self.global_step / self.opt.iters)
+                        
+                loss = loss + lambda_entropy * loss_entropy
+
+            if self.opt.lambda_orient > 0 and 'loss_orient' in outputs:
+                loss_orient = outputs['loss_orient']
+                loss = loss + self.opt.lambda_orient * loss_orient
+        else:
+            if self.opt.lambda_normal > 0:
+                loss = loss + self.opt.lambda_normal * outputs['normal_loss']
+            
+            if self.opt.lambda_lap > 0:
+                loss = loss + self.opt.lambda_lap * outputs['lap_loss']
 
         return pred_rgb, pred_depth, loss
     
@@ -868,6 +880,9 @@ class Trainer(object):
 
         if self.model.cuda_ray:
             state['mean_density'] = self.model.mean_density
+        
+        if self.opt.dmtet:
+            state['tet_scale'] = self.model.tet_scale
 
         if full:
             state['optimizer'] = self.optimizer.state_dict()
@@ -946,6 +961,11 @@ class Trainer(object):
         if self.model.cuda_ray:
             if 'mean_density' in checkpoint_dict:
                 self.model.mean_density = checkpoint_dict['mean_density']
+            
+        if self.opt.dmtet:
+            if 'tet_scale' in checkpoint_dict:
+                self.model.verts *= checkpoint_dict['tet_scale'] / self.model.tet_scale
+                self.model.tet_scale = checkpoint_dict['tet_scale']
 
         if model_only:
             return
