@@ -6,6 +6,9 @@ The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_
 
 **NEWS (2023.4.7)**: Improvement on Mesh Quality & DMTet finetuning support!
 
+https://user-images.githubusercontent.com/25863658/230535363-298c960e-bf9c-4906-8b96-cd60edcb24dd.mp4
+
+https://user-images.githubusercontent.com/25863658/230535373-6ee28f16-bb21-4ec4-bc86-d46597361a04.mp4
 
 
 Colab notebooks:
