@@ -2,8 +2,6 @@
 
 A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) text-to-2D model.
 
-The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
-
 **NEWS (2023.4.7)**: Improvement on Mesh Quality & DMTet finetuning support!
 
 https://user-images.githubusercontent.com/25863658/230535363-298c960e-bf9c-4906-8b96-cd60edcb24dd.mp4
@@ -248,6 +246,16 @@ The tracing functionality has only been tested in combination with the `-O` opti
         year = {2022},
     }
     ```
+
+* [Magic3D](https://research.nvidia.com/labs/dir/magic3d/):
+   ```
+   @inproceedings{lin2023magic3d,
+      title={Magic3D: High-Resolution Text-to-3D Content Creation},
+      author={Lin, Chen-Hsuan and Gao, Jun and Tang, Luming and Takikawa, Towaki and Zeng, Xiaohui and Huang, Xun and Kreis, Karsten and Fidler, Sanja and Liu, Ming-Yu and Lin, Tsung-Yi},
+      booktitle={IEEE Conference on Computer Vision and Pattern Recognition ({CVPR})},
+      year={2023}
+    }
+   ```
 
 * Huge thanks to the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) and the [diffusers](https://github.com/huggingface/diffusers) library.
 
