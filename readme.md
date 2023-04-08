@@ -40,12 +40,11 @@ cd stable-dreamfusion
 ```bash
 pip install -r requirements.txt
 
-# (optional) install nvdiffrast for exporting textured mesh (if use --save_mesh)
+# install nvdiffrast for exporting textured mesh and DMTet finetuning
 pip install git+https://github.com/NVlabs/nvdiffrast/
 
 # (optional) install CLIP guidance for the dreamfield setting
 pip install git+https://github.com/openai/CLIP.git
-
 ```
 
 ### Build extension (optional)
@@ -58,13 +57,17 @@ bash scripts/install_ext.sh
 # if you want to install manually, here is an example:
 pip install ./raymarching # install to python path (you still need the raymarching/ folder, since this only installs the built extension.)
 ```
-NOTE: if you use `setup.py` to install the extensions, do not forget to rerun installation after updating the source code! (in cases like `TypeError: grid_encode_forward(): incompatible function arguments`)
 
 ### Taichi backend (optional)
 Use [Taichi](https://github.com/taichi-dev/taichi) backend for Instant-NGP. It achieves comparable performance to CUDA implementation while **No CUDA** build is required. Install Taichi with pip:
 ```bash
 pip install -i https://pypi.taichi.graphics/simple/ taichi-nightly
 ```
+
+### Trouble Shooting:
+* `diffusers` related error: we assume the latest version, so try `pip install -U diffusers transformers` first.
+* `[F glutil.cpp:338] eglInitialize() failed Aborted (core dumped)`: this usually indicates problems in OpenGL installation. Try to re-install Nvidia driver, or use nvidia-docker as suggested in https://github.com/ashawkey/stable-dreamfusion/issues/131 if you are using a headless server.
+* `TypeError: xxx_forward(): incompatible function arguments`： this happens when we update the CUDA source and you used `setup.py` to install the extensions earlier. Try to re-install the corresponding extension (e.g., `pip install ./gridencoder`).
 
 ### Tested environments
 * Ubuntu 22 with torch 1.12 & CUDA 11.6 on a V100.
