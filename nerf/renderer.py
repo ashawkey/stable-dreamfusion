@@ -298,7 +298,7 @@ class NeRFRenderer(nn.Module):
         if self.opt.dmtet:
             # load dmtet vertices
             tets = np.load('tets/{}_tets.npz'.format(self.opt.tet_grid_size))
-            self.verts = torch.tensor(tets['vertices'], dtype=torch.float32, device='cuda') * 2 # covers [-1, 1]
+            self.verts = -1.0 * torch.tensor(tets['vertices'], dtype=torch.float32, device='cuda') * 2 # covers [-1, 1]
             self.indices  = torch.tensor(tets['indices'], dtype=torch.long, device='cuda')
             self.tet_scale = 1
             self.dmtet = DMTet('cuda')
