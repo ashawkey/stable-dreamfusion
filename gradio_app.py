@@ -60,7 +60,6 @@ parser.add_argument('--min_near', type=float, default=0.1, help="minimum near di
 parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
 parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 70], help="training camera fovy range")
 parser.add_argument('--dir_text', action='store_true', help="direction-encode the text prompt, by appending front/side/back/overhead view")
-parser.add_argument('--suppress_face', action='store_true', help="also use negative dir text prompt.")
 parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
 parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
 
@@ -105,10 +104,10 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'[INFO] loading models..')
 
 if opt.guidance == 'stable-diffusion':
-    from sd import StableDiffusion
+    from guidance.sd_utils import StableDiffusion
     guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key)
 elif opt.guidance == 'clip':
-    from nerf.clip import CLIP
+    from guidance.clip_utils import CLIP
     guidance = CLIP(device)
 else:
     raise NotImplementedError(f'--guidance {opt.guidance} is not implemented.')

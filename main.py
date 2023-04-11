@@ -19,8 +19,12 @@ if __name__ == '__main__':
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--eval_interval', type=int, default=1, help="evaluate on the valid set every interval epochs")
     parser.add_argument('--workspace', type=str, default='workspace')
-    parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
+    parser.add_argument('--guidance', type=str, default='stable-diffusion', help='guidance model')
     parser.add_argument('--seed', default=None)
+
+    parser.add_argument('--image', default=None, help="image prompt")
+    parser.add_argument('--known_view_interval', type=int, default=4, help="train default view with RGB loss every & iters, only valid if --image is not None.")
+    parser.add_argument('--guidance_scale', type=float, default=100, help="diffusion model classifier-free guidance scale")
 
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
@@ -45,7 +49,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_ray_batch', type=int, default=4096, help="batch size of rays at inference to avoid OOM (only valid when not using --cuda_ray)")
     parser.add_argument('--warmup_iters', type=int, default=2000, help="training iters that only use albedo shading")
     parser.add_argument('--jitter_pose', action='store_true', help="add jitters to the randomly sampled camera poses")
-    parser.add_argument('--uniform_sphere_rate', type=float, default=0.5, help="likelihood of sampling camera location uniformly on the sphere surface area")
+    parser.add_argument('--uniform_sphere_rate', type=float, default=0, help="likelihood of sampling camera location uniformly on the sphere surface area")
     # model options
     parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
     parser.add_argument('--density_activation', type=str, default='softplus', choices=['softplus', 'exp'], help="density activation function")
@@ -68,10 +72,18 @@ if __name__ == '__main__':
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
     parser.add_argument('--dt_gamma', type=float, default=0, help="dt_gamma (>=0) for adaptive ray marching. set to 0 to disable, >0 to accelerate rendering (but usually with worse quality)")
     parser.add_argument('--min_near', type=float, default=0.1, help="minimum near distance for camera")
+
     parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
     parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 80], help="training camera fovy range")
+    parser.add_argument('--theta_range', type=float, nargs='*', default=[45, 105], help="training camera fovy range")
+    parser.add_argument('--phi_range', type=float, nargs='*', default=[-180, 180], help="training camera fovy range")
+
+    parser.add_argument('--default_radius', type=float, default=1.0, help="radius for the default view")
+    parser.add_argument('--default_fovy', type=float, default=60, help="fovy for the default view")
+    parser.add_argument('--default_theta', type=float, default=90, help="radius for the default view")
+    parser.add_argument('--default_phi', type=float, default=0, help="radius for the default view")
+
     parser.add_argument('--dir_text', action='store_true', help="direction-encode the text prompt, by appending front/side/back/overhead view")
-    parser.add_argument('--suppress_face', action='store_true', help="also use negative dir text prompt.")
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
     parser.add_argument('--t_range', type=float, nargs='*', default=[0.02, 0.98], help="stable diffusion time steps range")
@@ -83,6 +95,8 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_tv', type=float, default=0, help="loss scale for total variation")
     parser.add_argument('--lambda_normal', type=float, default=0, help="loss scale for mesh normal smoothness")
     parser.add_argument('--lambda_lap', type=float, default=0.2, help="loss scale for mesh laplacian")
+
+    parser.add_argument('--grad_rgb_clip', type=float, default=10, help="clip grad of rgb space to this limit")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -106,13 +120,34 @@ if __name__ == '__main__':
         opt.dir_text = True
         opt.backbone = 'vanilla'
     
+    # default parameters for finetuning
     if opt.dmtet:
-        # parameters for finetuning
         opt.h = 512
         opt.w = 512
         opt.warmup_iters = 0
         opt.t_range = [0.02, 0.50]
         opt.fovy_range = [20, 60]
+
+    # image-conditioned generation
+    if opt.image is not None:
+        # opt.text = 'a teddy bear'
+        # opt.image = None
+        # opt.fp16 = False
+        opt.text = None # disable text-condition
+        opt.guidance = 'zero123' # can only use zero123 guidance model
+        opt.guidance_scale = 10
+        opt.warmup_iters = 0 # do not perform as_latent geom init
+        opt.fovy_range = [60, 60] # fix fov as zero123 doesn't support changing fov
+
+        opt.jitter_pose = False # must not jitter view target
+        opt.uniform_sphere_rate = 0 # do not do this as it disturbs the progressive view expansion
+
+        # opt.radius_range = [1.0, 1.0] # fix radius tmp
+        # opt.theta_range = [90, 90]
+        # opt.phi_range = [0, 0]
+        # opt.lambda_entropy = 0
+        # opt.lambda_orient = 0
+        opt.lambda_lap = 0
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
@@ -190,20 +225,24 @@ if __name__ == '__main__':
             # scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.1 ** min(iter / opt.iters, 1))
 
         if opt.guidance == 'stable-diffusion':
-            from sd import StableDiffusion
+            from guidance.sd_utils import StableDiffusion
             guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key, opt.t_range)
+        elif opt.guidance == 'zero123':
+            from guidance.zero123_utils import Zero123
+            guidance = Zero123(device, opt.fp16, opt.t_range)
         elif opt.guidance == 'clip':
-            from nerf.clip import CLIP
+            from guidance.clip_utils import CLIP
             guidance = CLIP(device)
         else:
             raise NotImplementedError(f'--guidance {opt.guidance} is not implemented.')
 
         trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
 
-        if opt.gui:
-            trainer.train_loader = train_loader # attach dataloader to trainer
+        trainer.default_view_data = train_loader._data.get_default_view_data()
 
-            gui = NeRFGUI(opt, trainer)
+        if opt.gui:
+
+            gui = NeRFGUI(opt, trainer, train_loader)
             gui.render()
 
         else:

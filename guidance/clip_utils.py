@@ -7,7 +7,7 @@ import torchvision.transforms.functional as TF
 import clip
 
 class CLIP(nn.Module):
-    def __init__(self, device):
+    def __init__(self, device, **kwargs):
         super().__init__()
 
         self.device = device
@@ -23,7 +23,7 @@ class CLIP(nn.Module):
         # self.gaussian_blur = T.GaussianBlur(15, sigma=(0.1, 10))
 
     
-    def get_text_embeds(self, prompt, negative_prompt):
+    def get_text_embeds(self, prompt, negative_prompt, **kwargs):
 
         # NOTE: negative_prompt is ignored for CLIP.
 
@@ -34,7 +34,7 @@ class CLIP(nn.Module):
         return text_z
 
     
-    def train_step(self, text_z, pred_rgb):
+    def train_step(self, text_z, pred_rgb, **kwargs):
 
         pred_rgb = self.aug(pred_rgb)
 

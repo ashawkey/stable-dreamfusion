@@ -115,28 +115,6 @@ def seed_everything(seed):
     #torch.backends.cudnn.benchmark = True
 
 
-def torch_vis_2d(x, renormalize=False):
-    # x: [3, H, W] or [1, H, W] or [H, W]
-    import matplotlib.pyplot as plt
-    import numpy as np
-    import torch
-    
-    if isinstance(x, torch.Tensor):
-        if len(x.shape) == 3:
-            x = x.permute(1,2,0).squeeze()
-        x = x.detach().cpu().numpy()
-        
-    print(f'[torch_vis_2d] {x.shape}, {x.dtype}, {x.min()} ~ {x.max()}')
-    
-    x = x.astype(np.float32)
-    
-    # renormalize
-    if renormalize:
-        x = (x - x.min(axis=0, keepdims=True)) / (x.max(axis=0, keepdims=True) - x.min(axis=0, keepdims=True) + 1e-8)
-
-    plt.imshow(x)
-    plt.show()
-
 @torch.jit.script
 def linear_to_srgb(x):
     return torch.where(x < 0.0031308, 12.92 * x, 1.055 * x ** 0.41666 - 0.055)
@@ -207,15 +185,10 @@ class Trainer(object):
         self.guidance = guidance
 
         # text prompt
-        if self.guidance is not None:
-            
+        if self.guidance is not None:            
             for p in self.guidance.parameters():
                 p.requires_grad = False
-
-            self.prepare_text_embeddings()
-        
-        else:
-            self.text_z = None
+            self.prepare_embeddings()
         
         # try out torch 2.0
         if torch.__version__[0] == '2':
@@ -295,35 +268,50 @@ class Trainer(object):
                 self.load_checkpoint(self.use_checkpoint)
 
     # calculate the text embs.
-    def prepare_text_embeddings(self):
+    def prepare_embeddings(self):
+        
+        # text embeddings (stable-diffusion)
+        if self.opt.text is not None:
+            if not self.opt.dir_text:
+                self.text_z = self.guidance.get_text_embeds([self.opt.text], [self.opt.negative])
+            else:
+                self.text_z = []
+                for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
+                    # construct dir-encoded text
+                    text = f"{self.opt.text}, {d} view"
+                    negative_text = f"{self.opt.negative}"
 
-        if self.opt.text is None:
-            self.log(f"[WARN] text prompt is not provided.")
-            self.text_z = None
-            return
-
-        if not self.opt.dir_text:
-            self.text_z = self.guidance.get_text_embeds([self.opt.text], [self.opt.negative])
+                    text_z = self.guidance.get_text_embeds([text], [negative_text])
+                    self.text_z.append(text_z)
         else:
-            self.text_z = []
-            for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
-                # construct dir-encoded text
-                text = f"{self.opt.text}, {d} view"
+            self.text_z = None
+        
+        # image embeddings (zero123)
+        if self.opt.image is not None:
 
-                negative_text = f"{self.opt.negative}"
+            # load processed image
+            rgba = cv2.cvtColor(cv2.imread(self.opt.image, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
+            rgba_hw = cv2.resize(rgba, (self.opt.w, self.opt.h), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
+            rgb_hw = rgba_hw[..., :3] * rgba_hw[..., 3:] + (1 - rgba_hw[..., 3:])
+            self.rgb = torch.from_numpy(rgb_hw).permute(2,0,1).unsqueeze(0).contiguous().to(self.device)
+            self.mask = torch.from_numpy(rgba_hw[..., 3] > 0.5).to(self.device)
+            print(f'[INFO] dataset: load image prompt {self.opt.image} {self.rgb.shape}')
 
-                # explicit negative dir-encoded text
-                if self.opt.suppress_face:
-                    if negative_text != '': negative_text += ', '
+            # load depth
+            depth_path = self.opt.image.replace('_rgba.png', '_depth.png')
+            depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
+            depth = cv2.resize(depth, (self.opt.w, self.opt.h), interpolation=cv2.INTER_AREA)
+            self.depth = torch.from_numpy(depth.astype(np.float32) / 255).to(self.device)
+            print(f'[INFO] dataset: load depth prompt {depth_path} {self.depth.shape}')
 
-                    if d == 'back': negative_text += "face"
-                    # elif d == 'front': negative_text += ""
-                    elif d == 'side': negative_text += "face"
-                    elif d == 'overhead': negative_text += "face"
-                    elif d == 'bottom': negative_text += "face"
-                
-                text_z = self.guidance.get_text_embeds([text], [negative_text])
-                self.text_z.append(text_z)
+            # encode image_z 
+            rgba_256 = cv2.resize(rgba, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
+            rgb_256 = rgba_256[..., :3] * rgba_256[..., 3:] + (1 - rgba_256[..., 3:])
+            rgb_256 = torch.from_numpy(rgb_256).permute(2,0,1).unsqueeze(0).contiguous().to(self.device)
+            self.image_z = self.guidance.get_img_embeds(rgb_256)
+        
+        else:
+            self.image_z = None
 
     def __del__(self):
         if self.log_ptr: 
@@ -343,6 +331,26 @@ class Trainer(object):
 
     def train_step(self, data):
 
+        do_rgbd_loss = self.opt.image is not None and \
+            (self.global_step % self.opt.known_view_interval == 0)
+            # (self.global_step < 100 or self.global_step % self.opt.known_view_interval == 0)
+
+        # # tmp:
+        # do_rgbd_loss = False
+        
+        # override random camera with fixed camera...
+        if do_rgbd_loss:
+        # if True:
+            data = self.default_view_data
+
+        # progressively relaxing view range if image-conditioned
+        if self.opt.image is not None:
+            _ratio = min(1.0, 2 * self.global_step / self.opt.iters)
+            self.opt.phi_range = [-180*_ratio, 180*_ratio]
+            self.opt.theta_range = [90-45*_ratio, 90+15*_ratio]
+            self.opt.radius_range = [1.0, 1.0+0.5*_ratio]
+        #     # self.opt.fovy_range = [60-20*_ratio, 60+20*_ratio]
+
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
         mvp = data['mvp'] # [B, 4, 4]
@@ -350,7 +358,13 @@ class Trainer(object):
         B, N = rays_o.shape[:2]
         H, W = data['H'], data['W']
 
-        if self.global_step < self.opt.warmup_iters:
+        if do_rgbd_loss:
+            ambient_ratio = 1.0
+            shading = 'ambient'
+            as_latent = False
+            # bg_color = torch.rand(3).to(self.device) # single color random bg
+            bg_color = torch.rand((B * N, 3), device=rays_o.device) 
+        elif self.global_step < self.opt.warmup_iters:
             ambient_ratio = 1.0
             shading = 'normal'
             as_latent = True
@@ -363,7 +377,7 @@ class Trainer(object):
             else: 
                 shading = 'lambertian'
             as_latent = False
-        
+
             if random.random() > 0.5:
                 bg_color = None # use bg_net
             else:
@@ -380,16 +394,43 @@ class Trainer(object):
         else:
             pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
 
-        # text embeddings
-        if self.opt.dir_text:
-            dirs = data['dir'] # [B,]
-            text_z = self.text_z[dirs]
-        else:
-            text_z = self.text_z
-        
-        # encode pred_rgb to latents
-        loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent)
+        # known view loss
+        if do_rgbd_loss:
+            gt_mask = self.mask # [H, W]
+            gt_rgb = self.rgb # [3, H, W]
+            
+            # color loss
+            # gt_rgb = gt_rgb * gt_mask.float() + bg_color.view(3, 1, 1) * (1 - gt_mask.float())
+            gt_rgb = gt_rgb * gt_mask.float() + bg_color.reshape(H, W, 3).permute(2,0,1).contiguous() * (1 - gt_mask.float())
+            loss = F.smooth_l1_loss(pred_rgb[0], gt_rgb)
 
+            # relative depth loss
+            # gt_depth = self.depth[gt_mask].unsqueeze(1) # [B, 1]
+            # pred_depth = pred_depth.squeeze()[gt_mask].unsqueeze(1) # [B, 1]
+            # # loss = loss - torch.corrcoef(torch.cat([pred_depth + 1e-8, gt_depth + 1e-8], dim=-1)).mean() / 2
+            # with torch.no_grad():
+            #     A = torch.cat([gt_depth, torch.ones_like(gt_depth)], dim=-1) # [B, 2]
+            #     X = torch.linalg.lstsq(A, pred_depth).solution # [2, 1]
+            #     gt_depth = A @ X # [B, 1]
+            # loss = loss + 0.1 * F.mse_loss(pred_depth, gt_depth)
+
+        # novel view loss
+        else:
+
+            if self.opt.image is None:
+                if self.opt.dir_text:
+                    dirs = data['dir'] # [B,]
+                    text_z = self.text_z[dirs]
+                else:
+                    text_z = self.text_z
+                loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent, guidance_scale=self.opt.guidance_scale)
+
+            else:
+                polar = data['polar']
+                azimuth = data['azimuth']
+                radius = data['radius']
+                loss = self.guidance.train_step(self.image_z, pred_rgb, polar, azimuth, radius, as_latent=as_latent, guidance_scale=self.opt.guidance_scale)
+                
         # regularizations
         if not self.opt.dmtet:
             if self.opt.lambda_opacity > 0:
@@ -489,8 +530,6 @@ class Trainer(object):
     ### ------------------------------
 
     def train(self, train_loader, valid_loader, max_epochs):
-
-        assert self.text_z is not None, 'Training must provide a text prompt!'
 
         if self.use_tensorboardX and self.local_rank == 0:
             self.writer = tensorboardX.SummaryWriter(os.path.join(self.workspace, "run", self.name))
@@ -725,8 +764,23 @@ class Trainer(object):
 
             with torch.cuda.amp.autocast(enabled=self.fp16):
                 pred_rgbs, pred_depths, loss = self.train_step(data)
-         
+
+            # import kiui
+            # hooked grad clipping for RGB space
+            def _hook(grad):
+                if self.opt.fp16:
+                    # correctly handle the scale
+                    grad_scale = self.scaler._get_scale_async()
+                    return grad.clamp(grad_scale * -self.opt.grad_rgb_clip, grad_scale * self.opt.grad_rgb_clip)
+                else:
+                    return grad.clamp(-self.opt.grad_rgb_clip, self.opt.grad_rgb_clip)
+            pred_rgbs.register_hook(_hook)
+            # pred_rgbs.retain_grad()
+
             self.scaler.scale(loss).backward()
+
+            # kiui.vis.plot_matrix(pred_rgbs.grad)
+
             self.post_train_step()
             self.scaler.step(self.optimizer)
             self.scaler.update()
