@@ -298,7 +298,7 @@ class NeRFRenderer(nn.Module):
         if self.opt.dmtet:
             # load dmtet vertices
             tets = np.load('tets/{}_tets.npz'.format(self.opt.tet_grid_size))
-            self.verts = torch.tensor(tets['vertices'], dtype=torch.float32, device='cuda') * 2 # covers [-1, 1]
+            self.verts = - torch.tensor(tets['vertices'], dtype=torch.float32, device='cuda') * 2 # covers [-1, 1]
             self.indices  = torch.tensor(tets['indices'], dtype=torch.long, device='cuda')
             self.tet_scale = 1
             self.dmtet = DMTet('cuda')
@@ -887,9 +887,12 @@ class NeRFRenderer(nn.Module):
         if bg_color is None:
             if self.opt.bg_radius > 0:
                 # use the bg model to calculate bg_color
-                bg_color = self.background(rays_d).view(h, w, -1) # [N, 3]
+                bg_color = self.background(rays_d) # [N, 3]
             else:
                 bg_color = 1
+        
+        if torch.is_tensor(bg_color) and len(bg_color.shape) > 1:
+            bg_color = bg_color.view(h, w, -1)
         
         depth = rast[0, :, :, [2]] # [H, W]
         color = color + (1 - alpha) * bg_color
@@ -1033,7 +1036,7 @@ class NeRFRenderer(nn.Module):
 
 
     @torch.no_grad()
-    def update_extra_state(self, decay=0.6, S=128):
+    def update_extra_state(self, decay=0.95, S=128):
         # call before each epoch to update extra states.
 
         if not (self.cuda_ray or self.taichi_ray):

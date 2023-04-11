@@ -9,5 +9,5 @@ CUDA_VISIBLE_DEVICES=4 python main.py -O --text "a rabbit, animated movie charac
 CUDA_VISIBLE_DEVICES=4 python main.py -O --text "a corgi dog, highly detailed 3d model" --workspace trial_corgi --iters 10000
 CUDA_VISIBLE_DEVICES=4 python main.py -O --text "a corgi dog, highly detailed 3d model" --workspace trial2_corgi --dmtet --iters 5000 --init_ckpt trial_corgi/checkpoints/df.pth
 
-CUDA_VISIBLE_DEVICES=4 python main.py -O --text "a jumping cat, highly detailed" --workspace trial_cat --iters 10000
-CUDA_VISIBLE_DEVICES=4 python main.py -O --text "a jumping cat, highly detailed" --workspace trial2_cat --dmtet --iters 5000 --init_ckpt trial_cat/checkpoints/df.pth
+CUDA_VISIBLE_DEVICES=4 python main.py -O --text "a DSLR photo of a delicious hamburger" --workspace trial_hamburger --iters 10000
+CUDA_VISIBLE_DEVICES=4 python main.py -O --text "a DSLR photo of a delicious hamburger" --workspace trial2_hamburger --dmtet --iters 5000 --init_ckpt trial_hamburger/checkpoints/df.pth

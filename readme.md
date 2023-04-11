@@ -2,7 +2,7 @@
 
 A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) text-to-2D model.
 
-**NEWS (2023.4.7)**: Improvement on Mesh Quality & DMTet finetuning support!
+**NEWS (2023.4.7)**: Improvement on mesh quality & DMTet finetuning support!
 
 https://user-images.githubusercontent.com/25863658/230535363-298c960e-bf9c-4906-8b96-cd60edcb24dd.mp4
 
@@ -203,7 +203,6 @@ return loss # functional loss
     * light direction: current implementation use a plane light source, instead of a point light source.
 * View-dependent prompting: `./nerf/provider.py > get_view_direction`.
     * use `--angle_overhead, --angle_front` to set the border.
-    * use `--suppress_face` to add `face` as a negative prompt at all directions except `front`.
 * Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option.
 * Spatial density bias (density blob): `./nerf/network*.py > NeRFNetwork > density_blob`.
 
