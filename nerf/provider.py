@@ -203,17 +203,20 @@ class NeRFDataset:
 
     def get_default_view_data(self):
 
+        H = int(self.opt.known_view_scale * self.H)
+        W = int(self.opt.known_view_scale * self.W)
+
         thetas = torch.FloatTensor([self.opt.default_theta]).to(self.device)
         phis = torch.FloatTensor([self.opt.default_phi]).to(self.device)
         radius = torch.FloatTensor([self.opt.default_radius]).to(self.device)
         poses, dirs = circle_poses(self.device, radius=radius, theta=thetas, phi=phis, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front)
         fov = self.opt.default_fovy
-        focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
+        focal = H / (2 * np.tan(np.deg2rad(fov) / 2))
         intrinsics = np.array([focal, focal, self.cx, self.cy])
 
         projection = torch.tensor([
-            [2*focal/self.W, 0, 0, 0], 
-            [0, -2*focal/self.H, 0, 0],
+            [2*focal/W, 0, 0, 0], 
+            [0, -2*focal/H, 0, 0],
             [0, 0, -(self.far+self.near)/(self.far-self.near), -(2*self.far*self.near)/(self.far-self.near)],
             [0, 0, -1, 0]
         ], dtype=torch.float32, device=self.device).unsqueeze(0)
@@ -221,11 +224,11 @@ class NeRFDataset:
         mvp = projection @ torch.inverse(poses) # [1, 4, 4]
         
         # sample a low-resolution but full image
-        rays = get_rays(poses, intrinsics, self.H, self.W, -1)
+        rays = get_rays(poses, intrinsics, H, W, -1)
 
         data = {
-            'H': self.H,
-            'W': self.W,
+            'H': H,
+            'W': W,
             'rays_o': rays['rays_o'],
             'rays_d': rays['rays_d'],
             'dir': dirs,

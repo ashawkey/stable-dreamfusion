@@ -270,6 +270,7 @@ class NeRFRenderer(nn.Module):
         self.bound = opt.bound
         self.cascade = 1 + math.ceil(math.log2(opt.bound))
         self.grid_size = 128
+        self.max_level = None
         self.dmtet = opt.dmtet
         self.cuda_ray = opt.cuda_ray
         self.taichi_ray = opt.taichi_ray

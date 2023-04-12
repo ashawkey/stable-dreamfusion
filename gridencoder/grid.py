@@ -1,3 +1,4 @@
+import math
 import numpy as np
 
 import torch
@@ -38,7 +39,7 @@ class _grid_encode(Function):
         S = np.log2(per_level_scale) # resolution multiplier at each level, apply log2 for later CUDA exp2f
         H = base_resolution # base resolution
 
-        max_level = L if max_level is None else min(max_level, L)
+        max_level = L if max_level is None else max(min(int(math.ceil(max_level * L)), L), 1)
 
         # manually handle autocast (only use half precision embeddings, inputs must be float for enough precision)
         # if C % 2 != 0, force float, since half for atomicAdd is very slow.
@@ -150,7 +151,7 @@ class GridEncoder(nn.Module):
     
     def forward(self, inputs, bound=1, max_level=None):
         # inputs: [..., input_dim], normalized real world positions in [-bound, bound]
-        # max_level: only calculate first max_level levels (None will use all levels)
+        # max_level: in [0, 1], only calculate first max_level * L levels (None will use all levels)
         # return: [..., num_levels * level_dim]
 
         inputs = (inputs + bound) / (2 * bound) # map to [0, 1]

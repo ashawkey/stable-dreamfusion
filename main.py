@@ -23,7 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=None)
 
     parser.add_argument('--image', default=None, help="image prompt")
-    parser.add_argument('--known_view_interval', type=int, default=4, help="train default view with RGB loss every & iters, only valid if --image is not None.")
+    parser.add_argument('--known_view_interval', type=int, default=2, help="train default view with RGB loss every & iters, only valid if --image is not None.")
     parser.add_argument('--guidance_scale', type=float, default=100, help="diffusion model classifier-free guidance scale")
 
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
@@ -67,6 +67,7 @@ if __name__ == '__main__':
     # rendering resolution in training, increase these for better quality / decrease these if CUDA OOM even if --vram_O enabled.
     parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
     parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
+    parser.add_argument('--known_view_scale', type=float, default=1.5, help="multiply --h/w by this for known view rendering")
 
     ### dataset options
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
@@ -80,7 +81,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--default_radius', type=float, default=1.0, help="radius for the default view")
     parser.add_argument('--default_fovy', type=float, default=60, help="fovy for the default view")
-    parser.add_argument('--default_theta', type=float, default=90, help="radius for the default view")
+    parser.add_argument('--default_theta', type=float, default=80, help="radius for the default view")
     parser.add_argument('--default_phi', type=float, default=0, help="radius for the default view")
 
     parser.add_argument('--dir_text', action='store_true', help="direction-encode the text prompt, by appending front/side/back/overhead view")
@@ -95,6 +96,9 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_tv', type=float, default=0, help="loss scale for total variation")
     parser.add_argument('--lambda_normal', type=float, default=0, help="loss scale for mesh normal smoothness")
     parser.add_argument('--lambda_lap', type=float, default=0.2, help="loss scale for mesh laplacian")
+
+    parser.add_argument('--lambda_rgb', type=float, default=5, help="loss scale for RGB")
+    parser.add_argument('--lambda_mask', type=float, default=0.5, help="loss scale for mask (A)")
 
     parser.add_argument('--grad_rgb_clip', type=float, default=10, help="clip grad of rgb space to this limit")
 
@@ -126,7 +130,7 @@ if __name__ == '__main__':
         opt.w = 512
         opt.warmup_iters = 0
         opt.t_range = [0.02, 0.50]
-        opt.fovy_range = [20, 60]
+        opt.fovy_range = [30, 70]
 
     # image-conditioned generation
     if opt.image is not None:
@@ -138,6 +142,7 @@ if __name__ == '__main__':
         opt.guidance_scale = 10
         opt.warmup_iters = 0 # do not perform as_latent geom init
         opt.fovy_range = [60, 60] # fix fov as zero123 doesn't support changing fov
+        opt.t_range = [0.0, 0.1]
 
         opt.jitter_pose = False # must not jitter view target
         opt.uniform_sphere_rate = 0 # do not do this as it disturbs the progressive view expansion
