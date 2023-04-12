@@ -128,7 +128,7 @@ class NeRFNetwork(NeRFRenderer):
         # x: [N, 3], in [-bound, bound]
 
         # sigma
-        enc = self.encoder(x, bound=self.bound)
+        enc = self.encoder(x, bound=self.bound, max_level=self.max_level)
 
         h = self.sigma_net(enc)
 

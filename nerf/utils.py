@@ -289,9 +289,12 @@ class Trainer(object):
         # image embeddings (zero123)
         if self.opt.image is not None:
 
+            h = int(self.opt.known_view_scale * self.opt.h)
+            w = int(self.opt.known_view_scale * self.opt.w)
+
             # load processed image
             rgba = cv2.cvtColor(cv2.imread(self.opt.image, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
-            rgba_hw = cv2.resize(rgba, (self.opt.w, self.opt.h), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
+            rgba_hw = cv2.resize(rgba, (w, h), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
             rgb_hw = rgba_hw[..., :3] * rgba_hw[..., 3:] + (1 - rgba_hw[..., 3:])
             self.rgb = torch.from_numpy(rgb_hw).permute(2,0,1).unsqueeze(0).contiguous().to(self.device)
             self.mask = torch.from_numpy(rgba_hw[..., 3] > 0.5).to(self.device)
@@ -300,7 +303,7 @@ class Trainer(object):
             # load depth
             depth_path = self.opt.image.replace('_rgba.png', '_depth.png')
             depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
-            depth = cv2.resize(depth, (self.opt.w, self.opt.h), interpolation=cv2.INTER_AREA)
+            depth = cv2.resize(depth, (w, h), interpolation=cv2.INTER_AREA)
             self.depth = torch.from_numpy(depth.astype(np.float32) / 255).to(self.device)
             print(f'[INFO] dataset: load depth prompt {depth_path} {self.depth.shape}')
 
@@ -332,11 +335,11 @@ class Trainer(object):
     def train_step(self, data):
 
         do_rgbd_loss = self.opt.image is not None and \
-            (self.global_step % self.opt.known_view_interval == 0)
-            # (self.global_step < 100 or self.global_step % self.opt.known_view_interval == 0)
+            (self.global_step < 100 or self.global_step % self.opt.known_view_interval == 0)
+            # (self.global_step % self.opt.known_view_interval == 0)
 
         # # tmp:
-        # do_rgbd_loss = False
+        # do_rgbd_loss = True # False
         
         # override random camera with fixed camera...
         if do_rgbd_loss:
@@ -347,9 +350,13 @@ class Trainer(object):
         if self.opt.image is not None:
             _ratio = min(1.0, 2 * self.global_step / self.opt.iters)
             self.opt.phi_range = [-180*_ratio, 180*_ratio]
-            self.opt.theta_range = [90-45*_ratio, 90+15*_ratio]
+            self.opt.theta_range = [80-35*_ratio, 80+25*_ratio]
             self.opt.radius_range = [1.0, 1.0+0.5*_ratio]
         #     # self.opt.fovy_range = [60-20*_ratio, 60+20*_ratio]
+
+        # progressively increase max_level
+        if not self.opt.dmtet:
+            self.model.max_level = min(1.0, 0.25 + self.global_step / (0.5 * self.opt.iters))
 
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
@@ -388,6 +395,7 @@ class Trainer(object):
         
         outputs = self.model.render(rays_o, rays_d, mvp, H, W, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, binarize=binarize)
         pred_depth = outputs['depth'].reshape(B, 1, H, W)
+        pred_mask = outputs['weights_sum'].reshape(B, 1, H, W)
 
         if as_latent:
             pred_rgb = torch.cat([outputs['image'], outputs['weights_sum'].unsqueeze(-1)], dim=-1).reshape(B, H, W, 4).permute(0, 3, 1, 2).contiguous() # [1, 4, H, W]
@@ -402,7 +410,10 @@ class Trainer(object):
             # color loss
             # gt_rgb = gt_rgb * gt_mask.float() + bg_color.view(3, 1, 1) * (1 - gt_mask.float())
             gt_rgb = gt_rgb * gt_mask.float() + bg_color.reshape(H, W, 3).permute(2,0,1).contiguous() * (1 - gt_mask.float())
-            loss = F.smooth_l1_loss(pred_rgb[0], gt_rgb)
+            loss = self.opt.lambda_rgb * F.mse_loss(pred_rgb, gt_rgb)
+
+            # mask loss
+            loss = loss + self.opt.lambda_mask * F.mse_loss(pred_mask[0, 0], gt_mask.float())
 
             # relative depth loss
             # gt_depth = self.depth[gt_mask].unsqueeze(1) # [B, 1]
@@ -463,7 +474,7 @@ class Trainer(object):
 
         if self.opt.backbone == 'grid' and self.opt.lambda_tv > 0:
 
-            lambda_tv = min(1.0, self.global_step / 1000) * self.opt.lambda_tv
+            lambda_tv = min(1.0, self.global_step / (0.5 * self.opt.iters)) * self.opt.lambda_tv
             # unscale grad before modifying it!
             # ref: https://pytorch.org/docs/stable/notes/amp_examples.html#gradient-clipping
             self.scaler.unscale_(self.optimizer)
