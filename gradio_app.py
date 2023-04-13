@@ -26,6 +26,7 @@ parser.add_argument('--decimate_target', type=int, default=1e5, help="target fac
 ### training options
 parser.add_argument('--iters', type=int, default=10000, help="training iters")
 parser.add_argument('--lr', type=float, default=1e-3, help="initial learning rate")
+parser.add_argument('--lr2', type=float, default=1e-3, help="initial learning rate 2")
 parser.add_argument('--ckpt', type=str, default='latest')
 parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
 parser.add_argument('--max_steps', type=int, default=1024, help="max num steps sampled per ray (only valid when using --cuda_ray)")
@@ -166,11 +167,20 @@ with gr.Blocks(css=".gradio-container {max-width: 512px; margin: auto;}") as dem
         if opt.optim == 'adan':
             from optimizer import Adan
             # Adan usually requires a larger LR
-            optimizer = lambda model: Adan(model.get_params(5 * opt.lr), eps=1e-15)
+            if opt.backbone == 'tensoRF':
+                optimizer = lambda model: Adan(model.get_params(5 * opt.lr, 5 * opt.lr2), eps=1e-15)
+            else:
+                optimizer = lambda model: Adan(model.get_params(5 * opt.lr), eps=1e-15)
         elif opt.optim == 'adamw':
-            optimizer = lambda model: torch.optim.AdamW(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
+            if opt.backbone == 'tensoRF':
+                optimizer = lambda model: torch.optim.AdamW(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
+            else:
+                optimizer = lambda model: torch.optim.AdamW(model.get_params(opt.lr, opt.lr2), betas=(0.9, 0.99), eps=1e-15)
         else: # adam
-            optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
+            if opt.backbone == 'tensoRF':
+                optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr, opt.lr2), betas=(0.9, 0.99), eps=1e-15)
+            else:
+                optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
 
         scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 1) # fixed
 
