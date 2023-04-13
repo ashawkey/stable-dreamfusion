@@ -152,7 +152,7 @@ class NeRFNetwork(NeRFRenderer):
         return color_feat
     
     
-    def forward(self, x, d):
+    def forward(self, x, d, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
 
