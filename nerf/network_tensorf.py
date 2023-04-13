@@ -26,6 +26,7 @@ class NeRFNetwork(NeRFRenderer):
         
         super().__init__(opt)
         self.resolution = resolution
+        self.bound = opt.bound
 
         # vector-matrix decomposition
         self.sigma_rank = sigma_rank
