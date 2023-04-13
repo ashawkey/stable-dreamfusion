@@ -103,6 +103,8 @@ if __name__ == '__main__':
         from nerf.network import NeRFNetwork
     elif opt.backbone == 'grid':
         from nerf.network_grid import NeRFNetwork
+    elif opt.backbone == 'tensoRF':
+        from nerf.network_tensorf import NeRFNetwork
     elif opt.backbone == 'grid_taichi':
         opt.cuda_ray = False
         opt.taichi_ray = True
