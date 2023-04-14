@@ -153,32 +153,38 @@ class NeRFNetwork(NeRFRenderer):
     
     
     def forward(self, x, d, l=None, ratio=1, shading='albedo'):
+        print('tensorf forward 1')
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
 
         # normalize to [-1, 1] inside aabb_train
         x = 2 * (x - self.aabb_train[:3]) / (self.aabb_train[3:] - self.aabb_train[:3]) - 1
 
+        print('tensorf forward 2')
         # sigma
         sigma_feat = self.get_sigma_feat(x)
         sigma = trunc_exp(sigma_feat)
         #sigma = F.softplus(sigma_feat - 3)
         #sigma = F.relu(sigma_feat)
 
+        print('tensorf forward 3')
         # rgb
         color_feat = self.get_color_feat(x)
         enc_color_feat = self.encoder(color_feat)
         enc_d = self.encoder_dir(d)
 
+        print('tensorf forward 4')
         h = torch.cat([enc_color_feat, enc_d], dim=-1)
         for l in range(self.num_layers):
             h = self.color_net[l](h)
             if l != self.num_layers - 1:
                 h = F.relu(h, inplace=True)
-        
+
+        print('tensorf forward 5')  
         # sigmoid activation for rgb
         rgb = torch.sigmoid(h)
 
+        print('tensorf forward 6')
         return sigma, rgb
 
 
