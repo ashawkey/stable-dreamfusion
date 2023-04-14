@@ -729,6 +729,7 @@ class NeRFRenderer(nn.Module):
 
     @torch.no_grad()
     def update_extra_state(self, decay=0.95, S=128):
+        print('update_extra_state 1')
         # call before each epoch to update extra states.
 
         if not (self.cuda_ray or self.taichi_ray):
@@ -741,6 +742,7 @@ class NeRFRenderer(nn.Module):
         Y = torch.arange(self.grid_size, dtype=torch.int32, device=self.aabb_train.device).split(S)
         Z = torch.arange(self.grid_size, dtype=torch.int32, device=self.aabb_train.device).split(S)
 
+        print('update_extra_state 2', self.times)
         if self.times is None:
             for xs in X:
                 for ys in Y:
