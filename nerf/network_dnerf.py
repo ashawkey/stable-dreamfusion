@@ -145,46 +145,31 @@ class NeRFNetwork(NeRFRenderer):
     def forward(self, x, d, t=None, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
-        # t: [1, 1], in [0, 1]
 
-        # deform
-        enc_ori_x = self.encoder_deform(x, bound=self.bound) # [N, C]
-        enc_t = self.encoder_time(t) # [1, 1] --> [1, C']
-        if enc_t.shape[0] == 1:
-            enc_t = enc_t.repeat(x.shape[0], 1) # [1, C'] --> [N, C']
-
-        deform = torch.cat([enc_ori_x, enc_t], dim=1) # [N, C + C']
-        for l in range(self.num_layers_deform):
-            deform = self.deform_net[l](deform)
-            if l != self.num_layers_deform - 1:
-                deform = F.relu(deform, inplace=True)
-        
-        x = x + deform
+        # normalize to [-1, 1] inside aabb_train
+        x = 2 * (x - self.aabb_train[:3]) / (self.aabb_train[3:] - self.aabb_train[:3]) - 1
 
         # sigma
-        x = self.encoder(x, bound=self.bound)
-        h = torch.cat([x, enc_ori_x, enc_t], dim=1)
+        sigma_feat = self.get_sigma_feat(x)
+        sigma = trunc_exp(sigma_feat)
+        #sigma = F.softplus(sigma_feat - 3)
+        #sigma = F.relu(sigma_feat)
+
+        # rgb
+        color_feat = self.get_color_feat(x)
+        enc_color_feat = self.encoder(color_feat)
+        enc_d = self.encoder_dir(d)
+
+        h = torch.cat([enc_color_feat, enc_d], dim=-1)
         for l in range(self.num_layers):
-            h = self.sigma_net[l](h)
+            h = self.color_net[l](h)
             if l != self.num_layers - 1:
                 h = F.relu(h, inplace=True)
-
-        #sigma = F.relu(h[..., 0])
-        sigma = trunc_exp(h[..., 0])
-        geo_feat = h[..., 1:]
-
-        # color
-        d = self.encoder_dir(d)
-        h = torch.cat([d, geo_feat], dim=-1)
-        for l in range(self.num_layers_color):
-            h = self.color_net[l](h)
-            if l != self.num_layers_color - 1:
-                h = F.relu(h, inplace=True)
-        
+ 
         # sigmoid activation for rgb
-        rgbs = torch.sigmoid(h)
+        rgb = torch.sigmoid(h)
 
-        return sigma, rgbs, deform
+        return sigma, rgb, None
 
     def density(self, x, t):
         # x: [N, 3], in [-bound, bound]
