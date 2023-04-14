@@ -59,8 +59,6 @@ class NeRFNetwork(NeRFRenderer):
          # time stamps for density grid
         self.time_size = 64
         self.times = ((torch.arange(self.time_size, dtype=torch.float32) + 0.5) / self.time_size).view(-1, 1, 1) # [T, 1, 1]
-        self.register_buffer('times', self.times)
-
         
         deform_net = []
         for l in range(num_layers_deform):
