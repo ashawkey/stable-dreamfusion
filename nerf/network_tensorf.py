@@ -92,7 +92,7 @@ class NeRFNetwork(NeRFRenderer):
             self.hidden_dim_bg = hidden_dim_bg
             
             # TODO: just use a matrix to model the background, no need of factorization.
-            self.encoder_bg, self.in_dim_bg = get_encoder('hashgrid', input_dim=2, num_levels=4, log2_hashmap_size=18) # much smaller hashgrid 
+            #self.encoder_bg, self.in_dim_bg = get_encoder('hashgrid', input_dim=2, num_levels=4, log2_hashmap_size=18) # much smaller hashgrid 
             self.bg_resolution = bg_resolution
             self.bg_rank = bg_rank
             self.bg_mat = nn.Parameter(0.1 * torch.randn((1, bg_rank, bg_resolution[0], bg_resolution[1]))) # [1, R, H, W]
@@ -111,7 +111,7 @@ class NeRFNetwork(NeRFRenderer):
                 
                 bg_net.append(nn.Linear(in_dim, out_dim, bias=False))
 
-            self.bg_net = MLP(self.in_dim_bg, 3, hidden_dim_bg, num_layers_bg, bias=True) #nn.ModuleList(bg_net)
+            self.bg_net = MLP(enc_dim_dir, 3, hidden_dim_bg, num_layers_bg, bias=True) #nn.ModuleList(bg_net)
         else:
             self.bg_net = None
 
