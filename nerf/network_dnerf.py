@@ -48,6 +48,7 @@ class NeRFNetwork(NeRFRenderer):
                  ):
         
         super().__init__(opt)
+        print('dnerf')
         self.bound = opt.bound
 
         # deformation network
@@ -141,6 +142,7 @@ class NeRFNetwork(NeRFRenderer):
         else:
             self.bg_net = None
 
+        print('dnerf init done')
 
     def forward(self, x, d, t=None, l=None, ratio=1, shading='albedo'):
         print('forward 1')
@@ -189,6 +191,7 @@ class NeRFNetwork(NeRFRenderer):
         return sigma, rgbs, deform
 
     def density(self, x, t):
+        print('density 1')
         # x: [N, 3], in [-bound, bound]
         # t: [1, 1], in [0, 1]
 
@@ -224,6 +227,7 @@ class NeRFNetwork(NeRFRenderer):
         results['sigma'] = sigma
         results['geo_feat'] = geo_feat
 
+        print('density return')
         return results
 
     def background(self, d, x):
@@ -247,6 +251,7 @@ class NeRFNetwork(NeRFRenderer):
 
     # allow masked inference
     def color(self, x, d, mask=None, geo_feat=None, **kwargs):
+        print('color 1')
         # x: [N, 3] in [-bound, bound]
         # t: [1, 1], in [0, 1]
         # mask: [N,], bool, indicates where we actually needs to compute rgb.
@@ -275,10 +280,12 @@ class NeRFNetwork(NeRFRenderer):
         else:
             rgbs = h
 
+        print('color return')
         return rgbs        
 
     # optimizer utils
     def get_params(self, lr, lr_net):
+        print('get_params 1')
 
         params = [
             {'params': self.encoder.parameters(), 'lr': lr},
@@ -293,4 +300,5 @@ class NeRFNetwork(NeRFRenderer):
             params.append({'params': self.encoder_bg.parameters(), 'lr': lr})
             params.append({'params': self.bg_net.parameters(), 'lr': lr_net})
         
+        print('get_params return')
         return params
