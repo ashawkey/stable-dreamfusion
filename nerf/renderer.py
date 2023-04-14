@@ -114,7 +114,10 @@ class NeRFRenderer(nn.Module):
         # extra state for cuda raymarching
         if self.cuda_ray:
             # density grid
-            density_grid = torch.zeros([self.cascade, self.grid_size ** 3]) # [CAS, H * H * H]
+            if hasattr(self, 'times'):
+                density_grid = torch.zeros(self.time_size, self.cascade, self.grid_size ** 3) # [T, CAS, H * H * H]
+            else: 
+                density_grid = torch.zeros([self.cascade, self.grid_size ** 3]) # [CAS, H * H * H]
             density_bitfield = torch.zeros(self.cascade * self.grid_size ** 3 // 8, dtype=torch.uint8) # [CAS * H * H * H // 8]
             self.register_buffer('density_grid', density_grid)
             self.register_buffer('density_bitfield', density_bitfield)
