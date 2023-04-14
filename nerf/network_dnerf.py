@@ -190,7 +190,7 @@ class NeRFNetwork(NeRFRenderer):
         print('foward return')
         return sigma, rgbs, deform
 
-    def density(self, x, t):
+    def density(self, x, t=None):
         print('density 1')
         # x: [N, 3], in [-bound, bound]
         # t: [1, 1], in [0, 1]
