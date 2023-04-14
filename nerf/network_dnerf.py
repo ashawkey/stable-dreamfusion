@@ -142,7 +142,7 @@ class NeRFNetwork(NeRFRenderer):
             self.bg_net = None
 
 
-    def forward(self, x, d, t):
+    def forward(self, x, d, t=None, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
         # t: [1, 1], in [0, 1]
@@ -227,14 +227,18 @@ class NeRFNetwork(NeRFRenderer):
     def background(self, d, x):
         # x: [N, 2], in [-1, 1]
 
-        h = self.encoder_bg(x) # [N, C]
-        d = self.encoder_dir(d)
+        #h = self.encoder_bg(x) # [N, C]
+        #d = self.encoder_dir(d)
 
-        h = torch.cat([d, h], dim=-1)
-        for l in range(self.num_layers_bg):
-            h = self.bg_net[l](h)
-            if l != self.num_layers_bg - 1:
-                h = F.relu(h, inplace=True)
+        #h = torch.cat([d, h], dim=-1)
+        #for l in range(self.num_layers_bg):
+        #    h = self.bg_net[l](h)
+        #    if l != self.num_layers_bg - 1:
+        #        h = F.relu(h, inplace=True)
+
+        h = self.encoder_dir(d)
+        
+        h = self.bg_net(h)
         
         # sigmoid activation for rgb
         rgbs = torch.sigmoid(h)
