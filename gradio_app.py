@@ -167,17 +167,17 @@ with gr.Blocks(css=".gradio-container {max-width: 512px; margin: auto;}") as dem
         if opt.optim == 'adan':
             from optimizer import Adan
             # Adan usually requires a larger LR
-            if opt.backbone == 'tensoRF':
+            if opt.backbone == 'tensoRF' or opt.backbone == 'dnerf':
                 optimizer = lambda model: Adan(model.get_params(5 * opt.lr, 5 * opt.lr2), eps=1e-15)
             else:
                 optimizer = lambda model: Adan(model.get_params(5 * opt.lr), eps=1e-15)
         elif opt.optim == 'adamw':
-            if opt.backbone == 'tensoRF':
+            if opt.backbone == 'tensoRF' or opt.backbone == 'dnerf':
                 optimizer = lambda model: torch.optim.AdamW(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
             else:
                 optimizer = lambda model: torch.optim.AdamW(model.get_params(opt.lr, opt.lr2), betas=(0.9, 0.99), eps=1e-15)
         else: # adam
-            if opt.backbone == 'tensoRF':
+            if opt.backbone == 'tensoRF' or opt.backbone == 'dnerf':
                 optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr, opt.lr2), betas=(0.9, 0.99), eps=1e-15)
             else:
                 optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
