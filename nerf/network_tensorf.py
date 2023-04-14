@@ -92,7 +92,7 @@ class NeRFNetwork(NeRFRenderer):
             self.hidden_dim_bg = hidden_dim_bg
             
             # TODO: just use a matrix to model the background, no need of factorization.
-            #self.encoder_bg, self.in_dim_bg = get_encoder('hashgrid', input_dim=2, num_levels=4, log2_hashmap_size=18) # much smaller hashgrid 
+            self.encoder_bg, self.in_dim_bg = get_encoder('hashgrid', input_dim=2, num_levels=4, log2_hashmap_size=18) # much smaller hashgrid 
             self.bg_resolution = bg_resolution
             self.bg_rank = bg_rank
             self.bg_mat = nn.Parameter(0.1 * torch.randn((1, bg_rank, bg_resolution[0], bg_resolution[1]))) # [1, R, H, W]
@@ -111,7 +111,7 @@ class NeRFNetwork(NeRFRenderer):
                 
                 bg_net.append(nn.Linear(in_dim, out_dim, bias=False))
 
-            self.bg_net = MLP(enc_dim_dir, 3, hidden_dim_bg, num_layers_bg, bias=True) #nn.ModuleList(bg_net)
+            self.bg_net = MLP(self.in_dim_bg, 3, hidden_dim_bg, num_layers_bg, bias=True) #nn.ModuleList(bg_net)
         else:
             self.bg_net = None
 
@@ -174,38 +174,32 @@ class NeRFNetwork(NeRFRenderer):
     
     
     def forward(self, x, d, l=None, ratio=1, shading='albedo'):
-        print('tensorf forward 1')
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
 
         # normalize to [-1, 1] inside aabb_train
         x = 2 * (x - self.aabb_train[:3]) / (self.aabb_train[3:] - self.aabb_train[:3]) - 1
 
-        print('tensorf forward 2')
         # sigma
         sigma_feat = self.get_sigma_feat(x)
         sigma = trunc_exp(sigma_feat)
         #sigma = F.softplus(sigma_feat - 3)
         #sigma = F.relu(sigma_feat)
 
-        print('tensorf forward 3')
         # rgb
         color_feat = self.get_color_feat(x)
         enc_color_feat = self.encoder(color_feat)
         enc_d = self.encoder_dir(d)
 
-        print('tensorf forward 4')
         h = torch.cat([enc_color_feat, enc_d], dim=-1)
         for l in range(self.num_layers):
             h = self.color_net[l](h)
             if l != self.num_layers - 1:
                 h = F.relu(h, inplace=True)
-
-        print('tensorf forward 5')  
+ 
         # sigmoid activation for rgb
         rgb = torch.sigmoid(h)
 
-        print('tensorf forward 6')
         return sigma, rgb, None
 
 
