@@ -96,6 +96,7 @@ class NeRFRenderer(nn.Module):
         self.opt = opt
         self.bound = opt.bound
         self.cascade = 1 + math.ceil(math.log2(opt.bound))
+        self.time_size = 64
         self.grid_size = 128
         self.cuda_ray = opt.cuda_ray
         self.taichi_ray = opt.taichi_ray
@@ -742,32 +743,7 @@ class NeRFRenderer(nn.Module):
         Y = torch.arange(self.grid_size, dtype=torch.int32, device=self.aabb_train.device).split(S)
         Z = torch.arange(self.grid_size, dtype=torch.int32, device=self.aabb_train.device).split(S)
 
-        print('update_extra_state 2', self.times)
-        if self.times is None:
-            for xs in X:
-                for ys in Y:
-                    for zs in Z:
-                        
-                        # construct points
-                        xx, yy, zz = custom_meshgrid(xs, ys, zs)
-                        coords = torch.cat([xx.reshape(-1, 1), yy.reshape(-1, 1), zz.reshape(-1, 1)], dim=-1) # [N, 3], in [0, 128)
-                        indices = raymarching.morton3D(coords).long() # [N]
-                        xyzs = 2 * coords.float() / (self.grid_size - 1) - 1 # [N, 3] in [-1, 1]
-
-                        # cascading
-                        for cas in range(self.cascade):
-                            bound = min(2 ** cas, self.bound)
-                            half_grid_size = bound / self.grid_size
-                            # scale to current cascade's resolution
-                            cas_xyzs = xyzs * (bound - half_grid_size)
-                            # add noise in [-hgs, hgs]
-                            cas_xyzs += (torch.rand_like(cas_xyzs) * 2 - 1) * half_grid_size
-                            # add noise in time [-hts, hts]
-                            # query density
-                            sigmas = self.density(cas_xyzs)['sigma'].reshape(-1).detach()
-                            # assign 
-                            tmp_grid[cas, indices] = sigmas
-        else:
+        if hasattr(self, 'times'):
             for t, time in enumerate(self.times):
                 for xs in X:
                     for ys in Y:
@@ -795,6 +771,30 @@ class NeRFRenderer(nn.Module):
                                 sigmas *= self.density_scale
                                 # assign 
                                 tmp_grid[t, cas, indices] = sigmas
+        else:
+            for xs in X:
+                for ys in Y:
+                    for zs in Z:
+                        
+                        # construct points
+                        xx, yy, zz = custom_meshgrid(xs, ys, zs)
+                        coords = torch.cat([xx.reshape(-1, 1), yy.reshape(-1, 1), zz.reshape(-1, 1)], dim=-1) # [N, 3], in [0, 128)
+                        indices = raymarching.morton3D(coords).long() # [N]
+                        xyzs = 2 * coords.float() / (self.grid_size - 1) - 1 # [N, 3] in [-1, 1]
+
+                        # cascading
+                        for cas in range(self.cascade):
+                            bound = min(2 ** cas, self.bound)
+                            half_grid_size = bound / self.grid_size
+                            # scale to current cascade's resolution
+                            cas_xyzs = xyzs * (bound - half_grid_size)
+                            # add noise in [-hgs, hgs]
+                            cas_xyzs += (torch.rand_like(cas_xyzs) * 2 - 1) * half_grid_size
+                            # add noise in time [-hts, hts]
+                            # query density
+                            sigmas = self.density(cas_xyzs)['sigma'].reshape(-1).detach()
+                            # assign 
+                            tmp_grid[cas, indices] = sigmas            
 
         # ema update
         valid_mask = self.density_grid >= 0
