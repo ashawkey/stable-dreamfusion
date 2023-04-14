@@ -56,6 +56,7 @@ class NeRFNetwork(NeRFRenderer):
         self.hidden_dim_deform = hidden_dim_deform
         self.encoder_deform, self.in_dim_deform = get_encoder(encoding_deform, multires=10)
         self.encoder_time, self.in_dim_time = get_encoder(encoding_time, input_dim=1, multires=6)
+        self.density_scale = 1
          # time stamps for density grid
         self.time_size = 64
         self.times = ((torch.arange(self.time_size, dtype=torch.float32) + 0.5) / self.time_size).view(-1, 1, 1) # [T, 1, 1]
