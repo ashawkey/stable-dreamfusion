@@ -818,7 +818,7 @@ class NeRFRenderer(nn.Module):
         # print(f'[density grid] min={self.density_grid.min().item():.4f}, max={self.density_grid.max().item():.4f}, mean={self.mean_density:.4f}, occ_rate={(self.density_grid > density_thresh).sum() / (128**3 * self.cascade):.3f} | [step counter] mean={self.mean_count}')
 
 
-    def render(self, rays_o, rays_d, staged=False, max_ray_batch=4096, **kwargs):
+    def render(self, rays_o, rays_d, time, staged=False, max_ray_batch=4096, **kwargs):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # return: pred_rgb: [B, N, 3]
 
@@ -831,6 +831,7 @@ class NeRFRenderer(nn.Module):
 
         B, N = rays_o.shape[:2]
         device = rays_o.device
+
 
         # never stage when cuda_ray
         if staged and not (self.cuda_ray or self.taichi_ray):
@@ -854,6 +855,6 @@ class NeRFRenderer(nn.Module):
             results['weights_sum'] = weights_sum
 
         else:
-            results = _run(rays_o, rays_d, **kwargs)
+            results = _run(rays_o, rays_d, time, **kwargs)
 
         return results

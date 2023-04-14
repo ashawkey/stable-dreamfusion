@@ -107,6 +107,7 @@ if __name__ == '__main__':
     elif opt.backbone == 'tensoRF':
         from nerf.network_tensorf import NeRFNetwork
     elif opt.backbone == 'dnerf':
+        opt.cuda_ray = False
         from nerf.network_dnerf import NeRFNetwork
     elif opt.backbone == 'grid_taichi':
         opt.cuda_ray = False
