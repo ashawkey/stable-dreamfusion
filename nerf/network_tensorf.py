@@ -111,7 +111,7 @@ class NeRFNetwork(NeRFRenderer):
                 
                 bg_net.append(nn.Linear(in_dim, out_dim, bias=False))
 
-            self.bg_net = MLP(self.enc_dim_dir, 3, hidden_dim_bg, num_layers_bg, bias=True) #nn.ModuleList(bg_net)
+            self.bg_net = MLP(enc_dim_dir, 3, hidden_dim_bg, num_layers_bg, bias=True) #nn.ModuleList(bg_net)
         else:
             self.bg_net = None
 
