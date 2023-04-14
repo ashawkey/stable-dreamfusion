@@ -148,7 +148,7 @@ class NeRFNetwork(NeRFRenderer):
 
         print('dnerf init done')
 
-    def forward(self, x, d, t, l=None, ratio=1, shading='albedo'):
+    def forward(self, x, d, t=None, l=None, ratio=1, shading='albedo'):
         print('forward 1')
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]

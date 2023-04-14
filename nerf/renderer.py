@@ -462,7 +462,7 @@ class NeRFRenderer(nn.Module):
         for k, v in density_outputs.items():
             density_outputs[k] = v.view(-1, v.shape[-1])
 
-        sigmas, rgbs, normals = self(xyzs.reshape(-1, 3), dirs.reshape(-1, 3), light_d, ratio=ambient_ratio, shading=shading)
+        sigmas, rgbs, normals = self(xyzs.reshape(-1, 3), dirs.reshape(-1, 3), light_d, t=time, ratio=ambient_ratio, shading=shading)
         rgbs = rgbs.view(N, -1, 3) # [N, T+t, 3]
 
         if normals is not None:
@@ -501,7 +501,7 @@ class NeRFRenderer(nn.Module):
         return results
 
 
-    def run_cuda(self, rays_o, rays_d, dt_gamma=0, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, perturb=False, force_all_rays=False, max_steps=1024, T_thresh=1e-4, **kwargs):
+    def run_cuda(self, rays_o, rays_d, time, dt_gamma=0, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, perturb=False, force_all_rays=False, max_steps=1024, T_thresh=1e-4, **kwargs):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # return: image: [B, N, 3], depth: [B, N]
 
@@ -530,7 +530,7 @@ class NeRFRenderer(nn.Module):
             self.local_step += 1
             xyzs, dirs, ts, rays = raymarching.march_rays_train(rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, perturb, dt_gamma, max_steps)
             # plot_pointcloud(xyzs.reshape(-1, 3).detach().cpu().numpy())
-            sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
+            sigmas, rgbs, normals = self(xyzs, dirs, light_d, t=time, ratio=ambient_ratio, shading=shading)
             weights, weights_sum, depth, image = raymarching.composite_rays_train(sigmas, rgbs, ts, rays, T_thresh)
             
             # normals related regularizations
@@ -570,7 +570,7 @@ class NeRFRenderer(nn.Module):
                 n_step = max(min(N // n_alive, 8), 1)
 
                 xyzs, dirs, ts = raymarching.march_rays(n_alive, n_step, rays_alive, rays_t, rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, perturb if step == 0 else False, dt_gamma, max_steps)
-                sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
+                sigmas, rgbs, normals = self(xyzs, dirs, light_d, t=time, ratio=ambient_ratio, shading=shading)
                 raymarching.composite_rays(n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, ts, weights_sum, depth, image, T_thresh)
 
                 rays_alive = rays_alive[rays_alive >= 0]
@@ -599,7 +599,7 @@ class NeRFRenderer(nn.Module):
         return results
 
 
-    def run_taichi(self, rays_o, rays_d, dt_gamma=0, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, perturb=False, force_all_rays=False, max_steps=1024, T_thresh=1e-4, **kwargs):
+    def run_taichi(self, rays_o, rays_d, time, dt_gamma=0, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, perturb=False, force_all_rays=False, max_steps=1024, T_thresh=1e-4, **kwargs):
         # rays_o, rays_d: [B, N, 3], assumes B == 1
         # return: image: [B, N, 3], depth: [B, N]
 
@@ -634,7 +634,7 @@ class NeRFRenderer(nn.Module):
             self.local_step += 1
             rays_a, xyzs, dirs, deltas, ts, _ = self.ray_marching(rays_o, rays_d, hits_t[:, 0], self.density_bitfield, self.cascade, self.bound, exp_step_factor, self.grid_size, MAX_SAMPLES)
             # plot_pointcloud(xyzs.reshape(-1, 3).detach().cpu().numpy())
-            sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
+            sigmas, rgbs, normals = self(xyzs, dirs, light_d, t=time, ratio=ambient_ratio, shading=shading)
             _, weights_sum, depth, image, weights = self.volume_render(sigmas, rgbs, deltas, ts, rays_a, kwargs.get('T_threshold', 1e-4))
             
             # normals related regularizations
@@ -691,7 +691,7 @@ class NeRFRenderer(nn.Module):
                 rgbs = torch.zeros(len(xyzs), 3, device=device)
                 normals = torch.zeros(len(xyzs), 3, device=device)
 
-                sigmas[valid_mask], _rgbs, normals = self(xyzs[valid_mask], dirs[valid_mask], light_d, ratio=ambient_ratio, shading=shading)
+                sigmas[valid_mask], _rgbs, normals = self(xyzs[valid_mask], dirs[valid_mask], light_d, t=time, ratio=ambient_ratio, shading=shading)
                 rgbs[valid_mask] = _rgbs.float()
                 sigmas = self.rearrange(sigmas, '(n1 n2) -> n1 n2', n2=n_step)
                 rgbs = self.rearrange(rgbs, '(n1 n2) c -> n1 n2 c', n2=n_step)
