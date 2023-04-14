@@ -203,19 +203,19 @@ class NeRFNetwork(NeRFRenderer):
             'sigma': sigma,
         }
 
-    def background(self, d):
+    def background(self, d, x):
         # x: [N, 2] in [-1, 1]
 
-        N = d.shape[0]
+        N = x.shape[0]
 
-        h = F.grid_sample(self.bg_mat, d.view(1, N, 1, 2), align_corners=True).view(-1, N).T.contiguous() # [R, N] --> [N, R]
-        h = self.encoder_dir(h)
+        h = F.grid_sample(self.bg_mat, x.view(1, N, 1, 2), align_corners=True).view(-1, N).T.contiguous() # [R, N] --> [N, R]
+        d = self.encoder_dir(d)
 
-        #h = torch.cat([d, h], dim=-1)
-        #for l in range(self.num_layers_bg):
-        #    h = self.bg_net[l](h)
-        #    if l != self.num_layers_bg - 1:
-        #        h = F.relu(h, inplace=True)
+        h = torch.cat([d, h], dim=-1)
+        for l in range(self.num_layers_bg):
+            h = self.bg_net[l](h)
+            if l != self.num_layers_bg - 1:
+                h = F.relu(h, inplace=True)
 
         # sigmoid activation for rgb
         rgbs = torch.sigmoid(h)
