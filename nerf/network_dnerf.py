@@ -142,68 +142,51 @@ class NeRFNetwork(NeRFRenderer):
             self.bg_net = None
 
 
-    def common_forward(self, x):
+    def forward(self, x, d, t=None, l=None, ratio=1, shading='albedo'):
+        print('forward 1')
+        # x: [N, 3], in [-bound, bound]
+        # d: [N, 3], nomalized in [-1, 1]
+        # t: [1, 1], in [0, 1]
+
+        # deform
+        enc_ori_x = self.encoder_deform(x, bound=self.bound) # [N, C]
+        enc_t = self.encoder_time(t) # [1, 1] --> [1, C']
+        if enc_t.shape[0] == 1:
+            enc_t = enc_t.repeat(x.shape[0], 1) # [1, C'] --> [N, C']
+
+        deform = torch.cat([enc_ori_x, enc_t], dim=1) # [N, C + C']
+        for l in range(self.num_layers_deform):
+            deform = self.deform_net[l](deform)
+            if l != self.num_layers_deform - 1:
+                deform = F.relu(deform, inplace=True)
+        
+        x = x + deform
 
         # sigma
-        enc = self.encoder(x, bound=self.bound)
+        x = self.encoder(x, bound=self.bound)
+        h = torch.cat([x, enc_ori_x, enc_t], dim=1)
+        for l in range(self.num_layers):
+            h = self.sigma_net[l](h)
+            if l != self.num_layers - 1:
+                h = F.relu(h, inplace=True)
 
-        h = self.sigma_net(enc)
+        #sigma = F.relu(h[..., 0])
+        sigma = trunc_exp(h[..., 0])
+        geo_feat = h[..., 1:]
 
-        sigma = self.density_activation(h[..., 0] + self.density_blob(x))
-        albedo = torch.sigmoid(h[..., 1:])
-
-        return sigma, albedo
-    
-    # ref: https://github.com/zhaofuq/Instant-NSR/blob/main/nerf/network_sdf.py#L192
-    def finite_difference_normal(self, x, epsilon=1e-2):
-        # x: [N, 3]
-        dx_pos, _ = self.common_forward((x + torch.tensor([[epsilon, 0.00, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
-        dx_neg, _ = self.common_forward((x + torch.tensor([[-epsilon, 0.00, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
-        dy_pos, _ = self.common_forward((x + torch.tensor([[0.00, epsilon, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
-        dy_neg, _ = self.common_forward((x + torch.tensor([[0.00, -epsilon, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
-        dz_pos, _ = self.common_forward((x + torch.tensor([[0.00, 0.00, epsilon]], device=x.device)).clamp(-self.bound, self.bound))
-        dz_neg, _ = self.common_forward((x + torch.tensor([[0.00, 0.00, -epsilon]], device=x.device)).clamp(-self.bound, self.bound))
+        # color
+        d = self.encoder_dir(d)
+        h = torch.cat([d, geo_feat], dim=-1)
+        for l in range(self.num_layers_color):
+            h = self.color_net[l](h)
+            if l != self.num_layers_color - 1:
+                h = F.relu(h, inplace=True)
         
-        normal = torch.stack([
-            0.5 * (dx_pos - dx_neg) / epsilon, 
-            0.5 * (dy_pos - dy_neg) / epsilon, 
-            0.5 * (dz_pos - dz_neg) / epsilon
-        ], dim=-1)
+        # sigmoid activation for rgb
+        rgbs = torch.sigmoid(h)
 
-        return -normal
-
-    def safe_normalize(x, eps=1e-20):
-        return x / torch.sqrt(torch.clamp(torch.sum(x * x, -1, keepdim=True), min=eps))
-    
-    def forward(self, x, d, l=None, ratio=1, shading='albedo'):
-        # x: [N, 3], in [-bound, bound]
-        # d: [N, 3], view direction, nomalized in [-1, 1]
-        # l: [3], plane light direction, nomalized in [-1, 1]
-        # ratio: scalar, ambient ratio, 1 == no shading (albedo only), 0 == only shading (textureless)
-
-        sigma, albedo = self.common_forward(x)
-
-        if shading == 'albedo':
-            normal = None
-            color = albedo
-        
-        else: # lambertian shading
-
-            # normal = self.normal_net(enc)
-            normal = self.finite_difference_normal(x)
-            normal = safe_normalize(normal)
-            normal = torch.nan_to_num(normal)
-
-            lambertian = ratio + (1 - ratio) * (normal @ l).clamp(min=0) # [N,]
-
-            if shading == 'textureless':
-                color = lambertian.unsqueeze(-1).repeat(1, 3)
-            elif shading == 'normal':
-                color = (normal + 1) / 2
-            else: # 'lambertian'
-                color = albedo * lambertian.unsqueeze(-1)
-            
-        return sigma, color, normal
+        print('foward return')
+        return sigma, rgbs, deform
 
     def density(self, x, t):
         # x: [N, 3], in [-bound, bound]
@@ -244,24 +227,22 @@ class NeRFNetwork(NeRFRenderer):
         return results
 
     def background(self, d, x):
+        print('background 1')
         # x: [N, 2], in [-1, 1]
 
-        #h = self.encoder_bg(x) # [N, C]
-        #d = self.encoder_dir(d)
+        h = self.encoder_bg(x) # [N, C]
+        d = self.encoder_dir(d)
 
-        #h = torch.cat([d, h], dim=-1)
-        #for l in range(self.num_layers_bg):
-        #    h = self.bg_net[l](h)
-        #    if l != self.num_layers_bg - 1:
-        #        h = F.relu(h, inplace=True)
-
-        h = self.encoder_dir(d)
-        
-        h = self.bg_net(h)
+        h = torch.cat([d, h], dim=-1)
+        for l in range(self.num_layers_bg):
+            h = self.bg_net[l](h)
+            if l != self.num_layers_bg - 1:
+                h = F.relu(h, inplace=True)
         
         # sigmoid activation for rgb
         rgbs = torch.sigmoid(h)
 
+        print('background return')
         return rgbs
 
     # allow masked inference
