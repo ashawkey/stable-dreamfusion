@@ -6,9 +6,9 @@ from encoding import get_encoder
 from activation import trunc_exp
 from .renderer import NeRFRenderer
 
-
 class NeRFNetwork(NeRFRenderer):
     def __init__(self,
+                 opt,
                  encoding="tiledgrid",
                  encoding_dir="sphere_harmonics",
                  encoding_time="frequency",

@@ -12,6 +12,7 @@ import raymarching
 
 class NeRFNetwork(NeRFRenderer):
     def __init__(self,
+                 opt,
                  resolution=[128] * 3,
                  sigma_rank=[16] * 3,
                  color_rank=[48] * 3,
