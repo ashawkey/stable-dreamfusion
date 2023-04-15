@@ -60,34 +60,31 @@ def plot_pointcloud(pc, color=None):
 
 class NeRFRenderer(nn.Module):
     def __init__(self,
-                 bound=1,
-                 cuda_ray=False,
-                 density_scale=1, # scale up deltas (or sigmas), to make the density grid more sharp. larger value than 1 usually improves performance.
-                 min_near=0.2,
-                 density_thresh=0.01,
-                 bg_radius=-1,
+                 opt,
+                 density_scale=1 # scale up deltas (or sigmas), to make the density grid more sharp. larger value than 1 usually improves performance.
                  ):
         super().__init__()
 
-        self.bound = bound
-        self.cascade = 1 + math.ceil(math.log2(bound))
+        self.bound = opt.bound
+        self.cascade = 1 + math.ceil(math.log2(opt.bound))
         self.time_size = 64
         self.grid_size = 128
         self.density_scale = density_scale
-        self.min_near = min_near
-        self.density_thresh = density_thresh
-        self.bg_radius = bg_radius # radius of the background sphere.
+        self.min_near = opt.min_near
+        self.density_thresh = opt.density_thresh
+        self.bg_radius = opt.bg_radius # radius of the background sphere.
 
         # prepare aabb with a 6D tensor (xmin, ymin, zmin, xmax, ymax, zmax)
         # NOTE: aabb (can be rectangular) is only used to generate points, we still rely on bound (always cubic) to calculate density grid and hashing.
-        aabb_train = torch.FloatTensor([-bound, -bound, -bound, bound, bound, bound])
+        aabb_train = torch.FloatTensor([-opt.bound, -opt.bound, -opt.bound, opt.bound, opt.bound, opt.bound])
         aabb_infer = aabb_train.clone()
         self.register_buffer('aabb_train', aabb_train)
         self.register_buffer('aabb_infer', aabb_infer)
 
         # extra state for cuda raymarching
-        self.cuda_ray = cuda_ray
-        if cuda_ray:
+        self.cuda_ray = opt.cuda_ray
+        self.taichi_ray = opt.taichi_ray
+        if opt.cuda_ray:
             # density grid (with an extra time dimension)
             density_grid = torch.zeros(self.time_size, self.cascade, self.grid_size ** 3) # [T, CAS, H * H * H]
             density_bitfield = torch.zeros(self.time_size, self.cascade * self.grid_size ** 3 // 8, dtype=torch.uint8) # [T, CAS * H * H * H // 8]
