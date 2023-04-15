@@ -140,7 +140,7 @@ if __name__ == '__main__':
         from tensoRF.utils import *
     elif opt.backbone == 'dnerf':
         from dnerf.network import NeRFNetwork
-        from dnerf.provider import NeRFDataset
+        from nerf.provider import NeRFDataset
         from dnerf.utils import *
     else:
         raise NotImplementedError(f'--backbone {opt.backbone} is not implemented!')
