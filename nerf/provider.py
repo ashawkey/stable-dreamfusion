@@ -192,7 +192,8 @@ class NeRFDataset:
         self.cx = self.H / 2
         self.cy = self.W / 2
 
-        self.times = [0]
+        self.times = []
+        self.times.append(0)
 
 
         # [debug] visualize poses
