@@ -10,7 +10,6 @@ import tensorboardX
 import numpy as np
 
 import time
-from datetime import datetime
 
 import cv2
 import matplotlib.pyplot as plt
@@ -20,9 +19,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.distributed as dist
-from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms.functional as TF
 
-import trimesh
+
 from rich.console import Console
 from torch_ema import ExponentialMovingAverage
 
@@ -272,17 +271,14 @@ class Trainer(object):
         
         # text embeddings (stable-diffusion)
         if self.opt.text is not None:
-            if not self.opt.dir_text:
-                self.text_z = self.guidance.get_text_embeds([self.opt.text], [self.opt.negative])
-            else:
-                self.text_z = []
-                for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
-                    # construct dir-encoded text
-                    text = f"{self.opt.text}, {d} view"
-                    negative_text = f"{self.opt.negative}"
+        
+            self.text_z = {}
 
-                    text_z = self.guidance.get_text_embeds([text], [negative_text])
-                    self.text_z.append(text_z)
+            self.text_z['default'] = self.guidance.get_text_embeds([self.opt.text])
+            self.text_z['uncond'] = self.guidance.get_text_embeds([self.opt.negative])
+
+            for d in ['front', 'side', 'back']:
+                self.text_z[d] = self.guidance.get_text_embeds([f"{self.opt.text}, {d} view"])
         else:
             self.text_z = None
         
@@ -336,27 +332,24 @@ class Trainer(object):
 
         do_rgbd_loss = self.opt.image is not None and \
             (self.global_step < 100 or self.global_step % self.opt.known_view_interval == 0)
-            # (self.global_step % self.opt.known_view_interval == 0)
 
-        # # tmp:
-        # do_rgbd_loss = True # False
-        
-        # override random camera with fixed camera...
+        # override random camera with fixed known camera
         if do_rgbd_loss:
-        # if True:
             data = self.default_view_data
 
         # progressively relaxing view range if image-conditioned
-        if self.opt.image is not None:
-            _ratio = min(1.0, 2 * self.global_step / self.opt.iters)
-            self.opt.phi_range = [-180*_ratio, 180*_ratio]
-            self.opt.theta_range = [80-35*_ratio, 80+25*_ratio]
-            self.opt.radius_range = [1.0, 1.0+0.5*_ratio]
-        #     # self.opt.fovy_range = [60-20*_ratio, 60+20*_ratio]
+        if self.opt.progressive_view:
+            r = min(1.0, 0.2 + self.global_step / (0.5 * self.opt.iters))
+            self.opt.phi_range = [self.opt.default_phi * (1 - r) + self.opt.full_phi_range[0] * r, 
+                                  self.opt.default_phi * (1 - r) + self.opt.full_phi_range[1] * r]
+            self.opt.theta_range = [self.opt.default_theta * (1 - r) + self.opt.full_theta_range[0] * r, 
+                                    self.opt.default_theta * (1 - r) + self.opt.full_theta_range[1] * r]
+            self.opt.radius_range = [self.opt.default_radius * (1 - r) + self.opt.full_radius_range[0] * r, 
+                                    self.opt.default_radius * (1 - r) + self.opt.full_radius_range[1] * r]
 
         # progressively increase max_level
         if not self.opt.dmtet:
-            self.model.max_level = min(1.0, 0.25 + self.global_step / (0.5 * self.opt.iters))
+            self.model.max_level = min(1.0, 0.5 + self.global_step / self.opt.iters)
 
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
@@ -369,14 +362,17 @@ class Trainer(object):
             ambient_ratio = 1.0
             shading = 'ambient'
             as_latent = False
-            # bg_color = torch.rand(3).to(self.device) # single color random bg
-            bg_color = torch.rand((B * N, 3), device=rays_o.device) 
+            binarize = False
+            bg_color = torch.rand(3).to(self.device) # single color random bg
+            # bg_color = torch.rand((B * N, 3), device=rays_o.device) 
         elif self.global_step < self.opt.warmup_iters:
             ambient_ratio = 1.0
             shading = 'normal'
             as_latent = True
+            binarize = False
             bg_color = None
         else: 
+            # random shading
             ambient_ratio = 0.1 + 0.9 * random.random()
             rand = random.random()
             if rand > 0.8: 
@@ -385,13 +381,17 @@ class Trainer(object):
                 shading = 'lambertian'
             as_latent = False
 
-            if random.random() > 0.5:
+            # random weights binarization
+            # binarize_thresh = min(0.5, self.global_step / (2 * self.opt.iters))
+            # binarize = (random.random() > binarize_thresh)
+            binarize = False
+
+            # random background
+            rand = random.random()
+            if rand > 0.5:
                 bg_color = None # use bg_net
             else:
                 bg_color = torch.rand(3).to(self.device) # single color random bg
-
-        # TODO: binarize is not working properly... should supervise both binarized/non-binarized image at the same time...
-        binarize = False # if self.global_step < self.opt.iters * 0.5 else True
         
         outputs = self.model.render(rays_o, rays_d, mvp, H, W, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, binarize=binarize)
         pred_depth = outputs['depth'].reshape(B, 1, H, W)
@@ -408,32 +408,48 @@ class Trainer(object):
             gt_rgb = self.rgb # [3, H, W]
             
             # color loss
-            # gt_rgb = gt_rgb * gt_mask.float() + bg_color.view(3, 1, 1) * (1 - gt_mask.float())
-            gt_rgb = gt_rgb * gt_mask.float() + bg_color.reshape(H, W, 3).permute(2,0,1).contiguous() * (1 - gt_mask.float())
+            gt_rgb = gt_rgb * gt_mask.float() + bg_color.view(3, 1, 1) * (1 - gt_mask.float())
+            # gt_rgb = gt_rgb * gt_mask.float() + bg_color.reshape(H, W, 3).permute(2,0,1).contiguous() * (1 - gt_mask.float())
             loss = self.opt.lambda_rgb * F.mse_loss(pred_rgb, gt_rgb)
-
+            
             # mask loss
             loss = loss + self.opt.lambda_mask * F.mse_loss(pred_mask[0, 0], gt_mask.float())
 
             # relative depth loss
-            # gt_depth = self.depth[gt_mask].unsqueeze(1) # [B, 1]
-            # pred_depth = pred_depth.squeeze()[gt_mask].unsqueeze(1) # [B, 1]
-            # # loss = loss - torch.corrcoef(torch.cat([pred_depth + 1e-8, gt_depth + 1e-8], dim=-1)).mean() / 2
-            # with torch.no_grad():
-            #     A = torch.cat([gt_depth, torch.ones_like(gt_depth)], dim=-1) # [B, 2]
-            #     X = torch.linalg.lstsq(A, pred_depth).solution # [2, 1]
-            #     gt_depth = A @ X # [B, 1]
-            # loss = loss + 0.1 * F.mse_loss(pred_depth, gt_depth)
+            valid_gt_depth = self.depth[gt_mask].unsqueeze(1) # [B, 1]
+            valid_pred_depth = pred_depth.squeeze()[gt_mask].unsqueeze(1) # [B, 1]
+            with torch.no_grad():
+                A = torch.cat([valid_gt_depth, torch.ones_like(valid_gt_depth)], dim=-1) # [B, 2]
+                X = torch.linalg.lstsq(A, valid_pred_depth).solution # [2, 1]
+                valid_gt_depth = A @ X # [B, 1]
+            lambda_depth = self.opt.lambda_depth * min(1, self.global_step / self.opt.iters)
+            loss = loss + lambda_depth * F.mse_loss(valid_pred_depth, valid_gt_depth)
 
         # novel view loss
         else:
 
             if self.opt.image is None:
-                if self.opt.dir_text:
-                    dirs = data['dir'] # [B,]
-                    text_z = self.text_z[dirs]
+                # interpolate text_z
+                azimuth = data['azimuth'] # [-180, 180]
+                
+                if azimuth >= -90 and azimuth < 90:
+                    if azimuth >= 0:
+                        r = 1 - azimuth / 90
+                    else:
+                        r = 1 + azimuth / 90
+                    start_z = self.text_z['front']
+                    end_z = self.text_z['side']
                 else:
-                    text_z = self.text_z
+                    if azimuth >= 0:
+                        r = 1 - (azimuth - 90) / 90
+                    else:
+                        r = 1 + (azimuth + 90) / 90
+                    start_z = self.text_z['side']
+                    end_z = self.text_z['back']
+
+                pos_z = r * start_z + (1 - r) * end_z    
+                uncond_z = self.text_z['uncond']
+                text_z = torch.cat([uncond_z, pos_z], dim=0)
                 loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent, guidance_scale=self.opt.guidance_scale)
 
             else:
@@ -449,14 +465,22 @@ class Trainer(object):
                 loss = loss + self.opt.lambda_opacity * loss_opacity
 
             if self.opt.lambda_entropy > 0:
-
                 alphas = outputs['weights'].clamp(1e-5, 1 - 1e-5)
                 # alphas = alphas ** 2 # skewed entropy, favors 0 over 1
                 loss_entropy = (- alphas * torch.log2(alphas) - (1 - alphas) * torch.log2(1 - alphas)).mean()
-
                 lambda_entropy = self.opt.lambda_entropy * min(1, 2 * self.global_step / self.opt.iters)
-                        
                 loss = loss + lambda_entropy * loss_entropy
+
+            if self.opt.lambda_normal_smooth > 0 and 'normal_image' in outputs:
+                # pred_vals = outputs['normal_image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous()
+                # smoothed_vals = TF.gaussian_blur(pred_vals.detach(), kernel_size=9)
+                # loss_smooth = F.mse_loss(pred_vals, smoothed_vals)
+                pred_vals = outputs['normal_image'].reshape(B, H, W, 3)
+                
+                loss_smooth = (pred_vals[:, 1:, :, :] - pred_vals[:, :-1, :, :]).square().mean() + \
+                              (pred_vals[:, :, 1:, :] - pred_vals[:, :, :-1, :]).square().mean()
+
+                loss = loss + self.opt.lambda_normal_smooth * loss_smooth
 
             if self.opt.lambda_orient > 0 and 'loss_orient' in outputs:
                 loss_orient = outputs['loss_orient']
@@ -472,13 +496,24 @@ class Trainer(object):
     
     def post_train_step(self):
 
-        if self.opt.backbone == 'grid' and self.opt.lambda_tv > 0:
+        # unscale grad before modifying it!
+        # ref: https://pytorch.org/docs/stable/notes/amp_examples.html#gradient-clipping
+        self.scaler.unscale_(self.optimizer)
 
-            lambda_tv = min(1.0, self.global_step / (0.5 * self.opt.iters)) * self.opt.lambda_tv
-            # unscale grad before modifying it!
-            # ref: https://pytorch.org/docs/stable/notes/amp_examples.html#gradient-clipping
-            self.scaler.unscale_(self.optimizer)
-            self.model.encoder.grad_total_variation(lambda_tv, None, self.model.bound)
+        # clip grad
+        if self.opt.grad_clip >= 0:
+            torch.nn.utils.clip_grad_value_(self.model.parameters(), self.opt.grad_clip)
+
+        if not self.opt.dmtet and self.opt.backbone == 'grid':
+            
+            # import kiui
+            # kiui.lo(self.model.encoder.embeddings.grad)
+
+            if self.opt.lambda_tv > 0:
+                lambda_tv = min(1.0, self.global_step / (0.5 * self.opt.iters)) * self.opt.lambda_tv
+                self.model.encoder.grad_total_variation(lambda_tv, None, self.model.bound)
+            if self.opt.lambda_wd > 0:
+                self.model.encoder.grad_weight_decay(self.opt.lambda_wd)
 
     def eval_step(self, data):
 
@@ -776,21 +811,19 @@ class Trainer(object):
             with torch.cuda.amp.autocast(enabled=self.fp16):
                 pred_rgbs, pred_depths, loss = self.train_step(data)
 
-            # import kiui
             # hooked grad clipping for RGB space
-            def _hook(grad):
-                if self.opt.fp16:
-                    # correctly handle the scale
-                    grad_scale = self.scaler._get_scale_async()
-                    return grad.clamp(grad_scale * -self.opt.grad_rgb_clip, grad_scale * self.opt.grad_rgb_clip)
-                else:
-                    return grad.clamp(-self.opt.grad_rgb_clip, self.opt.grad_rgb_clip)
-            pred_rgbs.register_hook(_hook)
-            # pred_rgbs.retain_grad()
+            if self.opt.grad_clip_rgb >= 0:
+                def _hook(grad):
+                    if self.opt.fp16:
+                        # correctly handle the scale
+                        grad_scale = self.scaler._get_scale_async()
+                        return grad.clamp(grad_scale * -self.opt.grad_clip_rgb, grad_scale * self.opt.grad_clip_rgb)
+                    else:
+                        return grad.clamp(-self.opt.grad_clip_rgb, self.opt.grad_clip_rgb)
+                pred_rgbs.register_hook(_hook)
+                # pred_rgbs.retain_grad()
 
             self.scaler.scale(loss).backward()
-
-            # kiui.vis.plot_matrix(pred_rgbs.grad)
 
             self.post_train_step()
             self.scaler.step(self.optimizer)
@@ -947,7 +980,7 @@ class Trainer(object):
             state['mean_density'] = self.model.mean_density
         
         if self.opt.dmtet:
-            state['tet_scale'] = self.model.tet_scale
+            state['tet_scale'] = self.model.tet_scale.cpu().numpy()
 
         if full:
             state['optimizer'] = self.optimizer.state_dict()
@@ -1029,8 +1062,9 @@ class Trainer(object):
             
         if self.opt.dmtet:
             if 'tet_scale' in checkpoint_dict:
-                self.model.verts *= checkpoint_dict['tet_scale'] / self.model.tet_scale
-                self.model.tet_scale = checkpoint_dict['tet_scale']
+                new_scale = torch.from_numpy(checkpoint_dict['tet_scale']).to(self.device)
+                self.model.verts *= new_scale / self.model.tet_scale
+                self.model.tet_scale = new_scale
 
         if model_only:
             return

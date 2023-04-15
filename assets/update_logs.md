@@ -1,6 +1,8 @@
 ### 2023.3.30
 * adopt ideas from [Fantasia3D](https://fantasia3d.github.io/) to concatenate normal and mask as the latent code in a warm up stage, which shows faster convergence of shape.
 
+https://user-images.githubusercontent.com/25863658/230535373-6ee28f16-bb21-4ec4-bc86-d46597361a04.mp4
+
 ### 2023.1.30
 * Use an MLP to predict the surface normals as in Magic3D to avoid finite difference / second order gradient, generation quality is greatly improved.
 * More efficient two-pass raymarching in training inspired by nerfacc.
@@ -22,3 +24,5 @@ https://user-images.githubusercontent.com/25863658/215996308-9fd959f5-b5c7-4a8e-
 * Non --cuda_ray, --tcnn are not working, need to fix.
 * Shading is not working, disabled in utils.py for now. Surface normals are bad.
 * Use an entropy loss to regularize weights_sum (alpha), the original L2 reg always leads to degenerated geometry...
+
+https://user-images.githubusercontent.com/25863658/194241493-f3e68f78-aefe-479e-a4a8-001424a61b37.mp4

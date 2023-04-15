@@ -103,20 +103,14 @@ class StableDiffusion(nn.Module):
         print(f'[INFO] loaded stable diffusion!')
 
     @torch.no_grad()
-    def get_text_embeds(self, prompt, negative_prompt):
+    def get_text_embeds(self, prompt):
         # prompt, negative_prompt: [str]
 
-        # Tokenize text and get embeddings
-        text_input = self.tokenizer(prompt, padding='max_length', max_length=self.tokenizer.model_max_length, truncation=True, return_tensors='pt')
-        text_embeddings = self.text_encoder(text_input.input_ids.to(self.device))[0]
+        # positive
+        inputs = self.tokenizer(prompt, padding='max_length', max_length=self.tokenizer.model_max_length, return_tensors='pt')
+        embeddings = self.text_encoder(inputs.input_ids.to(self.device))[0]
 
-        # Do the same for unconditional embeddings
-        uncond_input = self.tokenizer(negative_prompt, padding='max_length', max_length=self.tokenizer.model_max_length, return_tensors='pt')
-        uncond_embeddings = self.text_encoder(uncond_input.input_ids.to(self.device))[0]
-
-        # Cat for final embeddings
-        text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
-        return text_embeddings
+        return embeddings
 
 
     def train_step(self, text_embeddings, pred_rgb, guidance_scale=100, as_latent=False, grad_clip=None, grad_scale=1):
@@ -146,22 +140,24 @@ class StableDiffusion(nn.Module):
             noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
 
         # perform guidance (high scale from paper!)
-        noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
-        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)
+        noise_pred_uncond, noise_pred_pos = noise_pred.chunk(2)
+
+        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_pos - noise_pred_uncond)
+        
 
         # import kiui
-        # # latents = torch.randn((1, 4, 64, 64), device=self.device)
-        # latents = latents.detach()
-        # kiui.lo(latents)
-        # self.scheduler.set_timesteps(50)
+        # latents_tmp = torch.randn((1, 4, 64, 64), device=self.device)
+        # latents_tmp = latents_tmp.detach()
+        # kiui.lo(latents_tmp)
+        # self.scheduler.set_timesteps(30)
         # for i, t in enumerate(self.scheduler.timesteps):
-        #     latent_model_input = torch.cat([latents] * 2)
+        #     latent_model_input = torch.cat([latents_tmp] * 3)
         #     noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings)['sample']
-        #     noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
-        #     noise_pred = noise_pred_cond + 10 * (noise_pred_cond - noise_pred_uncond)
-        #     latents = self.scheduler.step(noise_pred, t, latents)['prev_sample']
-        # imgs = self.decode_latents(latents)
-        # kiui.vis.plot_image(pred_rgb_512, imgs)
+        #     noise_pred_uncond, noise_pred_pos = noise_pred.chunk(2)
+        #     noise_pred = noise_pred_uncond + 10 * (noise_pred_pos - noise_pred_uncond)
+        #     latents_tmp = self.scheduler.step(noise_pred, t, latents_tmp)['prev_sample']
+        # imgs = self.decode_latents(latents_tmp)
+        # kiui.vis.plot_image(imgs)
 
         # w(t), sigma_t^2
         w = (1 - self.alphas[t])
@@ -233,7 +229,9 @@ class StableDiffusion(nn.Module):
             negative_prompts = [negative_prompts]
 
         # Prompts -> text embeds
-        text_embeds = self.get_text_embeds(prompts, negative_prompts) # [2, 77, 768]
+        pos_embeds = self.get_text_embeds(prompts) # [1, 77, 768]
+        neg_embeds = self.get_text_embeds(negative_prompts)
+        text_embeds = torch.cat([neg_embeds, pos_embeds], dim=0) # [2, 77, 768]
 
         # Text embeds -> img latents
         latents = self.produce_latents(text_embeds, height=height, width=width, latents=latents, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale) # [1, 4, 64, 64]

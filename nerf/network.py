@@ -89,7 +89,7 @@ class MLP(nn.Module):
 class NeRFNetwork(NeRFRenderer):
     def __init__(self, 
                  opt,
-                 num_layers=3, # 5 in paper
+                 num_layers=5, # 5 in paper
                  hidden_dim=64, # 128 in paper
                  num_layers_bg=2, # 3 in paper
                  hidden_dim_bg=32, # 64 in paper

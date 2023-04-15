@@ -30,12 +30,12 @@ class SpecifyGradient(torch.autograd.Function):
         return gt_grad, None
 
 # load model
-def load_model_from_config(config, ckpt, device, verbose=False):
+def load_model_from_config(config, ckpt, device, vram_O=False, verbose=False):
     
     pl_sd = torch.load(ckpt, map_location='cpu')
 
-    if 'global_step' in pl_sd:
-        print(f'Global Step: {pl_sd["global_step"]}')
+    if 'global_step' in pl_sd and verbose:
+        print(f'[INFO] Global Step: {pl_sd["global_step"]}')
 
     sd = pl_sd['state_dict']
 
@@ -43,16 +43,29 @@ def load_model_from_config(config, ckpt, device, verbose=False):
     m, u = model.load_state_dict(sd, strict=False)
 
     if len(m) > 0 and verbose:
-        print('missing keys: \n', m)
+        print('[INFO] missing keys: \n', m)
     if len(u) > 0 and verbose:
-        print('unexpected keys: \n', u)
-        
-    model.to(device).eval()
+        print('[INFO] unexpected keys: \n', u)
+
+    # manually load ema and delete it to save GPU memory
+    if model.use_ema:
+        if verbose:
+            print('[INFO] loading EMA...')
+        model.model_ema.copy_to(model.model)
+        del model.model_ema
+    
+    if vram_O:
+        # we don't need decoder
+        del model.first_stage_model.decoder
+
+    torch.cuda.empty_cache()
+    
+    model.eval().to(device)
     
     return model
 
 class Zero123(nn.Module):
-    def __init__(self, device, fp16, t_range=[0.02, 0.98]):
+    def __init__(self, device, fp16, vram_O=False, t_range=[0.02, 0.98]):
         super().__init__()
 
         # hardcoded
@@ -60,10 +73,11 @@ class Zero123(nn.Module):
         ckpt = './pretrained/zero123/105000.ckpt'
 
         self.device = device
-        # TODO: seems it cannot run in fp16...
+        self.fp16 = fp16
 
         self.config = OmegaConf.load(config)
-        self.model = load_model_from_config(self.config, ckpt, device=self.device)
+        # TODO: seems it cannot load into fp16...
+        self.model = load_model_from_config(self.config, ckpt, device=self.device, vram_O=vram_O)
 
         # timesteps: use diffuser for convenience... hope it's alright.
         self.num_train_timesteps = self.config.model.params.timesteps
@@ -75,7 +89,7 @@ class Zero123(nn.Module):
             beta_schedule='scaled_linear',
             clip_sample=False,
             set_alpha_to_one=False,
-            steps_offset=1
+            steps_offset=1,
         )
 
         self.min_step = int(self.num_train_timesteps * t_range[0])
@@ -101,9 +115,7 @@ class Zero123(nn.Module):
 
         t = torch.randint(self.min_step, self.max_step + 1, [1], dtype=torch.long, device=self.device)
 
-        # with self.model.ema_scope():
         with torch.no_grad():
-
             noise = torch.randn_like(latents)
             latents_noisy = self.scheduler.add_noise(latents, noise, t)
 
@@ -137,19 +149,20 @@ class Zero123(nn.Module):
         # import kiui
         # latents = torch.randn((1, 4, 32, 32), device=self.device)
         # kiui.lo(latents)
-        # self.scheduler.set_timesteps(75)
-        # for i, t in enumerate(self.scheduler.timesteps):
-        #     x_in = torch.cat([latents] * 2)
-        #     t_in = torch.cat([t.view(1)] * 2).to(self.device)
+        # self.scheduler.set_timesteps(30)
+        # with torch.no_grad():
+        #     for i, t in enumerate(self.scheduler.timesteps):
+        #         x_in = torch.cat([latents] * 2)
+        #         t_in = torch.cat([t.view(1)] * 2).to(self.device)
 
-        #     noise_pred = self.model.apply_model(x_in, t_in, cond)
-        #     noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
-        #     noise_pred = noise_pred_uncond + 10 * (noise_pred_cond - noise_pred_uncond)
+        #         noise_pred = self.model.apply_model(x_in, t_in, cond)
+        #         noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
+        #         noise_pred = noise_pred_uncond + 3 * (noise_pred_cond - noise_pred_uncond)
 
-        #     latents = self.scheduler.step(noise_pred, t, latents)['prev_sample']
+        #         latents = self.scheduler.step(noise_pred, t, latents)['prev_sample']
         # imgs = self.decode_latents(latents)
         # print(polar, azimuth, radius)
-        # kiui.vis.plot_image(imgs)
+        # kiui.vis.plot_image(pred_rgb_256, imgs)
 
         # since we omitted an item in grad, we need to use the custom function to specify the gradient
         loss = SpecifyGradient.apply(latents, grad)

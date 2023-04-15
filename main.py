@@ -14,8 +14,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--text', default=None, help="text prompt")
     parser.add_argument('--negative', default='', type=str, help="negative text prompt")
-    parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray --dir_text")
-    parser.add_argument('-O2', action='store_true', help="equals --backbone vanilla --dir_text")
+    parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray")
+    parser.add_argument('-O2', action='store_true', help="equals --backbone vanilla")
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--eval_interval', type=int, default=1, help="evaluate on the valid set every interval epochs")
     parser.add_argument('--workspace', type=str, default='workspace')
@@ -37,8 +37,6 @@ if __name__ == '__main__':
     ### training options
     parser.add_argument('--iters', type=int, default=10000, help="training iters")
     parser.add_argument('--lr', type=float, default=1e-3, help="max learning rate")
-    parser.add_argument('--warm_iters', type=int, default=500, help="training iters")
-    parser.add_argument('--min_lr', type=float, default=1e-4, help="minimal learning rate")
     parser.add_argument('--ckpt', type=str, default='latest')
     parser.add_argument('--cuda_ray', action='store_true', help="use CUDA raymarching instead of pytorch")
     parser.add_argument('--taichi_ray', action='store_true', help="use taichi raymarching")
@@ -50,6 +48,8 @@ if __name__ == '__main__':
     parser.add_argument('--warmup_iters', type=int, default=2000, help="training iters that only use albedo shading")
     parser.add_argument('--jitter_pose', action='store_true', help="add jitters to the randomly sampled camera poses")
     parser.add_argument('--uniform_sphere_rate', type=float, default=0, help="likelihood of sampling camera location uniformly on the sphere surface area")
+    parser.add_argument('--grad_clip', type=float, default=1, help="clip grad of all grad to this limit, negative value disables it")
+    parser.add_argument('--grad_clip_rgb', type=float, default=-1, help="clip grad of rgb space grad to this limit, negative value disables it")
     # model options
     parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
     parser.add_argument('--density_activation', type=str, default='softplus', choices=['softplus', 'exp'], help="density activation function")
@@ -68,23 +68,25 @@ if __name__ == '__main__':
     parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
     parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
     parser.add_argument('--known_view_scale', type=float, default=1.5, help="multiply --h/w by this for known view rendering")
+    parser.add_argument('--dmtet_reso_scale', type=float, default=8, help="multiply --h/w by this for dmtet finetuning")
 
     ### dataset options
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
     parser.add_argument('--dt_gamma', type=float, default=0, help="dt_gamma (>=0) for adaptive ray marching. set to 0 to disable, >0 to accelerate rendering (but usually with worse quality)")
-    parser.add_argument('--min_near', type=float, default=0.1, help="minimum near distance for camera")
+    parser.add_argument('--min_near', type=float, default=0.01, help="minimum near distance for camera")
 
     parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
-    parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 80], help="training camera fovy range")
     parser.add_argument('--theta_range', type=float, nargs='*', default=[45, 105], help="training camera fovy range")
     parser.add_argument('--phi_range', type=float, nargs='*', default=[-180, 180], help="training camera fovy range")
+    parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 80], help="training camera fovy range")
 
-    parser.add_argument('--default_radius', type=float, default=1.0, help="radius for the default view")
-    parser.add_argument('--default_fovy', type=float, default=60, help="fovy for the default view")
-    parser.add_argument('--default_theta', type=float, default=80, help="radius for the default view")
+    parser.add_argument('--default_radius', type=float, default=1.2, help="radius for the default view")
+    parser.add_argument('--default_theta', type=float, default=90, help="radius for the default view")
     parser.add_argument('--default_phi', type=float, default=0, help="radius for the default view")
+    parser.add_argument('--default_fovy', type=float, default=60, help="fovy for the default view")
 
-    parser.add_argument('--dir_text', action='store_true', help="direction-encode the text prompt, by appending front/side/back/overhead view")
+    parser.add_argument('--progressive_view', action='store_true', help="progressively expand view sampling range from default to full")
+
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
     parser.add_argument('--t_range', type=float, nargs='*', default=[0.02, 0.98], help="stable diffusion time steps range")
@@ -93,14 +95,16 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
-    parser.add_argument('--lambda_tv', type=float, default=0, help="loss scale for total variation")
-    parser.add_argument('--lambda_normal', type=float, default=0, help="loss scale for mesh normal smoothness")
-    parser.add_argument('--lambda_lap', type=float, default=0.2, help="loss scale for mesh laplacian")
+    parser.add_argument('--lambda_tv', type=float, default=1e-7, help="loss scale for total variation")
+    parser.add_argument('--lambda_wd', type=float, default=0, help="loss scale")
+    parser.add_argument('--lambda_normal_smooth', type=float, default=0, help="loss scale for 2D normal image smoothness")
 
-    parser.add_argument('--lambda_rgb', type=float, default=5, help="loss scale for RGB")
-    parser.add_argument('--lambda_mask', type=float, default=0.5, help="loss scale for mask (A)")
+    parser.add_argument('--lambda_normal', type=float, default=0.5, help="loss scale for mesh normal smoothness")
+    parser.add_argument('--lambda_lap', type=float, default=0.5, help="loss scale for mesh laplacian")
 
-    parser.add_argument('--grad_rgb_clip', type=float, default=10, help="clip grad of rgb space to this limit")
+    parser.add_argument('--lambda_rgb', type=float, default=10, help="loss scale for RGB")
+    parser.add_argument('--lambda_mask', type=float, default=10, help="loss scale for mask (alpha)")
+    parser.add_argument('--lambda_depth', type=float, default=0.1, help="loss scale for relative depth")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -116,43 +120,44 @@ if __name__ == '__main__':
 
     if opt.O:
         opt.fp16 = True
-        opt.dir_text = True
         opt.cuda_ray = True
 
     elif opt.O2:
         opt.fp16 = True
-        opt.dir_text = True
         opt.backbone = 'vanilla'
-    
-    # default parameters for finetuning
-    if opt.dmtet:
-        opt.h = 512
-        opt.w = 512
-        opt.warmup_iters = 0
-        opt.t_range = [0.02, 0.50]
-        opt.fovy_range = [30, 70]
 
     # image-conditioned generation
     if opt.image is not None:
-        # opt.text = 'a teddy bear'
-        # opt.image = None
-        # opt.fp16 = False
         opt.text = None # disable text-condition
-        opt.guidance = 'zero123' # can only use zero123 guidance model
-        opt.guidance_scale = 10
-        opt.warmup_iters = 0 # do not perform as_latent geom init
-        opt.fovy_range = [60, 60] # fix fov as zero123 doesn't support changing fov
-        opt.t_range = [0.0, 0.1]
+        opt.guidance = 'zero123' # use zero123 guidance model
+        opt.guidance_scale = 3
+        opt.warmup_iters = 0
+        # opt.t_range = [0.02, 0.98] # need to do more exps...
 
-        opt.jitter_pose = False # must not jitter view target
         opt.uniform_sphere_rate = 0 # do not do this as it disturbs the progressive view expansion
+        opt.jitter_pose = False # must not jitter view target
+        opt.fovy_range = [60, 60] # fix fov as zero123 doesn't support changing fov
+        opt.progressive_view = True
 
-        # opt.radius_range = [1.0, 1.0] # fix radius tmp
-        # opt.theta_range = [90, 90]
-        # opt.phi_range = [0, 0]
-        # opt.lambda_entropy = 0
-        # opt.lambda_orient = 0
-        opt.lambda_lap = 0
+        opt.lambda_normal_smooth = 50
+
+    # default parameters for finetuning
+    if opt.dmtet:
+        opt.h = int(opt.h * opt.dmtet_reso_scale)
+        opt.w = int(opt.w * opt.dmtet_reso_scale)
+        opt.warmup_iters = 0
+        opt.t_range = [0.02, 0.50]
+        opt.progressive_view = False
+
+        if opt.image is None:
+            opt.fovy_range = [30, 70] # smaller fovy (zoom in) for better details
+
+    # record full range for progressive view expansion
+    if opt.progressive_view:
+        opt.full_radius_range = opt.radius_range
+        opt.full_theta_range = opt.theta_range    
+        opt.full_phi_range = opt.phi_range
+        opt.full_fovy_range = opt.fovy_range
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
@@ -204,8 +209,6 @@ if __name__ == '__main__':
             trainer.test(test_loader)
 
             if opt.save_mesh:
-                # a special loader for poisson mesh reconstruction,
-                # loader = NeRFDataset(opt, device=device, type='test', H=128, W=128, size=100).dataloader()
                 trainer.save_mesh()
 
     else:
@@ -220,11 +223,7 @@ if __name__ == '__main__':
             optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
 
         if opt.backbone == 'vanilla':
-            warm_up_with_cosine_lr = lambda iter: iter / opt.warm_iters if iter <= opt.warm_iters \
-                else max(0.5 * ( math.cos((iter - opt.warm_iters) /(opt.iters - opt.warm_iters) * math.pi) + 1), 
-                         opt.min_lr / opt.lr)
-
-            scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, warm_up_with_cosine_lr)
+            scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.1 ** min(iter / opt.iters, 1))
         else:
             scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 1) # fixed
             # scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.1 ** min(iter / opt.iters, 1))
@@ -234,7 +233,7 @@ if __name__ == '__main__':
             guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key, opt.t_range)
         elif opt.guidance == 'zero123':
             from guidance.zero123_utils import Zero123
-            guidance = Zero123(device, opt.fp16, opt.t_range)
+            guidance = Zero123(device, opt.fp16, opt.vram_O, opt.t_range)
         elif opt.guidance == 'clip':
             from guidance.clip_utils import CLIP
             guidance = CLIP(device)
