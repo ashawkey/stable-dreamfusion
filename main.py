@@ -64,7 +64,6 @@ if __name__ == '__main__':
     parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
     parser.add_argument('--resolution0', type=int, default=128)
     parser.add_argument('--resolution1', type=int, default=300)
-    parser.add_argument("--upsample_model_steps", type=int, action="append", default=[2000, 3000, 4000, 5500, 7000])
 
     ### dataset options
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
