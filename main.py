@@ -2,9 +2,6 @@ import torch
 import argparse
 import sys
 
-from nerf.provider import NeRFDataset
-from nerf.utils import *
-
 from nerf.gui import NeRFGUI
 
 # torch.autograd.set_detect_anomaly(True)
@@ -49,7 +46,7 @@ if __name__ == '__main__':
     parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the density blob")
     parser.add_argument('--blob_radius', type=float, default=0.5, help="control the radius for the density blob")
     # network backbone
-    parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla', 'grid_taichi'], help="nerf backbone")
+    parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla', 'grid_taichi', 'tensoRF', 'dnerf'], help="nerf backbone")
     parser.add_argument('--optim', type=str, default='adan', choices=['adan', 'adam'], help="optimizer")
     parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
     parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
@@ -101,18 +98,32 @@ if __name__ == '__main__':
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
+        from nerf.provider import NeRFDataset
+        from nerf.utils import *
     elif opt.backbone == 'grid':
         from nerf.network_grid import NeRFNetwork
+        from nerf.provider import NeRFDataset
+        from nerf.utils import *
     elif opt.backbone == 'grid_taichi':
         opt.cuda_ray = False
         opt.taichi_ray = True
         import taichi as ti
         from nerf.network_grid_taichi import NeRFNetwork
+        from nerf.provider import NeRFDataset
+        from nerf.utils import *
         taichi_half2_opt = True
         taichi_init_args = {"arch": ti.cuda, "device_memory_GB": 4.0}
         if taichi_half2_opt:
             taichi_init_args["half2_vectorization"] = True
         ti.init(**taichi_init_args)
+    elif opt.backbone == 'tensoRF':
+        from tensoRF.network import NeRFNetwork
+        from nerf.provider import NeRFDataset
+        from tensoRF.utils import *
+    elif opt.backbone == 'dnerf':
+        from dnerf.network import NeRFNetwork
+        from dnerf.provider import NeRFDataset
+        from dnerf.utils import *
     else:
         raise NotImplementedError(f'--backbone {opt.backbone} is not implemented!')
 
