@@ -143,7 +143,7 @@ if __name__ == '__main__':
         from tensoRF.utils import *
     elif opt.backbone == 'dnerf':
         opt.taichi_ray = False
-        opt.cuda_ray = False
+        opt.cuda_ray = True
         from dnerf.network import NeRFNetwork
         from nerf.provider import NeRFDataset
         from dnerf.utils import *
