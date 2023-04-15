@@ -55,6 +55,7 @@ if __name__ == '__main__':
     parser.add_argument('--optim', type=str, default='adan', choices=['adan', 'adam'], help="optimizer")
     parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
     parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
+    parser.add_argument("--upsample_model_steps", type=int, action="append", default=[2000, 3000, 4000, 5500, 7000])
     # try this if CUDA OOM
     parser.add_argument('--fp16', action='store_true', help="use float16 for training")
     parser.add_argument('--vram_O', action='store_true', help="optimization for low VRAM usage")
