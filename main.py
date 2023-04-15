@@ -40,6 +40,8 @@ if __name__ == '__main__':
     parser.add_argument('--warmup_iters', type=int, default=2000, help="training iters that only use albedo shading")
     parser.add_argument('--jitter_pose', action='store_true', help="add jitters to the randomly sampled camera poses")
     parser.add_argument('--uniform_sphere_rate', type=float, default=0.5, help="likelihood of sampling camera location uniformly on the sphere surface area")
+    parser.add_argument('--patch_size', type=int, default=1, help="[experimental] render patches in training, so as to apply LPIPS loss. 1 means disabled, use [64, 32, 16] to enable")
+    parser.add_argument('--num_rays', type=int, default=4096, help="num rays sampled per image for each training step")
     # model options
     parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
     parser.add_argument('--density_activation', type=str, default='softplus', choices=['softplus', 'exp'], help="density activation function")
@@ -69,6 +71,8 @@ if __name__ == '__main__':
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
     parser.add_argument('--preload', action='store_true', help="preload all data into GPU, accelerate training but use more GPU memory")
+    parser.add_argument('--scale', type=float, default=0.33, help="scale camera location into box[-bound, bound]^3")
+    parser.add_argument('--offset', type=float, nargs='*', default=[0, 0, 0], help="offset of camera location")
 
     ### regularizations
     parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
@@ -86,6 +90,10 @@ if __name__ == '__main__':
     parser.add_argument('--light_phi', type=float, default=0, help="default GUI light direction in [0, 360), azimuth")
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
 
+    ### experimental
+    parser.add_argument('--error_map', action='store_true', help="use error map to sample rays")
+    parser.add_argument('--rand_pose', type=int, default=-1, help="<0 uses no rand pose, =0 only uses rand pose, >0 sample one rand pose every $ known poses")
+
     opt = parser.parse_args()
 
     if opt.O:
@@ -97,6 +105,11 @@ if __name__ == '__main__':
         opt.fp16 = True
         opt.dir_text = True
         opt.backbone = 'vanilla'
+
+    if opt.patch_size > 1:
+        opt.error_map = False # do not use error_map if use patch-based training
+        # assert opt.patch_size > 16, "patch_size should > 16 to run LPIPS loss."
+        assert opt.num_rays % (opt.patch_size ** 2) == 0, "patch_size ** 2 should be dividable by num_rays."
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
