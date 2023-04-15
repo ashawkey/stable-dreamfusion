@@ -1,25 +1,39 @@
-torch-ema
-ninja
-trimesh
-opencv-python
-tensorboardX
-torch
-numpy 
-pandas
 tqdm
-matplotlib
-PyMCubes
 rich
-dearpygui
+ninja
+numpy 
 scipy
-huggingface_hub
-diffusers >= 0.9.0 # for stable-diffusion 2.0
-transformers
-xatlas
 scikit-learn
+matplotlib
+opencv-python
 imageio
 imageio-ffmpeg
-accelerate
-tensorboard
-pymeshlab
+
+torch
+torch-ema
 einops
+tensorboard
+tensorboardX
+
+# for gui
+dearpygui
+
+# for stable-diffusion
+huggingface_hub
+diffusers >= 0.9.0 
+accelerate
+transformers
+
+# for dmtet and mesh export
+xatlas
+trimesh
+PyMCubes
+pymeshlab
+git+https://github.com/NVlabs/nvdiffrast/
+
+# for zero123
+carvekit-colab
+omegaconf
+pytorch-lightning
+git+https://github.com/CompVis/taming-transformers.git
+git+https://github.com/openai/CLIP.git

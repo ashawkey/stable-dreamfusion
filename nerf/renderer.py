@@ -222,15 +222,7 @@ def normal_consistency(face_normals, t_pos_idx):
 
 
 def laplacian_uniform(verts, faces):
-    """
-    Compute the uniform laplacian
-    Parameters
-    ----------
-    verts : torch.Tensor
-        Vertex positions.
-    faces : torch.Tensor
-        array of triangle faces.
-    """
+
     V = verts.shape[0]
     F = faces.shape[0]
 
@@ -301,7 +293,7 @@ class NeRFRenderer(nn.Module):
             tets = np.load('tets/{}_tets.npz'.format(self.opt.tet_grid_size))
             self.verts = - torch.tensor(tets['vertices'], dtype=torch.float32, device='cuda') * 2 # covers [-1, 1]
             self.indices  = torch.tensor(tets['indices'], dtype=torch.long, device='cuda')
-            self.tet_scale = 1
+            self.tet_scale = torch.tensor([1, 1, 1], dtype=torch.float32, device='cuda')
             self.dmtet = DMTet('cuda')
 
             # vert sdf and deform
@@ -315,7 +307,7 @@ class NeRFRenderer(nn.Module):
             all_edges_sorted = torch.sort(all_edges, dim=1)[0]
             self.all_edges = torch.unique(all_edges_sorted, dim=0)
 
-            if self.opt.gui:
+            if self.opt.h <= 2048 and self.opt.w <= 2048:
                 self.glctx = dr.RasterizeCudaContext()
             else:
                 self.glctx = dr.RasterizeGLContext()
@@ -655,14 +647,11 @@ class NeRFRenderer(nn.Module):
         for k, v in density_outputs.items():
             density_outputs[k] = v.view(-1, v.shape[-1])
 
+        dirs = safe_normalize(dirs)
         sigmas, rgbs, normals = self(xyzs.reshape(-1, 3), dirs.reshape(-1, 3), light_d, ratio=ambient_ratio, shading=shading)
         rgbs = rgbs.view(N, -1, 3) # [N, T+t, 3]
-
-        if self.opt.lambda_orient > 0 and normals is not None:
-            # orientation loss
+        if normals is not None:
             normals = normals.view(N, -1, 3)
-            loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
-            results['loss_orient'] = loss_orient.sum(-1).mean()
 
         # calculate weight_sum (mask)
         weights_sum = weights.sum(dim=-1) # [N]
@@ -687,6 +676,16 @@ class NeRFRenderer(nn.Module):
         depth = depth.view(*prefix)
         weights_sum = weights_sum.reshape(*prefix)
 
+        if self.training:
+            if self.opt.lambda_orient > 0 and normals is not None:
+                # orientation loss
+                loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
+                results['loss_orient'] = loss_orient.sum(-1).mean()
+            
+            if self.opt.lambda_normal_smooth > 0 and normals is not None:
+                normal_image = torch.sum(weights.unsqueeze(-1) * (normals + 1) / 2, dim=-2) # [N, 3], in [0, 1]
+                results['normal_image'] = normal_image
+        
         results['image'] = image
         results['depth'] = depth
         results['weights'] = weights
@@ -719,6 +718,7 @@ class NeRFRenderer(nn.Module):
 
         if self.training:
             xyzs, dirs, ts, rays = raymarching.march_rays_train(rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, perturb, self.opt.dt_gamma, self.opt.max_steps)
+            dirs = safe_normalize(dirs)
             # plot_pointcloud(xyzs.reshape(-1, 3).detach().cpu().numpy())
             sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
             weights, weights_sum, depth, image = raymarching.composite_rays_train(sigmas, rgbs, ts, rays, T_thresh, binarize)
@@ -728,6 +728,10 @@ class NeRFRenderer(nn.Module):
                 # orientation loss 
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
+            
+            if self.opt.lambda_normal_smooth > 0 and normals is not None:
+                _, _, _, normal_image = raymarching.composite_rays_train(sigmas.detach(), (normals + 1) / 2, ts, rays, T_thresh, binarize)
+                results['normal_image'] = normal_image
             
             # weights normalization
             results['weights'] = weights
@@ -760,6 +764,7 @@ class NeRFRenderer(nn.Module):
                 n_step = max(min(N // n_alive, 8), 1)
 
                 xyzs, dirs, ts = raymarching.march_rays(n_alive, n_step, rays_alive, rays_t, rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, perturb if step == 0 else False, self.opt.dt_gamma, self.opt.max_steps)
+                dirs = safe_normalize(dirs)
                 sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
                 raymarching.composite_rays(n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, ts, weights_sum, depth, image, T_thresh, binarize)
 
@@ -804,12 +809,12 @@ class NeRFRenderer(nn.Module):
         sigma = self.density(self.verts)['sigma'] # verts covers [-1, 1] now
         mask = sigma > density_thresh
         valid_verts = self.verts[mask]
-        self.tet_scale = valid_verts.abs().max() + 1e-1
+        self.tet_scale = valid_verts.abs().amax(dim=0) + 1e-1
         self.verts = self.verts * self.tet_scale
 
         # init sigma
         sigma = self.density(self.verts)['sigma'] # new verts
-        self.sdf.data = self.sdf.data + (sigma - density_thresh).clamp(-1, 1)
+        self.sdf.data += (sigma - density_thresh).clamp(-1, 1)
 
         print(f'[INFO] init dmtet: scale = {self.tet_scale}')
 
@@ -941,6 +946,7 @@ class NeRFRenderer(nn.Module):
 
         if self.training:
             rays_a, xyzs, dirs, deltas, ts, _ = self.ray_marching(rays_o, rays_d, hits_t[:, 0], self.density_bitfield, self.cascade, self.bound, exp_step_factor, self.grid_size, MAX_SAMPLES)
+            dirs = safe_normalize(dirs)
             # plot_pointcloud(xyzs.reshape(-1, 3).detach().cpu().numpy())
             sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
             _, weights_sum, depth, image, weights = self.volume_render(sigmas, rgbs, deltas, ts, rays_a, kwargs.get('T_threshold', 1e-4))
@@ -950,6 +956,10 @@ class NeRFRenderer(nn.Module):
                 # orientation loss 
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
+            
+            if self.opt.lambda_normal_smooth > 0 and normals is not None:
+                _, _, _, normal_image, _ = self.volume_render(sigmas.detach(), (normals + 1) / 2, deltas, ts, rays_a, kwargs.get('T_threshold', 1e-4))
+                results['normal_image'] = normal_image
             
             # weights normalization
             results['weights'] = weights
@@ -991,6 +1001,7 @@ class NeRFRenderer(nn.Module):
 
                 xyzs = self.rearrange(xyzs, 'n1 n2 c -> (n1 n2) c')
                 dirs = self.rearrange(dirs, 'n1 n2 c -> (n1 n2) c')
+                dirs = safe_normalize(dirs)
                 valid_mask = ~torch.all(dirs == 0, dim=1)
                 if valid_mask.sum() == 0:
                     break
