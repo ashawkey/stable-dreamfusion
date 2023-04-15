@@ -217,7 +217,7 @@ class NeRFNetwork(NeRFRenderer):
         }
 
 
-    def background(self, d):
+    def background(self, x, d):
 
         h = self.encoder_bg(d) # [N, C]
         
