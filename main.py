@@ -27,6 +27,7 @@ if __name__ == '__main__':
     ### training options
     parser.add_argument('--iters', type=int, default=10000, help="training iters")
     parser.add_argument('--lr', type=float, default=1e-3, help="max learning rate")
+    parser.add_argument('--lr2', type=float, default=1e-3, help="max learning rate 2")
     parser.add_argument('--warm_iters', type=int, default=500, help="training iters")
     parser.add_argument('--min_lr', type=float, default=1e-4, help="minimal learning rate")
     parser.add_argument('--ckpt', type=str, default='latest')
@@ -177,9 +178,9 @@ if __name__ == '__main__':
         if opt.optim == 'adan':
             from optimizer import Adan
             # Adan usually requires a larger LR
-            optimizer = lambda model: Adan(model.get_params(5 * opt.lr), eps=1e-8, weight_decay=2e-5, max_grad_norm=5.0, foreach=False)
+            optimizer = lambda model: Adan(model.get_params(5 * opt.lr, 5 * opt.lr2), eps=1e-8, weight_decay=2e-5, max_grad_norm=5.0, foreach=False)
         else: # adam
-            optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr), betas=(0.9, 0.99), eps=1e-15)
+            optimizer = lambda model: torch.optim.Adam(model.get_params(opt.lr, opt.lr2), betas=(0.9, 0.99), eps=1e-15)
 
         if opt.backbone == 'vanilla':
             warm_up_with_cosine_lr = lambda iter: iter / opt.warm_iters if iter <= opt.warm_iters \
