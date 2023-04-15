@@ -7,6 +7,7 @@ from tensoRF.network_cc import NeRFNetwork as CCNeRF
 
 class Trainer(_Trainer):
     def __init__(self, 
+                 argv,
                  name, # name of this experiment
                  opt, # extra conf
                  model, # network 
@@ -34,7 +35,7 @@ class Trainer(_Trainer):
         self.optimizer_fn = optimizer
         self.lr_scheduler_fn = lr_scheduler
 
-        super().__init__(name, opt, model, criterion, optimizer, ema_decay, lr_scheduler, metrics, local_rank, world_size, device, mute, fp16, eval_interval, max_keep_ckpt, workspace, best_mode, use_loss_as_metric, report_metric_at_train, use_checkpoint, use_tensorboardX, scheduler_update_every_step)
+        super().__init__(argv, name, opt, model, criterion, optimizer, ema_decay, lr_scheduler, metrics, local_rank, world_size, device, mute, fp16, eval_interval, max_keep_ckpt, workspace, best_mode, use_loss_as_metric, report_metric_at_train, use_checkpoint, use_tensorboardX, scheduler_update_every_step)
         
     ### ------------------------------	
 
