@@ -50,7 +50,7 @@ class Trainer(_Trainer):
         return pred_rgb, gt_rgb, loss
 
 
-    def train_one_epoch(self, loader):
+    def train_one_epoch(self, loader, max_epochs):
         self.log(f"==> Start Training Epoch {self.epoch}, lr={self.optimizer.param_groups[0]['lr']:.6f} ...")
 
         total_loss = 0
