@@ -181,7 +181,7 @@ class NeRFNetwork(NeRFRenderer):
         # sigmoid activation for rgb
         rgb = torch.sigmoid(h)
 
-        return sigma, rgb
+        return sigma, rgb, None
 
 
     def density(self, x):
