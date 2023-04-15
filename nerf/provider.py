@@ -192,6 +192,9 @@ class NeRFDataset:
         self.cx = self.H / 2
         self.cy = self.W / 2
 
+        self.times = [0]
+
+
         # [debug] visualize poses
         # poses, dirs = rand_poses(100, self.device, radius_range=self.opt.radius_range, return_dirs=self.opt.dir_text, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose, uniform_sphere_rate=1)
         # visualize_poses(poses.detach().cpu().numpy(), dirs.detach().cpu().numpy())
@@ -217,11 +220,13 @@ class NeRFDataset:
 
         focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
         intrinsics = np.array([focal, focal, self.cx, self.cy])
+        times = self.times[index].to(self.device) # [B, 1]
         
         # sample a low-resolution but full image
         rays = get_rays(poses, intrinsics, self.H, self.W, -1)
 
         data = {
+            'time': times,
             'H': self.H,
             'W': self.W,
             'rays_o': rays['rays_o'],
