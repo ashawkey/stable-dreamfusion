@@ -12,6 +12,7 @@ import raymarching
 
 class NeRFNetwork(NeRFRenderer):
     def __init__(self,
+                 opt,
                  resolution=[128] * 3,
                  degree=4,
                 #  rank_vec_density=[64],
@@ -27,7 +28,7 @@ class NeRFNetwork(NeRFRenderer):
                  bound=1,
                  **kwargs
                  ):
-        super().__init__(bound, **kwargs)
+        super().__init__(opt)
 
         self.resolution = resolution
 
@@ -271,7 +272,7 @@ class NeRFNetwork(NeRFRenderer):
         return d
 
     
-    def forward(self, x, d, K=-1):
+    def forward(self, x, d, K=-1, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
 
@@ -292,7 +293,7 @@ class NeRFNetwork(NeRFRenderer):
 
             rgb = torch.sigmoid(h) # [K, N, 3] 
 
-            return sigma, rgb
+            return sigma, rgb, None
 
         # multi-object (composed scene), do not support rank-residual training for now.
         else:
@@ -332,7 +333,7 @@ class NeRFNetwork(NeRFRenderer):
 
             rgb_all = torch.sigmoid(rgb_all)
 
-            return sigma_all, rgb_all
+            return sigma_all, rgb_all, None
 
 
     def density(self, x, K=-1):

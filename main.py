@@ -51,7 +51,7 @@ if __name__ == '__main__':
     parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the density blob")
     parser.add_argument('--blob_radius', type=float, default=0.5, help="control the radius for the density blob")
     # network backbone
-    parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla', 'grid_taichi', 'tensoRF', 'dnerf'], help="nerf backbone")
+    parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla', 'grid_taichi', 'tensoRF', 'dnerf', 'ccnerf'], help="nerf backbone")
     parser.add_argument('--optim', type=str, default='adan', choices=['adan', 'adam'], help="optimizer")
     parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
     parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
@@ -147,6 +147,11 @@ if __name__ == '__main__':
         from dnerf.network import NeRFNetwork
         from nerf.provider import NeRFDataset
         from dnerf.utils import *
+    elif opt.backbone == 'ccnerf':
+        opt.taichi_ray = False
+        from tensoRF.network_cc import NeRFNetwork
+        from nerf.provider import NeRFDataset
+        from tensoRF.utils import *
     else:
         raise NotImplementedError(f'--backbone {opt.backbone} is not implemented!')
 
