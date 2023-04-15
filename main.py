@@ -62,6 +62,9 @@ if __name__ == '__main__':
     # rendering resolution in training, increase these for better quality / decrease these if CUDA OOM even if --vram_O enabled.
     parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
     parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
+    parser.add_argument('--resolution0', type=int, default=128)
+    parser.add_argument('--resolution1', type=int, default=300)
+    parser.add_argument("--upsample_model_steps", type=int, action="append", default=[2000, 3000, 4000, 5500, 7000])
 
     ### dataset options
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
@@ -207,6 +210,11 @@ if __name__ == '__main__':
             raise NotImplementedError(f'--guidance {opt.guidance} is not implemented.')
 
         trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=None, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
+
+        # calc upsample target resolutions
+        upsample_resolutions = (np.round(np.exp(np.linspace(np.log(opt.resolution0), np.log(opt.resolution1), len(opt.upsample_model_steps) + 1)))).astype(np.int32).tolist()[1:]
+        print('upsample_resolutions:', upsample_resolutions)
+        trainer.upsample_resolutions = upsample_resolutions
 
         if opt.gui:
             trainer.train_loader = train_loader # attach dataloader to trainer
