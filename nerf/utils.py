@@ -346,7 +346,7 @@ class Trainer(object):
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
         time = None
-        if 'times' in data:
+        if 'time' in data:
             time = data['time'] # [B, 1]
 
         B, N = rays_o.shape[:2]
@@ -425,7 +425,7 @@ class Trainer(object):
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
         time = None
-        if 'times' in data:
+        if 'time' in data:
             time = data['time'] # [B, 1]
 
         B, N = rays_o.shape[:2]
@@ -448,7 +448,7 @@ class Trainer(object):
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
         time = None
-        if 'times' in data:
+        if 'time' in data:
             time = data['time'] # [B, 1]
 
         B, N = rays_o.shape[:2]
