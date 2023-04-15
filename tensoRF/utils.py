@@ -7,10 +7,11 @@ from tensoRF.network_cc import NeRFNetwork as CCNeRF
 
 class Trainer(_Trainer):
     def __init__(self, 
-                 argv,
+                 argv, # command line args
                  name, # name of this experiment
                  opt, # extra conf
                  model, # network 
+                 guidance, # guidance network
                  criterion=None, # loss function, if None, assume inline implementation in train_step
                  optimizer=None, # optimizer
                  ema_decay=None, # if use EMA, set the decay
