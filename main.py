@@ -139,6 +139,7 @@ if __name__ == '__main__':
         from nerf.provider import NeRFDataset
         from tensoRF.utils import *
     elif opt.backbone == 'dnerf':
+        opt.cuda_ray = False
         from dnerf.network import NeRFNetwork
         from nerf.provider import NeRFDataset
         from dnerf.utils import *
