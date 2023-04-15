@@ -135,10 +135,12 @@ if __name__ == '__main__':
             taichi_init_args["half2_vectorization"] = True
         ti.init(**taichi_init_args)
     elif opt.backbone == 'tensoRF':
+        opt.taichi_ray = False
         from tensoRF.network import NeRFNetwork
         from nerf.provider import NeRFDataset
         from tensoRF.utils import *
     elif opt.backbone == 'dnerf':
+        opt.taichi_ray = False
         opt.cuda_ray = False
         from dnerf.network import NeRFNetwork
         from nerf.provider import NeRFDataset
