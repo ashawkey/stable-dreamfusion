@@ -221,7 +221,8 @@ class NeRFDataset:
 
         focal = self.H / (2 * np.tan(np.deg2rad(fov) / 2))
         intrinsics = np.array([focal, focal, self.cx, self.cy])
-        times = self.times[index].to(self.device) # [B, 1]
+        #times = self.times[index].to(self.device) # [B, 1]
+        times = self.times
         
         # sample a low-resolution but full image
         rays = get_rays(poses, intrinsics, self.H, self.W, -1)
