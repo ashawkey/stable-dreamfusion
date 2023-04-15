@@ -120,7 +120,7 @@ class NeRFNetwork(NeRFRenderer):
             self.bg_net = None
 
 
-    def forward(self, x, d, t):
+    def forward(self, x, d, t, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
         # t: [1, 1], in [0, 1]
