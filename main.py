@@ -18,6 +18,7 @@ if __name__ == '__main__':
     parser.add_argument('--workspace', type=str, default='workspace')
     parser.add_argument('--guidance', type=str, default='stable-diffusion', help='choose from [stable-diffusion, clip]')
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('path', type=str, default='.')
 
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
