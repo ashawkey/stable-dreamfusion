@@ -279,7 +279,7 @@ class NeRFNetwork(NeRFRenderer):
         N = x.shape[0]
 
         #if KIN <= 0:
-        KIN = self.K[oid]
+        KIN = self.K[0]
         print('KIN', KIN)
 
         # single object
