@@ -22,9 +22,7 @@ class NeRFNetwork(NeRFRenderer):
                  num_layers=3,
                  hidden_dim=128,
                  num_layers_bg=2,
-                 hidden_dim_bg=64,
-                 bound=1,
-                 **kwargs
+                 hidden_dim_bg=64
                  ):
         super().__init__(opt)
 

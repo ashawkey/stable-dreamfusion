@@ -24,9 +24,7 @@ class NeRFNetwork(NeRFRenderer):
                  rank_vec=[64, 64, 64, 64, 64],
                  rank_mat=[0, 4, 16, 32, 64],
                  bg_resolution=[512, 512],
-                 bg_rank=8,
-                 bound=1,
-                 **kwargs
+                 bg_rank=8
                  ):
         super().__init__(opt)
 
@@ -126,7 +124,7 @@ class NeRFNetwork(NeRFRenderer):
             self.bg_S = nn.Parameter(w)
 
 
-    def compute_features_density(self, x, K=-1, residual=False, oid=0):
+    def compute_features_density(self, x, KIN=-1, residual=False, oid=0):
         # x: [N, 3], in [-1, 1]
         # return: [K, N, out_dim]
 
@@ -139,8 +137,8 @@ class NeRFNetwork(NeRFRenderer):
         mat_coord = torch.stack((x[..., self.mat_ids[0]], x[..., self.mat_ids[1]], x[..., self.mat_ids[2]])).view(3, -1, 1, 2) # [3, N, 1, 2]
 
         # calculate first K blocks
-        if K <= 0:
-            K = self.K[oid]
+        if KIN <= 0:
+            KIN = self.K[oid]
             
         # loop all blocks 
         if residual:
@@ -151,7 +149,7 @@ class NeRFNetwork(NeRFRenderer):
         offset_vec = oid
         offset_mat = oid
 
-        for k in range(K):
+        for k in range(KIN):
 
             y = 0
 
@@ -182,13 +180,13 @@ class NeRFNetwork(NeRFRenderer):
             last_y = y
         
         if residual:
-            outputs = torch.stack(outputs, dim=0).permute(0, 2, 1).contiguous().view(K, *prefix, -1) # [K, out_dim, N] --> [K, N, out_dim]
+            outputs = torch.stack(outputs, dim=0).permute(0, 2, 1).contiguous().view(KIN, *prefix, -1) # [K, out_dim, N] --> [K, N, out_dim]
         else:
             outputs = last_y.permute(1, 0).contiguous().view(*prefix, -1) # [out_dim, N] --> [N, out_dim]
         
         return outputs
 
-    def compute_features(self, x, K=-1, residual=False, oid=0):
+    def compute_features(self, x, KIN=-1, residual=False, oid=0):
         # x: [N, 3], in [-1, 1]
         # return: [K, N, out_dim]
 
@@ -201,8 +199,8 @@ class NeRFNetwork(NeRFRenderer):
         mat_coord = torch.stack((x[..., self.mat_ids[0]], x[..., self.mat_ids[1]], x[..., self.mat_ids[2]])).view(3, -1, 1, 2) # [3, N, 1, 2]
 
         # calculate first K blocks
-        if K <= 0:
-            K = self.K[oid]
+        if KIN <= 0:
+            KIN = self.K[oid]
             
         # loop all blocks 
         if residual:
@@ -213,7 +211,7 @@ class NeRFNetwork(NeRFRenderer):
         offset_vec = oid
         offset_mat = oid
 
-        for k in range(K):
+        for k in range(KIN):
 
             y = 0
 
@@ -244,7 +242,7 @@ class NeRFNetwork(NeRFRenderer):
             last_y = y
         
         if residual:
-            outputs = torch.stack(outputs, dim=0).permute(0, 2, 1).contiguous().view(K, *prefix, -1) # [K, out_dim, N] --> [K, N, out_dim]
+            outputs = torch.stack(outputs, dim=0).permute(0, 2, 1).contiguous().view(KIN, *prefix, -1) # [K, out_dim, N] --> [K, N, out_dim]
         else:
             outputs = last_y.permute(1, 0).contiguous().view(*prefix, -1) # [out_dim, N] --> [N, out_dim]
         
@@ -272,7 +270,7 @@ class NeRFNetwork(NeRFRenderer):
         return d
 
     
-    def forward(self, x, d, K=-1, l=None, ratio=1, shading='albedo'):
+    def forward(self, x, d, KIN=-1, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
 
@@ -282,13 +280,13 @@ class NeRFNetwork(NeRFRenderer):
         if len(self.K) == 1:
 
             x_model = self.normalize_coord(x)
-            feats_density = self.compute_features_density(x_model, K, residual=self.training) # [K, N, 1]
+            feats_density = self.compute_features_density(x_model, KIN, residual=self.training) # [K, N, 1]
             sigma = trunc_exp(feats_density).squeeze(-1) # [K, N]
 
             enc_d = self.encoder_dir(d) # [N, C]
 
-            h = self.compute_features(x_model, K, residual=self.training) # [K, N, 3C]
-            h = h.view(K, N, 3, self.degree ** 2) # [K, N, 3, C]
+            h = self.compute_features(x_model, KIN, residual=self.training) # [K, N, 3C]
+            h = h.view(KIN, N, 3, self.degree ** 2) # [K, N, 3, C]
             h = (h * enc_d.unsqueeze(1)).sum(-1) # [K, N, 3]
 
             rgb = torch.sigmoid(h) # [K, N, 3] 
@@ -336,13 +334,13 @@ class NeRFNetwork(NeRFRenderer):
             return sigma_all, rgb_all, None
 
 
-    def density(self, x, K=-1):
+    def density(self, x, KIN=-1):
         # x: [N, 3], in [-bound, bound]
 
         if len(self.K) == 1:
         
             x_model = self.normalize_coord(x)
-            feats_density = self.compute_features_density(x_model, K, residual=False) # [N, 1 + 3C]
+            feats_density = self.compute_features_density(x_model, KIN, residual=False) # [N, 1 + 3C]
             sigma = trunc_exp(feats_density).squeeze(-1) # [N]
 
             return {
