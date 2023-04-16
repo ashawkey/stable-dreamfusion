@@ -137,8 +137,8 @@ class NeRFNetwork(NeRFRenderer):
         mat_coord = torch.stack((x[..., self.mat_ids[0]], x[..., self.mat_ids[1]], x[..., self.mat_ids[2]])).view(3, -1, 1, 2) # [3, N, 1, 2]
 
         # calculate first K blocks
-        if KIN <= 0:
-            KIN = self.K[oid]
+        #if KIN <= 0:
+        KIN = self.K[oid]
             
         # loop all blocks 
         if residual:
@@ -199,8 +199,8 @@ class NeRFNetwork(NeRFRenderer):
         mat_coord = torch.stack((x[..., self.mat_ids[0]], x[..., self.mat_ids[1]], x[..., self.mat_ids[2]])).view(3, -1, 1, 2) # [3, N, 1, 2]
 
         # calculate first K blocks
-        if KIN <= 0:
-            KIN = self.K[oid]
+        #if KIN <= 0:
+        KIN = self.K[oid]
             
         # loop all blocks 
         if residual:
