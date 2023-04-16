@@ -139,7 +139,6 @@ class NeRFNetwork(NeRFRenderer):
         # calculate first K blocks
         #if KIN <= 0:
         KIN = self.K[oid]
-        print('KIN', KIN)
             
         # loop all blocks 
         if residual:
@@ -202,7 +201,6 @@ class NeRFNetwork(NeRFRenderer):
         # calculate first K blocks
         #if KIN <= 0:
         KIN = self.K[oid]
-        print('KIN', KIN)
             
         # loop all blocks 
         if residual:
@@ -280,7 +278,6 @@ class NeRFNetwork(NeRFRenderer):
 
         #if KIN <= 0:
         KIN = self.K[0]
-        print('KIN', KIN)
 
         # single object
         if len(self.K) == 1:
