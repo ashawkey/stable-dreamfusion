@@ -38,7 +38,7 @@ parser.add_argument('--warmup_iters', type=int, default=1000, help="training ite
 parser.add_argument('--uniform_sphere_rate', type=float, default=0.5, help="likelihood of sampling camera location uniformly on the sphere surface area")
 # model options
 parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
-parser.add_argument('--density_activation', type=str, default='softplus', choices=['softplus', 'exp'] help="density activation function")
+parser.add_argument('--density_activation', type=str, default='softplus', choices=['softplus', 'exp'], help="density activation function")
 parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
 parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the density blob")
 parser.add_argument('--blob_radius', type=float, default=0.3, help="control the radius for the density blob")

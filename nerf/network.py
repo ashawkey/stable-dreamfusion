@@ -89,10 +89,10 @@ class MLP(nn.Module):
 class NeRFNetwork(NeRFRenderer):
     def __init__(self, 
                  opt,
-                 num_layers=4, # 5 in paper
-                 hidden_dim=96, # 128 in paper
+                 num_layers=3, # 5 in paper
+                 hidden_dim=64, # 128 in paper
                  num_layers_bg=2, # 3 in paper
-                 hidden_dim_bg=64, # 64 in paper
+                 hidden_dim_bg=32, # 64 in paper
                  encoding='frequency_torch', # pure pytorch
                  ):
         
@@ -103,8 +103,10 @@ class NeRFNetwork(NeRFRenderer):
         self.encoder, self.in_dim = get_encoder(encoding, input_dim=3, multires=6)
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True, block=ResBlock)
 
+        self.density_activation = trunc_exp if self.opt.density_activation == 'exp' else F.softplus
+
         # background network
-        if self.bg_radius > 0:
+        if self.opt.bg_radius > 0:
             self.num_layers_bg = num_layers_bg   
             self.hidden_dim_bg = hidden_dim_bg
             self.encoder_bg, self.in_dim_bg = get_encoder(encoding, input_dim=3, multires=4)
@@ -130,7 +132,7 @@ class NeRFNetwork(NeRFRenderer):
 
         h = self.sigma_net(enc)
 
-        sigma = F.softplus(h[..., 0] + self.density_blob(x))
+        sigma = self.density_activation(h[..., 0] + self.density_blob(x))
         albedo = torch.sigmoid(h[..., 1:])
 
         return sigma, albedo
@@ -236,8 +238,12 @@ class NeRFNetwork(NeRFRenderer):
             {'params': self.sigma_net.parameters(), 'lr': lr},
         ]        
 
-        if self.bg_radius > 0:
+        if self.opt.bg_radius > 0:
             # params.append({'params': self.encoder_bg.parameters(), 'lr': lr * 10})
             params.append({'params': self.bg_net.parameters(), 'lr': lr})
+        
+        if self.opt.dmtet:
+            params.append({'params': self.sdf, 'lr': lr})
+            params.append({'params': self.deform, 'lr': lr})
 
         return params

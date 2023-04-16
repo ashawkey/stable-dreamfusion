@@ -54,7 +54,7 @@ class NeRFNetwork(NeRFRenderer):
         self.density_activation = trunc_exp if self.opt.density_activation == 'exp' else F.softplus
 
         # background network
-        if self.bg_radius > 0:
+        if self.opt.bg_radius > 0:
             self.num_layers_bg = num_layers_bg
             self.hidden_dim_bg = hidden_dim_bg
             # use a very simple network to avoid it learning the prompt...
@@ -165,8 +165,12 @@ class NeRFNetwork(NeRFRenderer):
             # {'params': self.normal_net.parameters(), 'lr': lr},
         ]        
 
-        if self.bg_radius > 0:
+        if self.opt.bg_radius > 0:
             # params.append({'params': self.encoder_bg.parameters(), 'lr': lr * 10})
             params.append({'params': self.bg_net.parameters(), 'lr': lr})
+        
+        if self.opt.dmtet:
+            params.append({'params': self.sdf, 'lr': lr})
+            params.append({'params': self.deform, 'lr': lr})
 
         return params

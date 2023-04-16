@@ -2,11 +2,12 @@
 
 A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) text-to-2D model.
 
-The original paper's project page: [_DreamFusion: Text-to-3D using 2D Diffusion_](https://dreamfusion3d.github.io/).
+**NEWS (2023.4.7)**: Improvement on Mesh Quality & DMTet finetuning support!
 
-**NEWS (2023.3.12)**: A [Taichi](https://github.com/taichi-dev/taichi) backend is available for Instant-NGP. **No CUDA** build is requied while it achieves comparable performance!
+https://user-images.githubusercontent.com/25863658/230535363-298c960e-bf9c-4906-8b96-cd60edcb24dd.mp4
 
-https://user-images.githubusercontent.com/25863658/215996308-9fd959f5-b5c7-4a8e-a241-0fe63ec86a4a.mp4
+https://user-images.githubusercontent.com/25863658/230535373-6ee28f16-bb21-4ec4-bc86-d46597361a04.mp4
+
 
 Colab notebooks:
 * Instant-NGP backbone (`-O`): [![Instant-NGP Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1MXT3yfOFvO0ooKEfiUUvTKwUkrrlCHpF?usp=sharing)
@@ -39,12 +40,11 @@ cd stable-dreamfusion
 ```bash
 pip install -r requirements.txt
 
-# (optional) install nvdiffrast for exporting textured mesh (if use --save_mesh)
+# install nvdiffrast for exporting textured mesh and DMTet finetuning
 pip install git+https://github.com/NVlabs/nvdiffrast/
 
 # (optional) install CLIP guidance for the dreamfield setting
 pip install git+https://github.com/openai/CLIP.git
-
 ```
 
 ### Build extension (optional)
@@ -57,13 +57,17 @@ bash scripts/install_ext.sh
 # if you want to install manually, here is an example:
 pip install ./raymarching # install to python path (you still need the raymarching/ folder, since this only installs the built extension.)
 ```
-NOTE: if you use `setup.py` to install the extensions, do not forget to rerun installation after updating the source code! (in cases like `TypeError: grid_encode_forward(): incompatible function arguments`)
 
 ### Taichi backend (optional)
 Use [Taichi](https://github.com/taichi-dev/taichi) backend for Instant-NGP. It achieves comparable performance to CUDA implementation while **No CUDA** build is required. Install Taichi with pip:
 ```bash
 pip install -i https://pypi.taichi.graphics/simple/ taichi-nightly
 ```
+
+### Trouble Shooting:
+* `diffusers` related error: we assume the latest version, so try `pip install -U diffusers transformers` first.
+* `[F glutil.cpp:338] eglInitialize() failed Aborted (core dumped)`: this usually indicates problems in OpenGL installation. Try to re-install Nvidia driver, or use nvidia-docker as suggested in https://github.com/ashawkey/stable-dreamfusion/issues/131 if you are using a headless server.
+* `TypeError: xxx_forward(): incompatible function arguments`： this happens when we update the CUDA source and you used `setup.py` to install the extensions earlier. Try to re-install the corresponding extension (e.g., `pip install ./gridencoder`).
 
 ### Tested environments
 * Ubuntu 22 with torch 1.12 & CUDA 11.6 on a V100.
@@ -144,6 +148,16 @@ python main.py --text "a hotdog" --workspace trial2 -O2 --num_steps 64 --upsampl
 python main.py --workspace trial2 -O2 --test
 python main.py --workspace trial2 -O2 --test --save_mesh
 python main.py --workspace trial2 -O2 --test --gui # not recommended, FPS will be low.
+
+### DMTet finetuning
+# use --dmtet and --init_ckpt <nerf checkpoint> to finetune the mesh
+python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_ckpt trial/checkpoints/df.pth
+
+# test & export the mesh
+python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_ckpt trial/checkpoints/df.pth --test --save_mesh
+
+# gui to visualize dmtet
+python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_ckpt trial/checkpoints/df.pth --test --gui
 ```
 
 # Code organization & Advanced tips
@@ -235,6 +249,16 @@ The tracing functionality has only been tested in combination with the `-O` opti
         year = {2022},
     }
     ```
+
+* [Magic3D](https://research.nvidia.com/labs/dir/magic3d/):
+   ```
+   @inproceedings{lin2023magic3d,
+      title={Magic3D: High-Resolution Text-to-3D Content Creation},
+      author={Lin, Chen-Hsuan and Gao, Jun and Tang, Luming and Takikawa, Towaki and Zeng, Xiaohui and Huang, Xun and Kreis, Karsten and Fidler, Sanja and Liu, Ming-Yu and Lin, Tsung-Yi},
+      booktitle={IEEE Conference on Computer Vision and Pattern Recognition ({CVPR})},
+      year={2023}
+    }
+   ```
 
 * Huge thanks to the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) and the [diffusers](https://github.com/huggingface/diffusers) library.
 

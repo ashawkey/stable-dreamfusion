@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from activation import trunc_exp
+from activation import trunc_exp, biased_softplus
 from .renderer import NeRFRenderer
 
 import numpy as np
@@ -35,10 +35,10 @@ class MLP(nn.Module):
 class NeRFNetwork(NeRFRenderer):
     def __init__(self, 
                  opt,
-                 num_layers=2,
-                 hidden_dim=32,
+                 num_layers=3,
+                 hidden_dim=64,
                  num_layers_bg=2,
-                 hidden_dim_bg=16,
+                 hidden_dim_bg=32,
                  ):
         
         super().__init__(opt)
@@ -51,10 +51,10 @@ class NeRFNetwork(NeRFRenderer):
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True)
         # self.normal_net = MLP(self.in_dim, 3, hidden_dim, num_layers, bias=True)
 
-        self.density_activation = trunc_exp if self.opt.density_activation == 'exp' else F.softplus
+        self.density_activation = trunc_exp if self.opt.density_activation == 'exp' else biased_softplus
 
         # background network
-        if self.bg_radius > 0:
+        if self.opt.bg_radius > 0:
             self.num_layers_bg = num_layers_bg   
             self.hidden_dim_bg = hidden_dim_bg
             
@@ -66,6 +66,7 @@ class NeRFNetwork(NeRFRenderer):
             self.bg_net = None
 
     # add a density blob to the scene center
+    @torch.no_grad()
     def density_blob(self, x):
         # x: [B, N, 3]
         
@@ -167,8 +168,12 @@ class NeRFNetwork(NeRFRenderer):
             # {'params': self.normal_net.parameters(), 'lr': lr},
         ]        
 
-        if self.bg_radius > 0:
+        if self.opt.bg_radius > 0:
             # params.append({'params': self.encoder_bg.parameters(), 'lr': lr * 10})
             params.append({'params': self.bg_net.parameters(), 'lr': lr})
+        
+        if self.opt.dmtet:
+            params.append({'params': self.sdf, 'lr': lr})
+            params.append({'params': self.deform, 'lr': lr})
 
         return params

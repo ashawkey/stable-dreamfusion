@@ -22,7 +22,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
-    parser.add_argument('--decimate_target', type=int, default=1e5, help="target face number for mesh decimation")
+    parser.add_argument('--decimate_target', type=int, default=5e4, help="target face number for mesh decimation")
+
+    parser.add_argument('--dmtet', action='store_true', help="use dmtet finetuning")
+    parser.add_argument('--tet_grid_size', type=int, default=128, help="tet grid size")
+    parser.add_argument('--init_ckpt', type=str, default='', help="ckpt to init dmtet")
 
     ### training options
     parser.add_argument('--iters', type=int, default=10000, help="training iters")
@@ -70,7 +74,7 @@ if __name__ == '__main__':
     parser.add_argument('--dt_gamma', type=float, default=0, help="dt_gamma (>=0) for adaptive ray marching. set to 0 to disable, >0 to accelerate rendering (but usually with worse quality)")
     parser.add_argument('--min_near', type=float, default=0.1, help="minimum near distance for camera")
     parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
-    parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 70], help="training camera fovy range")
+    parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 80], help="training camera fovy range")
     parser.add_argument('--dir_text', action='store_true', help="direction-encode the text prompt, by appending front/side/back/overhead view")
     parser.add_argument('--suppress_face', action='store_true', help="also use negative dir text prompt.")
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
@@ -80,10 +84,12 @@ if __name__ == '__main__':
     parser.add_argument('--offset', type=float, nargs='*', default=[0, 0, 0], help="offset of camera location")
 
     ### regularizations
-    parser.add_argument('--lambda_entropy', type=float, default=1e-4, help="loss scale for alpha entropy")
+    parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
     parser.add_argument('--lambda_opacity', type=float, default=0, help="loss scale for alpha value")
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
     parser.add_argument('--lambda_tv', type=float, default=0, help="loss scale for total variation")
+    parser.add_argument('--lambda_normal', type=float, default=0, help="loss scale for mesh normal smoothness")
+    parser.add_argument('--lambda_lap', type=float, default=0.2, help="loss scale for mesh laplacian")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -110,6 +116,14 @@ if __name__ == '__main__':
         opt.fp16 = True
         opt.dir_text = True
         opt.backbone = 'vanilla'
+    
+    if opt.dmtet:
+        # parameters for finetuning
+        opt.h = 512
+        opt.w = 512
+        opt.warmup_iters = 0
+        opt.t_range = [0.02, 0.50]
+        opt.fovy_range = [20, 60]
 
     if opt.patch_size > 1:
         opt.error_map = False # do not use error_map if use patch-based training
@@ -157,13 +171,22 @@ if __name__ == '__main__':
 
     print(opt)
 
-    seed_everything(opt.seed)
-
-    model = NeRFNetwork(opt)
-
-    print(model)
+    if opt.seed is not None:
+        seed_everything(int(opt.seed))
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    model = NeRFNetwork(opt).to(device)
+
+    if opt.dmtet and opt.init_ckpt != '':
+        # load pretrained weights to init dmtet
+        state_dict = torch.load(opt.init_ckpt, map_location=device)
+        model.load_state_dict(state_dict['model'], strict=False)
+        if opt.cuda_ray:
+            model.mean_density = state_dict['mean_density']
+        model.init_tet()
+
+    print(model)
 
     if opt.test:
         guidance = None # no need to load guidance model at test
@@ -206,7 +229,7 @@ if __name__ == '__main__':
 
         if opt.guidance == 'stable-diffusion':
             from sd import StableDiffusion
-            guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key)
+            guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key, opt.t_range)
         elif opt.guidance == 'clip':
             from nerf.clip import CLIP
             guidance = CLIP(device)

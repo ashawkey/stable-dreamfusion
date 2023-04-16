@@ -9,3 +9,7 @@ trial*/
 .vs/
 
 TOKEN
+*.ckpt
+
+densegridencoder
+tets/256_tets.npz
