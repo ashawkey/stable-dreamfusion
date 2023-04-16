@@ -280,7 +280,7 @@ class NeRFNetwork(NeRFRenderer):
         if len(self.K) == 1:
 
             x_model = self.normalize_coord(x)
-            feats_density = self.compute_features_density(x_model, -1, residual=False, oid=oid) # [N, 1]
+            feats_density = self.compute_features_density(x_model, -1, residual=False) # [N, 1]
             sigma = trunc_exp(feats_density).squeeze(-1) # [K, N]
 
             enc_d = self.encoder_dir(d) # [N, C]
