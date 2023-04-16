@@ -286,7 +286,7 @@ class NeRFNetwork(NeRFRenderer):
             enc_d = self.encoder_dir(d) # [N, C]
 
             h = self.compute_features(x_model, KIN, residual=self.training) # [K, N, 3C]
-            h = h.view(KIN, N, 3, self.degree ** 2) # [K, N, 3, C]
+            h = h.view(N, 3, self.degree ** 2) # [K, N, 3, C]
             h = (h * enc_d.unsqueeze(1)).sum(-1) # [K, N, 3]
 
             rgb = torch.sigmoid(h) # [K, N, 3] 
