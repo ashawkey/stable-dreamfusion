@@ -1,3 +1,8 @@
+### 2023.4.7
+Improvement on mesh quality & DMTet finetuning support.
+
+https://user-images.githubusercontent.com/25863658/230535363-298c960e-bf9c-4906-8b96-cd60edcb24dd.mp4
+
 ### 2023.3.30
 * adopt ideas from [Fantasia3D](https://fantasia3d.github.io/) to concatenate normal and mask as the latent code in a warm up stage, which shows faster convergence of shape.
 
