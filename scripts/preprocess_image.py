@@ -97,29 +97,27 @@ if __name__ == '__main__':
     else:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
+    # predict depth (with bg as it's more stable)
+    print(f'[INFO] depth estimation...')
+    dpt_model = DPT()
+    depth = dpt_model(image)[0]
+    depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-9)
+    depth = (depth * 255).astype(np.uint8)
+    cv2.imwrite(out_depth, depth)
+
+    # predict caption (it's too slow... use your brain instead)
+    # print(f'[INFO] captioning...')
+    # blip2 = BLIP2()
+    # caption = blip2(image)
+    # with open(out_caption, 'w') as f:
+    #     f.write(caption)
+
     # carve background
     print(f'[INFO] background removal...')
     image = BackgroundRemoval()(image) # [H, W, 4]
     
     cv2.imwrite(out_rgba, cv2.cvtColor(image, cv2.COLOR_RGBA2BGRA))
 
-    # white background
-    image = image.astype(np.float32) / 255.0
-    alpha = image[:, :, 3:4]
-    image = alpha * image[..., :3] + (1.0 - alpha)
 
-    # predict caption (it's too slow... use your brain instead)
-    # print(f'[INFO] captioning...')
-    # blip2 = BLIP2()
-    # caption = blip2((image * 255).astype(np.uint8))
-    # with open(out_caption, 'w') as f:
-    #     f.write(caption)
-
-    # predict depth
-    print(f'[INFO] depth estimation...')
-    dpt_model = DPT()
-    depth = dpt_model((image * 255).astype(np.uint8))[0]
-    depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-9)
-    depth = (depth * 255).astype(np.uint8)
-    cv2.imwrite(out_depth, depth)
+    
 

@@ -282,7 +282,6 @@ class Trainer(object):
         else:
             self.text_z = None
         
-        # image embeddings (zero123)
         if self.opt.image is not None:
 
             h = int(self.opt.known_view_scale * self.opt.h)
@@ -303,11 +302,14 @@ class Trainer(object):
             self.depth = torch.from_numpy(depth.astype(np.float32) / 255).to(self.device)
             print(f'[INFO] dataset: load depth prompt {depth_path} {self.depth.shape}')
 
-            # encode image_z 
-            rgba_256 = cv2.resize(rgba, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
-            rgb_256 = rgba_256[..., :3] * rgba_256[..., 3:] + (1 - rgba_256[..., 3:])
-            rgb_256 = torch.from_numpy(rgb_256).permute(2,0,1).unsqueeze(0).contiguous().to(self.device)
-            self.image_z = self.guidance.get_img_embeds(rgb_256)
+            # encode image_z for zero123
+            if self.opt.guidance == 'zero123':
+                rgba_256 = cv2.resize(rgba, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
+                rgb_256 = rgba_256[..., :3] * rgba_256[..., 3:] + (1 - rgba_256[..., 3:])
+                rgb_256 = torch.from_numpy(rgb_256).permute(2,0,1).unsqueeze(0).contiguous().to(self.device)
+                self.image_z = self.guidance.get_img_embeds(rgb_256)
+            else:
+                self.image_z = None
         
         else:
             self.image_z = None
@@ -330,6 +332,7 @@ class Trainer(object):
 
     def train_step(self, data):
 
+        # perform RGBD loss instead of SDS if is image-conditioned
         do_rgbd_loss = self.opt.image is not None and \
             (self.global_step < 100 or self.global_step % self.opt.known_view_interval == 0)
 
@@ -337,7 +340,7 @@ class Trainer(object):
         if do_rgbd_loss:
             data = self.default_view_data
 
-        # progressively relaxing view range if image-conditioned
+        # progressively relaxing view range
         if self.opt.progressive_view:
             r = min(1.0, 0.2 + self.global_step / (0.5 * self.opt.iters))
             self.opt.phi_range = [self.opt.default_phi * (1 - r) + self.opt.full_phi_range[0] * r, 
@@ -346,10 +349,12 @@ class Trainer(object):
                                     self.opt.default_theta * (1 - r) + self.opt.full_theta_range[1] * r]
             self.opt.radius_range = [self.opt.default_radius * (1 - r) + self.opt.full_radius_range[0] * r, 
                                     self.opt.default_radius * (1 - r) + self.opt.full_radius_range[1] * r]
+            self.opt.fovy_range = [self.opt.default_fovy * (1 - r) + self.opt.full_fovy_range[0] * r, 
+                                    self.opt.default_fovy * (1 - r) + self.opt.full_fovy_range[1] * r]
 
         # progressively increase max_level
-        if not self.opt.dmtet:
-            self.model.max_level = min(1.0, 0.5 + self.global_step / self.opt.iters)
+        if self.opt.progressive_level:
+            self.model.max_level = min(1.0, 0.25 + self.global_step / (0.5 * self.opt.iters))
 
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
@@ -363,8 +368,13 @@ class Trainer(object):
             shading = 'ambient'
             as_latent = False
             binarize = False
-            bg_color = torch.rand(3).to(self.device) # single color random bg
-            # bg_color = torch.rand((B * N, 3), device=rays_o.device) 
+            bg_color = torch.rand((B * N, 3), device=rays_o.device) 
+
+            # add camera noise to avoid grid-like artifect
+            noise_scale = self.opt.known_view_noise_scale #* (1 - self.global_step / self.opt.iters)
+            rays_o = rays_o + torch.randn(3, device=self.device) * noise_scale
+            rays_d = rays_d + torch.randn(3, device=self.device) * noise_scale
+
         elif self.global_step < self.opt.warmup_iters:
             ambient_ratio = 1.0
             shading = 'normal'
@@ -381,7 +391,7 @@ class Trainer(object):
                 shading = 'lambertian'
             as_latent = False
 
-            # random weights binarization
+            # random weights binarization (like mobile-nerf)
             # binarize_thresh = min(0.5, self.global_step / (2 * self.opt.iters))
             # binarize = (random.random() > binarize_thresh)
             binarize = False
@@ -392,12 +402,13 @@ class Trainer(object):
                 bg_color = None # use bg_net
             else:
                 bg_color = torch.rand(3).to(self.device) # single color random bg
-        
+
         outputs = self.model.render(rays_o, rays_d, mvp, H, W, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, binarize=binarize)
         pred_depth = outputs['depth'].reshape(B, 1, H, W)
         pred_mask = outputs['weights_sum'].reshape(B, 1, H, W)
 
         if as_latent:
+            # abuse normal & mask as latent code for faster geometry initialization (ref: fantasia3D)
             pred_rgb = torch.cat([outputs['image'], outputs['weights_sum'].unsqueeze(-1)], dim=-1).reshape(B, H, W, 4).permute(0, 3, 1, 2).contiguous() # [1, 4, H, W]
         else:
             pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
@@ -408,27 +419,27 @@ class Trainer(object):
             gt_rgb = self.rgb # [3, H, W]
             
             # color loss
-            gt_rgb = gt_rgb * gt_mask.float() + bg_color.view(3, 1, 1) * (1 - gt_mask.float())
-            # gt_rgb = gt_rgb * gt_mask.float() + bg_color.reshape(H, W, 3).permute(2,0,1).contiguous() * (1 - gt_mask.float())
+            gt_rgb = gt_rgb * gt_mask.float() + bg_color.reshape(H, W, 3).permute(2,0,1).contiguous() * (1 - gt_mask.float())
             loss = self.opt.lambda_rgb * F.mse_loss(pred_rgb, gt_rgb)
             
             # mask loss
             loss = loss + self.opt.lambda_mask * F.mse_loss(pred_mask[0, 0], gt_mask.float())
 
             # relative depth loss
-            valid_gt_depth = self.depth[gt_mask].unsqueeze(1) # [B, 1]
-            valid_pred_depth = pred_depth.squeeze()[gt_mask].unsqueeze(1) # [B, 1]
-            with torch.no_grad():
-                A = torch.cat([valid_gt_depth, torch.ones_like(valid_gt_depth)], dim=-1) # [B, 2]
-                X = torch.linalg.lstsq(A, valid_pred_depth).solution # [2, 1]
-                valid_gt_depth = A @ X # [B, 1]
-            lambda_depth = self.opt.lambda_depth * min(1, self.global_step / self.opt.iters)
-            loss = loss + lambda_depth * F.mse_loss(valid_pred_depth, valid_gt_depth)
+            if self.opt.lambda_depth > 0:
+                valid_gt_depth = self.depth[gt_mask].unsqueeze(1) # [B, 1]
+                valid_pred_depth = pred_depth.squeeze()[gt_mask].unsqueeze(1) # [B, 1]
+                with torch.no_grad():
+                    A = torch.cat([valid_gt_depth, torch.ones_like(valid_gt_depth)], dim=-1) # [B, 2]
+                    X = torch.linalg.lstsq(A, valid_pred_depth).solution # [2, 1]
+                    valid_gt_depth = A @ X # [B, 1]
+                lambda_depth = self.opt.lambda_depth * min(1, self.global_step / self.opt.iters)
+                loss = loss + lambda_depth * F.mse_loss(valid_pred_depth, valid_gt_depth)
 
         # novel view loss
         else:
 
-            if self.opt.image is None:
+            if self.opt.guidance == 'stable-diffusion':
                 # interpolate text_z
                 azimuth = data['azimuth'] # [-180, 180]
                 
@@ -450,16 +461,17 @@ class Trainer(object):
                 pos_z = r * start_z + (1 - r) * end_z    
                 uncond_z = self.text_z['uncond']
                 text_z = torch.cat([uncond_z, pos_z], dim=0)
-                loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent, guidance_scale=self.opt.guidance_scale)
+                loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance)
 
-            else:
+            else: # zero123
                 polar = data['polar']
                 azimuth = data['azimuth']
                 radius = data['radius']
-                loss = self.guidance.train_step(self.image_z, pred_rgb, polar, azimuth, radius, as_latent=as_latent, guidance_scale=self.opt.guidance_scale)
+                loss = self.guidance.train_step(self.image_z, pred_rgb, polar, azimuth, radius, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance)
                 
         # regularizations
         if not self.opt.dmtet:
+
             if self.opt.lambda_opacity > 0:
                 loss_opacity = (outputs['weights_sum'] ** 2).mean()
                 loss = loss + self.opt.lambda_opacity * loss_opacity
@@ -476,16 +488,16 @@ class Trainer(object):
                 # smoothed_vals = TF.gaussian_blur(pred_vals.detach(), kernel_size=9)
                 # loss_smooth = F.mse_loss(pred_vals, smoothed_vals)
                 pred_vals = outputs['normal_image'].reshape(B, H, W, 3)
-                
+                # total-variation
                 loss_smooth = (pred_vals[:, 1:, :, :] - pred_vals[:, :-1, :, :]).square().mean() + \
                               (pred_vals[:, :, 1:, :] - pred_vals[:, :, :-1, :]).square().mean()
-
                 loss = loss + self.opt.lambda_normal_smooth * loss_smooth
 
             if self.opt.lambda_orient > 0 and 'loss_orient' in outputs:
                 loss_orient = outputs['loss_orient']
                 loss = loss + self.opt.lambda_orient * loss_orient
         else:
+
             if self.opt.lambda_normal > 0:
                 loss = loss + self.opt.lambda_normal * outputs['normal_loss']
             
@@ -506,9 +518,6 @@ class Trainer(object):
 
         if not self.opt.dmtet and self.opt.backbone == 'grid':
             
-            # import kiui
-            # kiui.lo(self.model.encoder.embeddings.grad)
-
             if self.opt.lambda_tv > 0:
                 lambda_tv = min(1.0, self.global_step / (0.5 * self.opt.iters)) * self.opt.lambda_tv
                 self.model.encoder.grad_total_variation(lambda_tv, None, self.model.bound)
@@ -556,7 +565,6 @@ class Trainer(object):
 
         pred_rgb = outputs['image'].reshape(B, H, W, 3)
         pred_depth = outputs['depth'].reshape(B, H, W)
-        # pred_mask = outputs['weights_sum'].reshape(B, H, W) > 0.95
 
         return pred_rgb, pred_depth, None
 

@@ -104,7 +104,7 @@ class Zero123(nn.Module):
         v = self.model.encode_first_stage(x).mode()
         return c, v
     
-    def train_step(self, embeddings, pred_rgb, polar, azimuth, radius, guidance_scale=3, as_latent=False, grad_clip=None):
+    def train_step(self, embeddings, pred_rgb, polar, azimuth, radius, guidance_scale=3, as_latent=False, grad_scale=1):
         # pred_rgb: tensor [1, 3, H, W] in [-1, 1]
 
         if as_latent:
@@ -134,10 +134,7 @@ class Zero123(nn.Module):
         noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)
 
         w = (1 - self.alphas[t])
-        grad = w * (noise_pred - noise)
-
-        if grad_clip is not None:
-            grad = grad.clamp(-grad_clip, grad_clip)
+        grad = grad_scale * w * (noise_pred - noise)
         grad = torch.nan_to_num(grad)
 
         # import kiui

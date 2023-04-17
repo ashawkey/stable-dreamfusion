@@ -65,17 +65,6 @@ class NeRFNetwork(NeRFRenderer):
         else:
             self.bg_net = None
 
-    # add a density blob to the scene center
-    @torch.no_grad()
-    def density_blob(self, x):
-        # x: [B, N, 3]
-        
-        d = (x ** 2).sum(-1)
-        # g = self.opt.blob_density * torch.exp(- d / (self.opt.blob_radius ** 2))
-        g = self.opt.blob_density * (1 - torch.sqrt(d) / self.opt.blob_radius)
-
-        return g
-
     def common_forward(self, x):
 
         # sigma
