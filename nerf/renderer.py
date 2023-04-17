@@ -335,14 +335,23 @@ class NeRFRenderer(nn.Module):
             self.mean_density = 0
             self.iter_density = 0
     
+    @torch.no_grad()
+    def density_blob(self, x):
+        # x: [B, N, 3]
+        
+        d = (x ** 2).sum(-1)
+        
+        if self.opt.density_activation == 'exp':
+            g = self.opt.blob_density * torch.exp(- d / (2 * self.opt.blob_radius ** 2))
+        else:
+            g = self.opt.blob_density * (1 - torch.sqrt(d) / self.opt.blob_radius)
+
+        return g
     
     def forward(self, x, d):
         raise NotImplementedError()
 
     def density(self, x):
-        raise NotImplementedError()
-
-    def color(self, x, d, mask=None, **kwargs):
         raise NotImplementedError()
 
     def reset_extra_state(self):

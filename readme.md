@@ -2,14 +2,13 @@
 
 A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) text-to-2D model.
 
-### [Update Logs](assets/update_logs.md)
-
-**NEWS (2023.4.14)**: Experimental Image-to-3D generation support!
-
+**NEWS (2023.4.17)**: Experimental Image-to-3D generation support!
 
 **NEWS (2023.4.7)**: Improvement on mesh quality & DMTet finetuning support!
 
 https://user-images.githubusercontent.com/25863658/230535363-298c960e-bf9c-4906-8b96-cd60edcb24dd.mp4
+
+### [Update Logs](assets/update_logs.md)
 
 ### Colab notebooks:
 * Instant-NGP backbone (`-O`): [![Instant-NGP Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1MXT3yfOFvO0ooKEfiUUvTKwUkrrlCHpF?usp=sharing)
@@ -142,15 +141,18 @@ python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5
 ### Image-conditioned 3D Generation
 
 ## preprocess input image
-# for best performance, the image should contain a single front-facing object. Check the examples under ./data.
+# note: the results of image-to-3D is dependent on zero-1-to-3's capability. For best performance, the input image should contain a single front-facing object. Check the examples under ./data.
 # this will exports `<image>_rgba.png` and `<image>_depth.png` to the directory containing the input image.
 python scripts/preprocess_image.py <image>.png 
 
 ## train
-# pass in the processed <image>_rgba.png by --image.
+# pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
 python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000
-# dmtet finetuning (highly recommended, the color from the first stage is strangely worse, but dmtet can correct it.)
+# dmtet finetuning (highly recommended)
 python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --init_ckpt trial_image/checkpoints/df.pth
+
+# experimental: providing both --text and --image enables stable-diffusion backend, but the result may look very different from the provided image. This is still an option if image-only mode cannot produce a satisfactory result.
+python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text
 
 ## test / visualize
 python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --save_mesh
