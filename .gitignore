@@ -4,7 +4,8 @@ build/
 *.so
 
 tmp*
-data/
+# data/
+ldm/data/
 trial*/
 .vs/
 
