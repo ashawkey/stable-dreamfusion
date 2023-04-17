@@ -4,9 +4,9 @@ A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the
 
 **NEWS (2023.4.17)**: Experimental Image-to-3D generation support!
 
-**NEWS (2023.4.7)**: Improvement on mesh quality & DMTet finetuning support!
+https://user-images.githubusercontent.com/25863658/232403294-b77409bf-ddc7-4bb8-af32-ee0cc123825a.mp4
 
-https://user-images.githubusercontent.com/25863658/230535363-298c960e-bf9c-4906-8b96-cd60edcb24dd.mp4
+https://user-images.githubusercontent.com/25863658/232403162-51b69000-a242-4b8c-9cd9-4242b09863fa.mp4
 
 ### [Update Logs](assets/update_logs.md)
 
