@@ -277,7 +277,7 @@ class NeRFDataset:
         # sample a low-resolution but full image
         rays = get_rays(poses, intrinsics, self.H, self.W, -1)
 
-        # delta polar/azimuth/radius to default view for zero123
+        # delta polar/azimuth/radius to default view
         delta_polar = thetas - self.opt.default_theta
         delta_azimuth = phis - self.opt.default_phi
         delta_azimuth[delta_azimuth > 180] -= 360 # range in [-180, 180]

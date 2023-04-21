@@ -1,3 +1,7 @@
+### 2023.4.19
+* Fix depth supervision, migrate depth estimation model to omnidata.
+* Add normal supervision (also by omnidata).
+
 ### 2023.4.7
 Improvement on mesh quality & DMTet finetuning support.
 

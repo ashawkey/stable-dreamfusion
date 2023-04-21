@@ -5,8 +5,6 @@ import sys
 from nerf.provider import NeRFDataset
 from nerf.utils import *
 
-from nerf.gui import NeRFGUI
-
 # torch.autograd.set_detect_anomaly(True)
 
 if __name__ == '__main__':
@@ -57,7 +55,7 @@ if __name__ == '__main__':
     parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the density blob")
     parser.add_argument('--blob_radius', type=float, default=0.5, help="control the radius for the density blob")
     # network backbone
-    parser.add_argument('--backbone', type=str, default='grid', choices=['grid', 'vanilla', 'grid_taichi'], help="nerf backbone")
+    parser.add_argument('--backbone', type=str, default='grid', choices=['grid_tcnn', 'grid', 'vanilla', 'grid_taichi'], help="nerf backbone")
     parser.add_argument('--optim', type=str, default='adan', choices=['adan', 'adam'], help="optimizer")
     parser.add_argument('--sd_version', type=str, default='2.1', choices=['1.5', '2.0', '2.1'], help="stable diffusion version")
     parser.add_argument('--hf_key', type=str, default=None, help="hugging face Stable diffusion model key")
@@ -99,15 +97,16 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_orient', type=float, default=1e-2, help="loss scale for orientation")
     parser.add_argument('--lambda_tv', type=float, default=0, help="loss scale for total variation")
     parser.add_argument('--lambda_wd', type=float, default=0, help="loss scale")
-    parser.add_argument('--lambda_normal_smooth', type=float, default=0, help="loss scale for 2D normal image smoothness")
 
-    parser.add_argument('--lambda_normal', type=float, default=0.5, help="loss scale for mesh normal smoothness")
-    parser.add_argument('--lambda_lap', type=float, default=0.5, help="loss scale for mesh laplacian")
+    parser.add_argument('--lambda_mesh_normal', type=float, default=0.5, help="loss scale for mesh normal smoothness")
+    parser.add_argument('--lambda_mesh_laplacian', type=float, default=0.5, help="loss scale for mesh laplacian")
 
     parser.add_argument('--lambda_guidance', type=float, default=1, help="loss scale for SDS")
     parser.add_argument('--lambda_rgb', type=float, default=10, help="loss scale for RGB")
-    parser.add_argument('--lambda_mask', type=float, default=1, help="loss scale for mask (alpha)")
+    parser.add_argument('--lambda_mask', type=float, default=5, help="loss scale for mask (alpha)")
+    parser.add_argument('--lambda_normal', type=float, default=1, help="loss scale for normal map")
     parser.add_argument('--lambda_depth', type=float, default=1, help="loss scale for relative depth")
+    parser.add_argument('--lambda_2d_normal_smooth', type=float, default=0, help="loss scale for 2D normal image smoothness")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")
@@ -145,13 +144,10 @@ if __name__ == '__main__':
         else:
             # use stable-diffusion when providing both text and image
             opt.guidance = 'stable-diffusion'
-
             opt.guidance_scale = 100
-            opt.lambda_guidance = 0.1
-
+        
         # enforce surface smoothness in nerf stage
-        opt.lambda_normal_smooth = 1
-        opt.lambda_orient = 100
+        # opt.lambda_orient = 100
 
         # latent warmup is not needed, we hardcode a 100-iter rgbd loss only warmup.
         opt.warmup_iters = 0 
@@ -191,6 +187,8 @@ if __name__ == '__main__':
         from nerf.network import NeRFNetwork
     elif opt.backbone == 'grid':
         from nerf.network_grid import NeRFNetwork
+    elif opt.backbone == 'grid_tcnn':
+        from nerf.network_grid_tcnn import NeRFNetwork
     elif opt.backbone == 'grid_taichi':
         opt.cuda_ray = False
         opt.taichi_ray = True
@@ -229,6 +227,7 @@ if __name__ == '__main__':
         trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, fp16=opt.fp16, use_checkpoint=opt.ckpt)
 
         if opt.gui:
+            from nerf.gui import NeRFGUI
             gui = NeRFGUI(opt, trainer)
             gui.render()
 
@@ -273,7 +272,7 @@ if __name__ == '__main__':
         trainer.default_view_data = train_loader._data.get_default_view_data()
 
         if opt.gui:
-
+            from nerf.gui import NeRFGUI
             gui = NeRFGUI(opt, trainer, train_loader)
             gui.render()
 

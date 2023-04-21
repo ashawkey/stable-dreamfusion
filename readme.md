@@ -30,12 +30,21 @@ git clone https://github.com/ashawkey/stable-dreamfusion.git
 cd stable-dreamfusion
 ```
 
-To use image-conditioned 3D generation, you need to download the pretrained checkpoint of [Zero-1-to-3](https://github.com/cvlab-columbia/zero123) under `./pretrained/`.
-We use `105000.ckpt` by default, and it is hard-coded in `guidance/zero123_utils.py`.
-```bash
-cd pretrained
-wget https://huggingface.co/cvlab/zero123-weights/resolve/main/105000.ckpt
-```
+To use image-conditioned 3D generation, you need to download some pretrained checkpoints manually:
+* [Zero-1-to-3](https://github.com/cvlab-columbia/zero123) for diffusion backend.
+    We use `105000.ckpt` by default, and it is hard-coded in `guidance/zero123_utils.py`.
+    ```bash
+    cd pretrained/zero123
+    wget https://huggingface.co/cvlab/zero123-weights/resolve/main/105000.ckpt
+    ```
+* [Omnidata](https://github.com/EPFL-VILAB/omnidata/tree/main/omnidata_tools/torch) for depth and normal prediction. 
+    These ckpts are hardcoded in `preprocess_image.py`.
+    ```bash
+    cd pretrained/omnidata
+    # assume gdown is installed
+    gdown '1Jrh-bRnJEjyMCS7f-WsaFlccfPjJPPHI&confirm=t' # omnidata_dpt_depth_v2.ckpt
+    gdown '1wNxVO4vVbDEMEpnAi_jwQObf2MFodcBR&confirm=t' # omnidata_dpt_normal_v2.ckpt
+    ```
 
 ### Install with pip
 ```bash
@@ -142,8 +151,8 @@ python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5
 
 ## preprocess input image
 # note: the results of image-to-3D is dependent on zero-1-to-3's capability. For best performance, the input image should contain a single front-facing object. Check the examples under ./data.
-# this will exports `<image>_rgba.png` and `<image>_depth.png` to the directory containing the input image.
-python scripts/preprocess_image.py <image>.png 
+# this will exports `<image>_rgba.png`, `<image>_depth.png`, and `<image>_normal.png` to the directory containing the input image.
+python preprocess_image.py <image>.png 
 
 ## train
 # pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
@@ -165,7 +174,7 @@ For advanced tips and other developing stuff, check [Advanced Tips](./assets/adv
 
 This work is based on an increasing list of amazing research works and open-source projects, thanks a lot to all the authors for sharing!
 
-* [DreamFusion: Text-to-3D using 2D Diffusion](https://dreamfusion3d.github.io/).
+* [DreamFusion: Text-to-3D using 2D Diffusion](https://dreamfusion3d.github.io/)
     ```
     @article{poole2022dreamfusion,
         author = {Poole, Ben and Jain, Ajay and Barron, Jonathan T. and Mildenhall, Ben},
@@ -175,7 +184,7 @@ This work is based on an increasing list of amazing research works and open-sour
     }
     ```
 
-* [Magic3D: High-Resolution Text-to-3D Content Creation](https://research.nvidia.com/labs/dir/magic3d/):
+* [Magic3D: High-Resolution Text-to-3D Content Creation](https://research.nvidia.com/labs/dir/magic3d/)
    ```
    @inproceedings{lin2023magic3d,
       title={Magic3D: High-Resolution Text-to-3D Content Creation},

@@ -1,6 +1,4 @@
 import os
-import glob
-import tqdm
 import cv2
 import argparse
 import numpy as np
@@ -58,24 +56,61 @@ class BLIP2():
 
 
 class DPT():
-    def __init__(self, device='cuda'):
-        self.device = device
-        from transformers import DPTImageProcessor, DPTForDepthEstimation
-        self.processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
-        self.model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large").to(device)
+    def __init__(self, task='depth', device='cuda'):
 
+        self.task = task
+        self.device = device
+
+        from dpt import DPTDepthModel
+
+        if task == 'depth':
+            path = 'pretrained/omnidata/omnidata_dpt_depth_v2.ckpt'
+            self.model = DPTDepthModel(backbone='vitb_rn50_384')
+            self.aug = transforms.Compose([
+                transforms.Resize((384, 384)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=0.5, std=0.5)
+            ])
+
+        else: # normal
+            path = 'pretrained/omnidata/omnidata_dpt_normal_v2.ckpt'
+            self.model = DPTDepthModel(backbone='vitb_rn50_384', num_channels=3)
+            self.aug = transforms.Compose([
+                transforms.Resize((384, 384)),
+                transforms.ToTensor()
+            ])
+
+        # load model
+        checkpoint = torch.load(path, map_location='cpu')
+        if 'state_dict' in checkpoint:
+            state_dict = {}
+            for k, v in checkpoint['state_dict'].items():
+                state_dict[k[6:]] = v
+        else:
+            state_dict = checkpoint
+        self.model.load_state_dict(state_dict)
+        self.model.eval().to(device)
+
+        
     @torch.no_grad()
     def __call__(self, image):
-
+        # image: np.ndarray, uint8, [H, W, 3]
         H, W = image.shape[:2]
         image = Image.fromarray(image)
-        pixel_values = self.processor(image, return_tensors="pt").pixel_values.to(self.device)
-        outputs = self.model(pixel_values)
-        depth = outputs.predicted_depth
-        depth = F.interpolate(depth.unsqueeze(1), size=(H, W), mode='bicubic', align_corners=False)
-        depth = depth.squeeze(1).cpu().numpy()
 
-        return depth
+        image = self.aug(image).unsqueeze(0).to(self.device)
+
+        if self.task == 'depth':
+            depth = self.model(image).clamp(0, 1)
+            depth = F.interpolate(depth.unsqueeze(1), size=(H, W), mode='bicubic', align_corners=False)
+            depth = depth.squeeze(1).cpu().numpy()
+            return depth
+        else:
+            normal = self.model(image).clamp(0, 1)
+            normal = F.interpolate(normal, size=(H, W), mode='bicubic', align_corners=False)
+            normal = normal.cpu().numpy()
+            return normal
+
 
 
 if __name__ == '__main__':
@@ -87,6 +122,7 @@ if __name__ == '__main__':
     out_dir = os.path.dirname(opt.path)
     out_rgba = os.path.join(out_dir, os.path.basename(opt.path).split('.')[0] + '_rgba.png')
     out_depth = os.path.join(out_dir, os.path.basename(opt.path).split('.')[0] + '_depth.png')
+    out_normal = os.path.join(out_dir, os.path.basename(opt.path).split('.')[0] + '_normal.png')
     out_caption = os.path.join(out_dir, os.path.basename(opt.path).split('.')[0] + '_caption.txt')
 
     # load image
@@ -97,13 +133,30 @@ if __name__ == '__main__':
     else:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    # predict depth (with bg as it's more stable)
+    # carve background
+    print(f'[INFO] background removal...')
+    carved_image = BackgroundRemoval()(image) # [H, W, 4]
+    cv2.imwrite(out_rgba, cv2.cvtColor(carved_image, cv2.COLOR_RGBA2BGRA))
+    mask = carved_image[..., -1] > 0
+
+    # predict depth
     print(f'[INFO] depth estimation...')
-    dpt_model = DPT()
-    depth = dpt_model(image)[0]
-    depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-9)
+    dpt_depth_model = DPT(task='depth')
+    depth = dpt_depth_model(image)[0]
+    depth[mask] = (depth[mask] - depth[mask].min()) / (depth[mask].max() - depth[mask].min() + 1e-9)
+    depth[~mask] = 0
     depth = (depth * 255).astype(np.uint8)
     cv2.imwrite(out_depth, depth)
+    del dpt_depth_model
+
+    # predict normal
+    print(f'[INFO] normal estimation...')
+    dpt_normal_model = DPT(task='normal')
+    normal = dpt_normal_model(image)[0]
+    normal = (normal * 255).astype(np.uint8).transpose(1, 2, 0)
+    normal[~mask] = 0
+    cv2.imwrite(out_normal, normal)
+    del dpt_normal_model
 
     # predict caption (it's too slow... use your brain instead)
     # print(f'[INFO] captioning...')
@@ -111,12 +164,6 @@ if __name__ == '__main__':
     # caption = blip2(image)
     # with open(out_caption, 'w') as f:
     #     f.write(caption)
-
-    # carve background
-    print(f'[INFO] background removal...')
-    image = BackgroundRemoval()(image) # [H, W, 4]
-    
-    cv2.imwrite(out_rgba, cv2.cvtColor(image, cv2.COLOR_RGBA2BGRA))
 
 
     
