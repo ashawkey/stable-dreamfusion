@@ -188,11 +188,6 @@ class Trainer(object):
             for p in self.guidance.parameters():
                 p.requires_grad = False
             self.prepare_embeddings()
-        
-        # try out torch 2.0
-        if torch.__version__[0] == '2':
-            self.model = torch.compile(self.model)
-            self.guidance = torch.compile(self.guidance)
     
         if isinstance(criterion, nn.Module):
             criterion.to(self.device)
@@ -302,6 +297,13 @@ class Trainer(object):
             self.depth = torch.from_numpy(depth.astype(np.float32) / 255).to(self.device)
             print(f'[INFO] dataset: load depth prompt {depth_path} {self.depth.shape}')
 
+            # load normal
+            normal_path = self.opt.image.replace('_rgba.png', '_normal.png')
+            normal = cv2.imread(normal_path, cv2.IMREAD_UNCHANGED)
+            normal = cv2.resize(normal, (w, h), interpolation=cv2.INTER_AREA)
+            self.normal = torch.from_numpy(normal.astype(np.float32) / 255).to(self.device)
+            print(f'[INFO] dataset: load normal prompt {normal_path} {self.normal.shape}')
+
             # encode image_z for zero123
             if self.opt.guidance == 'zero123':
                 rgba_256 = cv2.resize(rgba, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
@@ -334,7 +336,7 @@ class Trainer(object):
 
         # perform RGBD loss instead of SDS if is image-conditioned
         do_rgbd_loss = self.opt.image is not None and \
-            (self.global_step < 100 or self.global_step % self.opt.known_view_interval == 0)
+            (self.global_step % self.opt.known_view_interval == 0)
 
         # override random camera with fixed known camera
         if do_rgbd_loss:
@@ -371,9 +373,10 @@ class Trainer(object):
             bg_color = torch.rand((B * N, 3), device=rays_o.device) 
 
             # add camera noise to avoid grid-like artifect
-            noise_scale = self.opt.known_view_noise_scale #* (1 - self.global_step / self.opt.iters)
-            rays_o = rays_o + torch.randn(3, device=self.device) * noise_scale
-            rays_d = rays_d + torch.randn(3, device=self.device) * noise_scale
+            if self.opt.known_view_noise_scale > 0:
+                noise_scale = self.opt.known_view_noise_scale #* (1 - self.global_step / self.opt.iters)
+                rays_o = rays_o + torch.randn(3, device=self.device) * noise_scale
+                rays_d = rays_d + torch.randn(3, device=self.device) * noise_scale
 
         elif self.global_step < self.opt.warmup_iters:
             ambient_ratio = 1.0
@@ -391,9 +394,9 @@ class Trainer(object):
                 shading = 'lambertian'
             as_latent = False
 
-            # random weights binarization (like mobile-nerf)
-            # binarize_thresh = min(0.5, self.global_step / (2 * self.opt.iters))
-            # binarize = (random.random() > binarize_thresh)
+            # random weights binarization (like mobile-nerf) [NOT WORKING NOW]
+            # binarize_thresh = min(0.5, -0.5 + self.global_step / self.opt.iters)
+            # binarize = random.random() < binarize_thresh
             binarize = False
 
             # random background
@@ -406,6 +409,8 @@ class Trainer(object):
         outputs = self.model.render(rays_o, rays_d, mvp, H, W, staged=False, perturb=True, bg_color=bg_color, ambient_ratio=ambient_ratio, shading=shading, binarize=binarize)
         pred_depth = outputs['depth'].reshape(B, 1, H, W)
         pred_mask = outputs['weights_sum'].reshape(B, 1, H, W)
+        if 'normal_image' in outputs:
+            pred_normal = outputs['normal_image'].reshape(B, H, W, 3)
 
         if as_latent:
             # abuse normal & mask as latent code for faster geometry initialization (ref: fantasia3D)
@@ -425,10 +430,18 @@ class Trainer(object):
             # mask loss
             loss = loss + self.opt.lambda_mask * F.mse_loss(pred_mask[0, 0], gt_mask.float())
 
+            # normal loss
+            if self.opt.lambda_normal > 0 and 'normal_image' in outputs:
+                valid_gt_normal = 1 - 2 * self.normal[gt_mask] # [B, 3]
+                valid_pred_normal = 2 * pred_normal.squeeze()[gt_mask] - 1 # [B, 3]
+                lambda_normal = self.opt.lambda_normal * min(1, self.global_step / self.opt.iters)
+                loss = loss + lambda_normal * (1 - F.cosine_similarity(valid_pred_normal, valid_gt_normal).mean())
+
             # relative depth loss
             if self.opt.lambda_depth > 0:
                 valid_gt_depth = self.depth[gt_mask].unsqueeze(1) # [B, 1]
                 valid_pred_depth = pred_depth.squeeze()[gt_mask].unsqueeze(1) # [B, 1]
+                # scale-invariant
                 with torch.no_grad():
                     A = torch.cat([valid_gt_depth, torch.ones_like(valid_gt_depth)], dim=-1) # [B, 2]
                     X = torch.linalg.lstsq(A, valid_pred_depth).solution # [2, 1]
@@ -483,26 +496,25 @@ class Trainer(object):
                 lambda_entropy = self.opt.lambda_entropy * min(1, 2 * self.global_step / self.opt.iters)
                 loss = loss + lambda_entropy * loss_entropy
 
-            if self.opt.lambda_normal_smooth > 0 and 'normal_image' in outputs:
+            if self.opt.lambda_2d_normal_smooth > 0 and 'normal_image' in outputs:
                 # pred_vals = outputs['normal_image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous()
                 # smoothed_vals = TF.gaussian_blur(pred_vals.detach(), kernel_size=9)
                 # loss_smooth = F.mse_loss(pred_vals, smoothed_vals)
-                pred_vals = outputs['normal_image'].reshape(B, H, W, 3)
                 # total-variation
-                loss_smooth = (pred_vals[:, 1:, :, :] - pred_vals[:, :-1, :, :]).square().mean() + \
-                              (pred_vals[:, :, 1:, :] - pred_vals[:, :, :-1, :]).square().mean()
-                loss = loss + self.opt.lambda_normal_smooth * loss_smooth
+                loss_smooth = (pred_normal[:, 1:, :, :] - pred_normal[:, :-1, :, :]).square().mean() + \
+                              (pred_normal[:, :, 1:, :] - pred_normal[:, :, :-1, :]).square().mean()
+                loss = loss + self.opt.lambda_2d_normal_smooth * loss_smooth
 
             if self.opt.lambda_orient > 0 and 'loss_orient' in outputs:
                 loss_orient = outputs['loss_orient']
                 loss = loss + self.opt.lambda_orient * loss_orient
         else:
 
-            if self.opt.lambda_normal > 0:
-                loss = loss + self.opt.lambda_normal * outputs['normal_loss']
+            if self.opt.lambda_mesh_normal > 0:
+                loss = loss + self.opt.lambda_mesh_normal * outputs['normal_loss']
             
-            if self.opt.lambda_lap > 0:
-                loss = loss + self.opt.lambda_lap * outputs['lap_loss']
+            if self.opt.lambda_mesh_laplacian > 0:
+                loss = loss + self.opt.lambda_mesh_laplacian * outputs['lap_loss']
 
         return pred_rgb, pred_depth, loss
     

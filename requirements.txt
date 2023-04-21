@@ -18,6 +18,9 @@ tensorboardX
 # for gui
 dearpygui
 
+# for grid_tcnn
+# git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+
 # for stable-diffusion
 huggingface_hub
 diffusers >= 0.9.0 
@@ -37,3 +40,6 @@ omegaconf
 pytorch-lightning
 git+https://github.com/CompVis/taming-transformers.git
 git+https://github.com/openai/CLIP.git
+
+# for dpt
+timm

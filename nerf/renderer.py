@@ -691,7 +691,7 @@ class NeRFRenderer(nn.Module):
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.sum(-1).mean()
             
-            if self.opt.lambda_normal_smooth > 0 and normals is not None:
+            if (self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0) and normals is not None:
                 normal_image = torch.sum(weights.unsqueeze(-1) * (normals + 1) / 2, dim=-2) # [N, 3], in [0, 1]
                 results['normal_image'] = normal_image
         
@@ -738,7 +738,7 @@ class NeRFRenderer(nn.Module):
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
             
-            if self.opt.lambda_normal_smooth > 0 and normals is not None:
+            if (self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0) and normals is not None:
                 _, _, _, normal_image = raymarching.composite_rays_train(sigmas.detach(), (normals + 1) / 2, ts, rays, T_thresh, binarize)
                 results['normal_image'] = normal_image
             
@@ -866,7 +866,6 @@ class NeRFRenderer(nn.Module):
 
         # rasterization
         verts_clip = torch.matmul(F.pad(verts, pad=(0, 1), mode='constant', value=1.0), torch.transpose(mvp[0], 0, 1)).float().unsqueeze(0)  # [1, N, 4]
-
         rast, rast_db = dr.rasterize(self.glctx, verts_clip, faces, (h, w))
         
         alpha, _ = dr.interpolate(torch.ones_like(verts[:, :1]).unsqueeze(0), rast, faces) # [1, H, W, 1]
@@ -915,12 +914,16 @@ class NeRFRenderer(nn.Module):
         results['depth'] = depth        
         results['image'] = color
         results['weights_sum'] = alpha.squeeze(-1)
+
+        if self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0:
+            normal_image = dr.antialias((normal + 1) / 2, rast, verts_clip, faces).squeeze(0).clamp(0, 1) # [H, W, 3]
+            results['normal_image'] = normal_image
         
         # regularizations
         if self.training:
-            if self.opt.lambda_normal > 0:
+            if self.opt.lambda_mesh_normal > 0:
                 results['normal_loss'] = normal_consistency(face_normals, faces)
-            if self.opt.lambda_lap > 0:
+            if self.opt.lambda_mesh_laplacian > 0:
                 results['lap_loss'] = laplacian_smooth_loss(verts, faces)
 
         return results
@@ -966,7 +969,7 @@ class NeRFRenderer(nn.Module):
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
             
-            if self.opt.lambda_normal_smooth > 0 and normals is not None:
+            if (self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0) and normals is not None:
                 _, _, _, normal_image, _ = self.volume_render(sigmas.detach(), (normals + 1) / 2, deltas, ts, rays_a, kwargs.get('T_threshold', 1e-4))
                 results['normal_image'] = normal_image
             

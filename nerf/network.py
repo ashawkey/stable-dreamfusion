@@ -100,7 +100,7 @@ class NeRFNetwork(NeRFRenderer):
 
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
-        self.encoder, self.in_dim = get_encoder(encoding, input_dim=3, multires=6)
+        self.encoder, self.in_dim = get_encoder(encoding, input_dim=3, multires=12)
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True, block=ResBlock)
 
         self.density_activation = trunc_exp if self.opt.density_activation == 'exp' else F.softplus
