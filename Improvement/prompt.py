@@ -1,10 +1,13 @@
+import textwrap
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, AutoModelForTokenClassification
 from transformers import pipeline
 import argparse
 import sys
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 
-#python prompt.py --text 'a dog is flying and the rabbit is jumping' --model vlt5
+# python prompt_processing.py --text a dog is flying and the rabbit is jumping --model vlt5
 
 if __name__ == '__main__':
 
@@ -31,28 +34,29 @@ if __name__ == '__main__':
                 input_sequences, return_tensors="pt", truncation=True
             ).input_ids
             output = model.generate(input_ids, no_repeat_ngram_size=3, num_beams=4)
-            predicted = tokenizer.decode(output[0], skip_special_tokens=True)
-            print(sample, "\n --->", predicted)
+            output_text = tokenizer.decode(output[0], skip_special_tokens=True)
+            #print(sample, "\n --->", output_text)
 
     elif opt.model == "bert":
         tokenizer = AutoTokenizer.from_pretrained("yanekyuk/bert-uncased-keyword-extractor")
         model = AutoModelForTokenClassification.from_pretrained("yanekyuk/bert-uncased-keyword-extractor")
 
         text = opt.text
-        inputs = tokenizer.encode(text, add_special_tokens=True, return_tensors="pt")
+        input_ids = tokenizer.encode(text, add_special_tokens=True, return_tensors="pt")
 
         # Classify tokens
-        outputs = model(**inputs)
+        outputs = model(input_ids)
         predictions = outputs.logits.detach().numpy()[0]
-        labels = logits.argmax(axis=1)
+        labels = predictions.argmax(axis=1)
         labels = labels[1:-1]
-
+        
+        print(labels)
         tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
         tokens = tokens[1:-1]
         output_tokens = [tokens[i] for i in range(len(tokens)) if labels[i] != 0]
         output_text = tokenizer.convert_tokens_to_string(output_tokens)
 
-        print(output_text)
+        #print(output_text)
 
 
     elif opt.model == "XLNet":
@@ -60,17 +64,27 @@ if __name__ == '__main__':
         model = AutoModelForTokenClassification.from_pretrained("jasminejwebb/KeywordIdentifier")
 
         text = opt.text
-        inputs = tokenizer.encode(text, add_special_tokens=True, return_tensors="pt")
+        input_ids = tokenizer.encode(text, add_special_tokens=True, return_tensors="pt")
 
         # Classify tokens
-        outputs = model(**inputs)
+        outputs = model(input_ids)
         predictions = outputs.logits.detach().numpy()[0]
-        labels = logits.argmax(axis=1)
+        labels = predictions.argmax(axis=1)
         labels = labels[1:-1]
-
+        
+        print(labels)
         tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
         tokens = tokens[1:-1]
         output_tokens = [tokens[i] for i in range(len(tokens)) if labels[i] != 0]
         output_text = tokenizer.convert_tokens_to_string(output_tokens)
 
-        print(output_text)
+        #print(output_text)
+
+wrapped_text = textwrap.fill(output_text, width=50)
+
+
+print('+' + '-'*52 + '+')
+for line in wrapped_text.split('\n'):
+    print('| {} |'.format(line.ljust(50)))
+print('+' + '-'*52 + '+')
+#print(result)
