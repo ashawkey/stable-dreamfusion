@@ -104,8 +104,8 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_guidance', type=float, default=1, help="loss scale for SDS")
     parser.add_argument('--lambda_rgb', type=float, default=10, help="loss scale for RGB")
     parser.add_argument('--lambda_mask', type=float, default=5, help="loss scale for mask (alpha)")
-    parser.add_argument('--lambda_normal', type=float, default=1, help="loss scale for normal map")
-    parser.add_argument('--lambda_depth', type=float, default=1, help="loss scale for relative depth")
+    parser.add_argument('--lambda_normal', type=float, default=0, help="loss scale for normal map")
+    parser.add_argument('--lambda_depth', type=float, default=0.1, help="loss scale for relative depth")
     parser.add_argument('--lambda_2d_normal_smooth', type=float, default=0, help="loss scale for 2D normal image smoothness")
 
     ### GUI options
@@ -138,17 +138,15 @@ if __name__ == '__main__':
 
             # very important to keep the image's content
             opt.guidance_scale = 3 
-            opt.lambda_guidance = 0.01 
-            opt.grad_clip = 1
+            opt.lambda_guidance = 0.02
             
         else:
             # use stable-diffusion when providing both text and image
             opt.guidance = 'stable-diffusion'
-            opt.guidance_scale = 100
         
-        # enforce surface smoothness in nerf stage
-        # opt.lambda_orient = 100
-
+        opt.t_range = [0.02, 0.50]
+        opt.lambda_orient = 10
+        
         # latent warmup is not needed, we hardcode a 100-iter rgbd loss only warmup.
         opt.warmup_iters = 0 
         
