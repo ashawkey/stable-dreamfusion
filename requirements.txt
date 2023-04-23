@@ -38,7 +38,8 @@ git+https://github.com/NVlabs/nvdiffrast/
 carvekit-colab
 omegaconf
 pytorch-lightning
-git+https://github.com/CompVis/taming-transformers.git
+taming-transformers-rom1504
+kornia
 git+https://github.com/openai/CLIP.git
 
 # for dpt

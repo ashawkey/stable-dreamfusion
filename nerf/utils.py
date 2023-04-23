@@ -434,6 +434,7 @@ class Trainer(object):
             if self.opt.lambda_normal > 0 and 'normal_image' in outputs:
                 valid_gt_normal = 1 - 2 * self.normal[gt_mask] # [B, 3]
                 valid_pred_normal = 2 * pred_normal.squeeze()[gt_mask] - 1 # [B, 3]
+
                 lambda_normal = self.opt.lambda_normal * min(1, self.global_step / self.opt.iters)
                 loss = loss + lambda_normal * (1 - F.cosine_similarity(valid_pred_normal, valid_gt_normal).mean())
 
@@ -480,7 +481,11 @@ class Trainer(object):
                 polar = data['polar']
                 azimuth = data['azimuth']
                 radius = data['radius']
-                loss = self.guidance.train_step(self.image_z, pred_rgb, polar, azimuth, radius, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance)
+
+                # adjust SDS scale based on how far the novel view is from the known view
+                lambda_guidance = (abs(azimuth) / 180) * self.opt.lambda_guidance
+
+                loss = self.guidance.train_step(self.image_z, pred_rgb, polar, azimuth, radius, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=lambda_guidance)
                 
         # regularizations
         if not self.opt.dmtet:
