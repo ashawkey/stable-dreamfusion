@@ -31,7 +31,7 @@ class SpecifyGradient(torch.autograd.Function):
 
 # load model
 def load_model_from_config(config, ckpt, device, vram_O=False, verbose=False):
-    
+
     pl_sd = torch.load(ckpt, map_location='cpu')
 
     if 'global_step' in pl_sd and verbose:
@@ -53,15 +53,15 @@ def load_model_from_config(config, ckpt, device, vram_O=False, verbose=False):
             print('[INFO] loading EMA...')
         model.model_ema.copy_to(model.model)
         del model.model_ema
-    
+
     if vram_O:
         # we don't need decoder
         del model.first_stage_model.decoder
 
     torch.cuda.empty_cache()
-    
+
     model.eval().to(device)
-    
+
     return model
 
 class Zero123(nn.Module):
@@ -81,7 +81,7 @@ class Zero123(nn.Module):
 
         # timesteps: use diffuser for convenience... hope it's alright.
         self.num_train_timesteps = self.config.model.params.timesteps
-        
+
         self.scheduler = DDIMScheduler(
             self.num_train_timesteps,
             self.config.model.params.linear_start,
@@ -98,14 +98,14 @@ class Zero123(nn.Module):
 
     @torch.no_grad()
     def get_img_embeds(self, x):
-        # x: image tensor [1, 3, 256, 256] in [0, 1]
+        # x: image tensor [B, 3, 256, 256] in [0, 1]
         x = x * 2 - 1
-        c = self.model.get_learned_conditioning(x) #.tile(n_samples, 1, 1)
-        v = self.model.encode_first_stage(x).mode()
+        c = [self.model.get_learned_conditioning(xx.unsqueeze(0)) for xx in x] #.tile(n_samples, 1, 1)
+        v = [self.model.encode_first_stage(xx.unsqueeze(0)).mode() for xx in x]
         return c, v
-    
+
     def train_step(self, embeddings, pred_rgb, polar, azimuth, radius, guidance_scale=3, as_latent=False, grad_scale=1):
-        # pred_rgb: tensor [1, 3, H, W] in [-1, 1]
+        # pred_rgb: tensor [1, 3, H, W] in [0, 1]
 
         if as_latent:
             latents = F.interpolate(pred_rgb, (32, 32), mode='bilinear', align_corners=False) * 2 - 1
@@ -121,17 +121,29 @@ class Zero123(nn.Module):
 
             x_in = torch.cat([latents_noisy] * 2)
             t_in = torch.cat([t] * 2)
-            T = torch.tensor([math.radians(polar), math.sin(math.radians(azimuth)), math.cos(math.radians(azimuth)), radius])
-            T = T[None, None, :].to(self.device)
-            cond = {}
-            clip_emb = self.model.cc_projection(torch.cat([embeddings[0], T], dim=-1))
-            cond['c_crossattn'] = [torch.cat([torch.zeros_like(clip_emb).to(self.device), clip_emb], dim=0)]
-            cond['c_concat'] = [torch.cat([torch.zeros_like(embeddings[1]).to(self.device), embeddings[1]], dim=0)]
 
-            noise_pred = self.model.apply_model(x_in, t_in, cond)
+            noise_preds = []
+            for (img_w, c_crossattn, c_concat, theta, phi, rad) in zip(embeddings['img_ws'],
+                                                                     embeddings['c_crossattn'], embeddings['c_concat'],
+                                                                     embeddings['thetas'], embeddings['phis'], embeddings['radii']):
+                if img_w == 0:
+                    continue
+                # polar,azimuth,radius are all actually delta wrt default
+                p = polar + embeddings['thetas'][0] - theta
+                a = azimuth + embeddings['phis'][0] - phi
+                a[a > 180] -= 360 # range in [-180, 180]
+                r = radius + embeddings['radii'][0] - rad
+                T = torch.tensor([math.radians(p), math.sin(math.radians(a)), math.cos(math.radians(a)), r])
+                T = T[None, None, :].to(self.device)
+                cond = {}
+                clip_emb = self.model.cc_projection(torch.cat([c_crossattn, T], dim=-1))
+                cond['c_crossattn'] = [torch.cat([torch.zeros_like(clip_emb).to(self.device), clip_emb], dim=0)]
+                cond['c_concat'] = [torch.cat([torch.zeros_like(c_concat).to(self.device), c_concat], dim=0)]
+                noise_pred = self.model.apply_model(x_in, t_in, cond)
+                noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
+                noise_preds.append(img_w * (noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)))
 
-        noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
-        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)
+        noise_pred = torch.stack(noise_preds).sum(dim=0) / sum(embeddings['img_ws'])
 
         w = (1 - self.alphas[t])
         grad = grad_scale * w * (noise_pred - noise)
@@ -165,7 +177,7 @@ class Zero123(nn.Module):
         loss = SpecifyGradient.apply(latents, grad)
 
         return loss
-    
+
     # verification
     @torch.no_grad()
     def __call__(self,
@@ -186,7 +198,7 @@ class Zero123(nn.Module):
         # produce latents loop
         latents = torch.randn((1, 4, h // 8, w // 8), device=self.device)
         self.scheduler.set_timesteps(ddim_steps)
-    
+
         for i, t in enumerate(self.scheduler.timesteps):
             x_in = torch.cat([latents] * 2)
             t_in = torch.cat([t.view(1)] * 2).to(self.device)
@@ -199,7 +211,7 @@ class Zero123(nn.Module):
 
         imgs = self.decode_latents(latents)
         imgs = imgs.cpu().numpy().transpose(0, 2, 3, 1)
-        
+
         return imgs
 
     def decode_latents(self, latents):
@@ -208,7 +220,7 @@ class Zero123(nn.Module):
         imgs = self.model.decode_first_stage(latents)
         imgs = (imgs / 2 + 0.5).clamp(0, 1)
 
-        return imgs # [B, 3, 256, 256] RGB space image    
+        return imgs # [B, 3, 256, 256] RGB space image
 
     def encode_imgs(self, imgs):
         # imgs: [B, 3, 256, 256] RGB space image
@@ -216,14 +228,14 @@ class Zero123(nn.Module):
         imgs = imgs * 2 - 1
         latents = self.model.get_first_stage_encoding(self.model.encode_first_stage(imgs))
         return latents # [B, 4, 32, 32] Latent space image
-    
-    
+
+
 if __name__ == '__main__':
     import cv2
     import argparse
     import numpy as np
     import matplotlib.pyplot as plt
-    
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument('input', type=str)

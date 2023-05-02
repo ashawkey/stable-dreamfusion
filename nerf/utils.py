@@ -125,11 +125,11 @@ def srgb_to_linear(x):
 
 
 class Trainer(object):
-    def __init__(self, 
+    def __init__(self,
 		         argv, # command line args
                  name, # name of this experiment
                  opt, # extra conf
-                 model, # network 
+                 model, # network
                  guidance, # guidance network
                  criterion=None, # loss function, if None, assume inline implementation in train_step
                  optimizer=None, # optimizer
@@ -151,7 +151,7 @@ class Trainer(object):
                  use_tensorboardX=True, # whether to use tensorboard for logging
                  scheduler_update_every_step=False, # whether to call scheduler.step() after every train step
                  ):
-        
+
         self.argv = argv
         self.name = name
         self.opt = opt
@@ -173,7 +173,7 @@ class Trainer(object):
         self.scheduler_update_every_step = scheduler_update_every_step
         self.device = device if device is not None else torch.device(f'cuda:{local_rank}' if torch.cuda.is_available() else 'cpu')
         self.console = Console()
-    
+
         model.to(self.device)
         if self.world_size > 1:
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -184,11 +184,11 @@ class Trainer(object):
         self.guidance = guidance
 
         # text prompt
-        if self.guidance is not None:            
+        if self.guidance is not None:
             for p in self.guidance.parameters():
                 p.requires_grad = False
             self.prepare_embeddings()
-    
+
         if isinstance(criterion, nn.Module):
             criterion.to(self.device)
         self.criterion = criterion
@@ -229,14 +229,14 @@ class Trainer(object):
         # workspace prepare
         self.log_ptr = None
         if self.workspace is not None:
-            os.makedirs(self.workspace, exist_ok=True)        
+            os.makedirs(self.workspace, exist_ok=True)
             self.log_path = os.path.join(workspace, f"log_{self.name}.txt")
             self.log_ptr = open(self.log_path, "a+")
 
             self.ckpt_path = os.path.join(self.workspace, 'checkpoints')
             self.best_path = f"{self.ckpt_path}/{self.name}.pth"
             os.makedirs(self.ckpt_path, exist_ok=True)
-        
+
         self.log(f'[INFO] Cmdline: {self.argv}')
         self.log(f'[INFO] Trainer: {self.name} | {self.time_stamp} | {self.device} | {"fp16" if self.fp16 else "fp32"} | {self.workspace}')
         self.log(f'[INFO] #parameters: {sum([p.numel() for p in model.parameters() if p.requires_grad])}')
@@ -263,10 +263,10 @@ class Trainer(object):
 
     # calculate the text embs.
     def prepare_embeddings(self):
-        
+
         # text embeddings (stable-diffusion)
         if self.opt.text is not None:
-        
+
             self.text_z = {}
 
             self.text_z['default'] = self.guidance.get_text_embeds([self.opt.text])
@@ -276,66 +276,74 @@ class Trainer(object):
                 self.text_z[d] = self.guidance.get_text_embeds([f"{self.opt.text}, {d} view"])
         else:
             self.text_z = None
-        
-        if self.opt.image is not None:
+
+        if self.opt.images is not None:
 
             h = int(self.opt.known_view_scale * self.opt.h)
             w = int(self.opt.known_view_scale * self.opt.w)
 
             # load processed image
-            rgba = cv2.cvtColor(cv2.imread(self.opt.image, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
-            rgba_hw = cv2.resize(rgba, (w, h), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
+            rgbas = [cv2.cvtColor(cv2.imread(image, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA) for image in self.opt.images]
+            rgba_hw = np.stack([cv2.resize(rgba, (w, h), interpolation=cv2.INTER_AREA).astype(np.float32) / 255 for rgba in rgbas])
             rgb_hw = rgba_hw[..., :3] * rgba_hw[..., 3:] + (1 - rgba_hw[..., 3:])
-            self.rgb = torch.from_numpy(rgb_hw).permute(2,0,1).unsqueeze(0).contiguous().to(self.device)
+            self.rgb = torch.from_numpy(rgb_hw).permute(0,3,1,2).contiguous().to(self.device)
             self.mask = torch.from_numpy(rgba_hw[..., 3] > 0.5).to(self.device)
-            print(f'[INFO] dataset: load image prompt {self.opt.image} {self.rgb.shape}')
+            print(f'[INFO] dataset: load image prompt {self.opt.images} {self.rgb.shape}')
 
             # load depth
-            depth_path = self.opt.image.replace('_rgba.png', '_depth.png')
-            depth = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
-            depth = cv2.resize(depth, (w, h), interpolation=cv2.INTER_AREA)
+            depth_paths = [image.replace('_rgba.png', '_depth.png') for image in self.opt.images]
+            depths = [cv2.imread(depth_path, cv2.IMREAD_UNCHANGED) for depth_path in depth_paths]
+            depth = np.stack([cv2.resize(depth, (w, h), interpolation=cv2.INTER_AREA) for depth in depths])
             self.depth = torch.from_numpy(depth.astype(np.float32) / 255).to(self.device)
-            print(f'[INFO] dataset: load depth prompt {depth_path} {self.depth.shape}')
+            print(f'[INFO] dataset: load depth prompt {depth_paths} {self.depth.shape}')
 
             # load normal
-            normal_path = self.opt.image.replace('_rgba.png', '_normal.png')
-            normal = cv2.imread(normal_path, cv2.IMREAD_UNCHANGED)
-            normal = cv2.resize(normal, (w, h), interpolation=cv2.INTER_AREA)
+            normal_paths = [image.replace('_rgba.png', '_normal.png') for image in self.opt.images]
+            normals = [cv2.imread(normal_path, cv2.IMREAD_UNCHANGED) for normal_path in normal_paths]
+            normal = np.stack([cv2.resize(normal, (w, h), interpolation=cv2.INTER_AREA) for normal in normals])
             self.normal = torch.from_numpy(normal.astype(np.float32) / 255).to(self.device)
-            print(f'[INFO] dataset: load normal prompt {normal_path} {self.normal.shape}')
+            print(f'[INFO] dataset: load normal prompt {normal_paths} {self.normal.shape}')
 
             # encode image_z for zero123
             if self.opt.guidance == 'zero123':
-                rgba_256 = cv2.resize(rgba, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32) / 255
-                rgb_256 = rgba_256[..., :3] * rgba_256[..., 3:] + (1 - rgba_256[..., 3:])
-                rgb_256 = torch.from_numpy(rgb_256).permute(2,0,1).unsqueeze(0).contiguous().to(self.device)
-                self.image_z = self.guidance.get_img_embeds(rgb_256)
+                rgba_256 = np.stack([cv2.resize(rgba, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32) / 255 for rgba in rgbas])
+                rgbs_256 = rgba_256[..., :3] * rgba_256[..., 3:] + (1 - rgba_256[..., 3:])
+                rgb_256 = torch.from_numpy(rgbs_256).permute(0,3,1,2).contiguous().to(self.device)
+                guidance_embeds = self.guidance.get_img_embeds(rgb_256)
+                self.image_z = {
+                    'img_ws' : self.opt.img_ws,
+                    'c_crossattn' : guidance_embeds[0],
+                    'c_concat' : guidance_embeds[1],
+                    'thetas' : self.opt.thetas,
+                    'phis' : self.opt.phis,
+                    'radii' : self.opt.radii,
+                }
             else:
                 self.image_z = None
-        
+
         else:
             self.image_z = None
 
     def __del__(self):
-        if self.log_ptr: 
+        if self.log_ptr:
             self.log_ptr.close()
 
 
     def log(self, *args, **kwargs):
         if self.local_rank == 0:
-            if not self.mute: 
+            if not self.mute:
                 #print(*args)
                 self.console.print(*args, **kwargs)
-            if self.log_ptr: 
+            if self.log_ptr:
                 print(*args, file=self.log_ptr)
                 self.log_ptr.flush() # write immediately to file
 
-    ### ------------------------------	
+    ### ------------------------------
 
     def train_step(self, data):
 
         # perform RGBD loss instead of SDS if is image-conditioned
-        do_rgbd_loss = self.opt.image is not None and \
+        do_rgbd_loss = self.opt.images is not None and \
             (self.global_step % self.opt.known_view_interval == 0)
 
         # override random camera with fixed known camera
@@ -345,13 +353,13 @@ class Trainer(object):
         # progressively relaxing view range
         if self.opt.progressive_view:
             r = min(1.0, 0.2 + self.global_step / (0.5 * self.opt.iters))
-            self.opt.phi_range = [self.opt.default_phi * (1 - r) + self.opt.full_phi_range[0] * r, 
+            self.opt.phi_range = [self.opt.default_phi * (1 - r) + self.opt.full_phi_range[0] * r,
                                   self.opt.default_phi * (1 - r) + self.opt.full_phi_range[1] * r]
-            self.opt.theta_range = [self.opt.default_theta * (1 - r) + self.opt.full_theta_range[0] * r, 
+            self.opt.theta_range = [self.opt.default_theta * (1 - r) + self.opt.full_theta_range[0] * r,
                                     self.opt.default_theta * (1 - r) + self.opt.full_theta_range[1] * r]
-            self.opt.radius_range = [self.opt.default_radius * (1 - r) + self.opt.full_radius_range[0] * r, 
+            self.opt.radius_range = [self.opt.default_radius * (1 - r) + self.opt.full_radius_range[0] * r,
                                     self.opt.default_radius * (1 - r) + self.opt.full_radius_range[1] * r]
-            self.opt.fovy_range = [self.opt.default_fovy * (1 - r) + self.opt.full_fovy_range[0] * r, 
+            self.opt.fovy_range = [self.opt.default_fovy * (1 - r) + self.opt.full_fovy_range[0] * r,
                                     self.opt.default_fovy * (1 - r) + self.opt.full_fovy_range[1] * r]
 
         # progressively increase max_level
@@ -370,7 +378,7 @@ class Trainer(object):
             shading = 'ambient'
             as_latent = False
             binarize = False
-            bg_color = torch.rand((B * N, 3), device=rays_o.device) 
+            bg_color = torch.rand((B * N, 3), device=rays_o.device)
 
             # add camera noise to avoid grid-like artifect
             if self.opt.known_view_noise_scale > 0:
@@ -384,13 +392,13 @@ class Trainer(object):
             as_latent = True
             binarize = False
             bg_color = None
-        else: 
+        else:
             # random shading
             ambient_ratio = 0.1 + 0.9 * random.random()
             rand = random.random()
-            if rand > 0.8: 
+            if rand > 0.8:
                 shading = 'textureless'
-            else: 
+            else:
                 shading = 'lambertian'
             as_latent = False
 
@@ -414,26 +422,26 @@ class Trainer(object):
 
         if as_latent:
             # abuse normal & mask as latent code for faster geometry initialization (ref: fantasia3D)
-            pred_rgb = torch.cat([outputs['image'], outputs['weights_sum'].unsqueeze(-1)], dim=-1).reshape(B, H, W, 4).permute(0, 3, 1, 2).contiguous() # [1, 4, H, W]
+            pred_rgb = torch.cat([outputs['image'], outputs['weights_sum'].unsqueeze(-1)], dim=-1).reshape(B, H, W, 4).permute(0, 3, 1, 2).contiguous() # [B, 4, H, W]
         else:
-            pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [1, 3, H, W]
+            pred_rgb = outputs['image'].reshape(B, H, W, 3).permute(0, 3, 1, 2).contiguous() # [B, 3, H, W]
 
         # known view loss
         if do_rgbd_loss:
-            gt_mask = self.mask # [H, W]
-            gt_rgb = self.rgb # [3, H, W]
-            
+            gt_mask = self.mask # [B, H, W]
+            gt_rgb = self.rgb # [B, 3, H, W]
+
             # color loss
             gt_rgb = gt_rgb * gt_mask.float() + bg_color.reshape(H, W, 3).permute(2,0,1).contiguous() * (1 - gt_mask.float())
             loss = self.opt.lambda_rgb * F.mse_loss(pred_rgb, gt_rgb)
-            
+
             # mask loss
-            loss = loss + self.opt.lambda_mask * F.mse_loss(pred_mask[0, 0], gt_mask.float())
+            loss = loss + self.opt.lambda_mask * F.mse_loss(pred_mask[:, 0], gt_mask.float())
 
             # normal loss
             if self.opt.lambda_normal > 0 and 'normal_image' in outputs:
                 valid_gt_normal = 1 - 2 * self.normal[gt_mask] # [B, 3]
-                valid_pred_normal = 2 * pred_normal.squeeze()[gt_mask] - 1 # [B, 3]
+                valid_pred_normal = 2 * pred_normal[gt_mask] - 1 # [B, 3]
 
                 lambda_normal = self.opt.lambda_normal * min(1, self.global_step / self.opt.iters)
                 loss = loss + lambda_normal * (1 - F.cosine_similarity(valid_pred_normal, valid_gt_normal).mean())
@@ -441,7 +449,7 @@ class Trainer(object):
             # relative depth loss
             if self.opt.lambda_depth > 0:
                 valid_gt_depth = self.depth[gt_mask].unsqueeze(1) # [B, 1]
-                valid_pred_depth = pred_depth.squeeze()[gt_mask].unsqueeze(1) # [B, 1]
+                valid_pred_depth = pred_depth[:, 0][gt_mask].unsqueeze(1) # [B, 1]
                 # scale-invariant
                 with torch.no_grad():
                     A = torch.cat([valid_gt_depth, torch.ones_like(valid_gt_depth)], dim=-1) # [B, 2]
@@ -456,7 +464,7 @@ class Trainer(object):
             if self.opt.guidance == 'stable-diffusion':
                 # interpolate text_z
                 azimuth = data['azimuth'] # [-180, 180]
-                
+
                 if azimuth >= -90 and azimuth < 90:
                     if azimuth >= 0:
                         r = 1 - azimuth / 90
@@ -472,7 +480,7 @@ class Trainer(object):
                     start_z = self.text_z['side']
                     end_z = self.text_z['back']
 
-                pos_z = r * start_z + (1 - r) * end_z    
+                pos_z = r * start_z + (1 - r) * end_z
                 uncond_z = self.text_z['uncond']
                 text_z = torch.cat([uncond_z, pos_z], dim=0)
                 loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance)
@@ -486,7 +494,7 @@ class Trainer(object):
                 lambda_guidance = (abs(azimuth) / 180) * self.opt.lambda_guidance
 
                 loss = self.guidance.train_step(self.image_z, pred_rgb, polar, azimuth, radius, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=lambda_guidance)
-                
+
         # regularizations
         if not self.opt.dmtet:
 
@@ -517,12 +525,12 @@ class Trainer(object):
 
             if self.opt.lambda_mesh_normal > 0:
                 loss = loss + self.opt.lambda_mesh_normal * outputs['normal_loss']
-            
+
             if self.opt.lambda_mesh_laplacian > 0:
                 loss = loss + self.opt.lambda_mesh_laplacian * outputs['lap_loss']
 
         return pred_rgb, pred_depth, loss
-    
+
     def post_train_step(self):
 
         # unscale grad before modifying it!
@@ -534,7 +542,7 @@ class Trainer(object):
             torch.nn.utils.clip_grad_value_(self.model.parameters(), self.opt.grad_clip)
 
         if not self.opt.dmtet and self.opt.backbone == 'grid':
-            
+
             if self.opt.lambda_tv > 0:
                 lambda_tv = min(1.0, self.global_step / (0.5 * self.opt.iters)) * self.opt.lambda_tv
                 self.model.encoder.grad_total_variation(lambda_tv, None, self.model.bound)
@@ -558,12 +566,12 @@ class Trainer(object):
         pred_rgb = outputs['image'].reshape(B, H, W, 3)
         pred_depth = outputs['depth'].reshape(B, H, W)
 
-        # dummy 
+        # dummy
         loss = torch.zeros([1], device=pred_rgb.device, dtype=pred_rgb.dtype)
 
         return pred_rgb, pred_depth, loss
 
-    def test_step(self, data, bg_color=None, perturb=False):  
+    def test_step(self, data, bg_color=None, perturb=False):
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
         mvp = data['mvp']
@@ -595,7 +603,7 @@ class Trainer(object):
         os.makedirs(save_path, exist_ok=True)
 
         self.model.export_mesh(save_path, resolution=self.opt.mcubes_resolution, decimate_target=self.opt.decimate_target)
-        
+
         self.log(f"==> Finished saving mesh.")
 
     ### ------------------------------
@@ -606,7 +614,7 @@ class Trainer(object):
             self.writer = tensorboardX.SummaryWriter(os.path.join(self.workspace, "run", self.name))
 
         start_t = time.time()
-        
+
         for epoch in range(self.epoch + 1, max_epochs + 1):
             self.epoch = epoch
 
@@ -640,7 +648,7 @@ class Trainer(object):
             name = f'{self.name}_ep{self.epoch:04d}'
 
         os.makedirs(save_path, exist_ok=True)
-        
+
         self.log(f"==> Start Test, save results to {save_path}")
 
         pbar = tqdm.tqdm(total=len(loader) * loader.batch_size, bar_format='{percentage:3.0f}% {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
@@ -653,7 +661,7 @@ class Trainer(object):
         with torch.no_grad():
 
             for i, data in enumerate(loader):
-                
+
                 with torch.cuda.amp.autocast(enabled=self.fp16):
                     preds, preds_depth, _ = self.test_step(data)
 
@@ -676,23 +684,23 @@ class Trainer(object):
         if write_video:
             all_preds = np.stack(all_preds, axis=0)
             all_preds_depth = np.stack(all_preds_depth, axis=0)
-            
+
             imageio.mimwrite(os.path.join(save_path, f'{name}_rgb.mp4'), all_preds, fps=25, quality=8, macro_block_size=1)
             imageio.mimwrite(os.path.join(save_path, f'{name}_depth.mp4'), all_preds_depth, fps=25, quality=8, macro_block_size=1)
 
         self.log(f"==> Finished Test.")
-    
+
     # [GUI] train text step.
     def train_gui(self, train_loader, step=16):
 
         self.model.train()
 
         total_loss = torch.tensor([0], dtype=torch.float32, device=self.device)
-        
+
         loader = iter(train_loader)
 
         for _ in range(step):
-            
+
             # mimic an infinite loop dataloader (in case the total dataset is smaller than step)
             try:
                 data = next(loader)
@@ -704,19 +712,19 @@ class Trainer(object):
             if self.model.cuda_ray and self.global_step % self.opt.update_extra_interval == 0:
                 with torch.cuda.amp.autocast(enabled=self.fp16):
                     self.model.update_extra_state()
-            
+
             self.global_step += 1
 
             self.optimizer.zero_grad()
 
             with torch.cuda.amp.autocast(enabled=self.fp16):
                 pred_rgbs, pred_depths, loss = self.train_step(data)
-         
+
             self.scaler.scale(loss).backward()
             self.post_train_step()
             self.scaler.step(self.optimizer)
             self.scaler.update()
-            
+
             if self.scheduler_update_every_step:
                 self.lr_scheduler.step()
 
@@ -737,13 +745,13 @@ class Trainer(object):
             'loss': average_loss,
             'lr': self.optimizer.param_groups[0]['lr'],
         }
-        
+
         return outputs
 
-    
+
     # [GUI] test on a single image
     def test_gui(self, pose, intrinsics, mvp, W, H, bg_color=None, spp=1, downscale=1, light_d=None, ambient_ratio=1.0, shading='albedo'):
-        
+
         # render resolution (may need downscale to for better frame rate)
         rH = int(H * downscale)
         rW = int(W * downscale)
@@ -773,7 +781,7 @@ class Trainer(object):
             'ambient_ratio': ambient_ratio,
             'shading': shading,
         }
-        
+
         self.model.eval()
 
         if self.ema is not None:
@@ -815,19 +823,19 @@ class Trainer(object):
         # ref: https://pytorch.org/docs/stable/data.html
         if self.world_size > 1:
             loader.sampler.set_epoch(self.epoch)
-        
+
         if self.local_rank == 0:
             pbar = tqdm.tqdm(total=len(loader) * loader.batch_size, bar_format='{desc}: {percentage:3.0f}% {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
 
         self.local_step = 0
 
         for data in loader:
-            
+
             # update grid every 16 steps
             if (self.model.cuda_ray or self.model.taichi_ray) and self.global_step % self.opt.update_extra_interval == 0:
                 with torch.cuda.amp.autocast(enabled=self.fp16):
                     self.model.update_extra_state()
-                    
+
             self.local_step += 1
             self.global_step += 1
 
@@ -864,7 +872,7 @@ class Trainer(object):
                 # if self.report_metric_at_train:
                 #     for metric in self.metrics:
                 #         metric.update(preds, truths)
-                        
+
                 if self.use_tensorboardX:
                     self.writer.add_scalar("train/loss", loss_val, self.global_step)
                     self.writer.add_scalar("train/lr", self.optimizer.param_groups[0]['lr'], self.global_step)
@@ -922,7 +930,7 @@ class Trainer(object):
         with torch.no_grad():
             self.local_step = 0
 
-            for data in loader:    
+            for data in loader:
                 self.local_step += 1
 
                 with torch.cuda.amp.autocast(enabled=self.fp16):
@@ -932,7 +940,7 @@ class Trainer(object):
                 if self.world_size > 1:
                     dist.all_reduce(loss, op=dist.ReduceOp.SUM)
                     loss = loss / self.world_size
-                    
+
                     preds_list = [torch.zeros_like(preds).to(self.device) for _ in range(self.world_size)] # [[B, ...], [B, ...], ...]
                     dist.all_gather(preds_list, preds)
                     preds = torch.cat(preds_list, dim=0)
@@ -940,7 +948,7 @@ class Trainer(object):
                     preds_depth_list = [torch.zeros_like(preds_depth).to(self.device) for _ in range(self.world_size)] # [[B, ...], [B, ...], ...]
                     dist.all_gather(preds_depth_list, preds_depth)
                     preds_depth = torch.cat(preds_depth_list, dim=0)
-                
+
                 loss_val = loss.item()
                 total_loss += loss_val
 
@@ -960,7 +968,7 @@ class Trainer(object):
                     pred_depth = preds_depth[0].detach().cpu().numpy()
                     pred_depth = (pred_depth - pred_depth.min()) / (pred_depth.max() - pred_depth.min() + 1e-6)
                     pred_depth = (pred_depth * 255).astype(np.uint8)
-                    
+
                     cv2.imwrite(save_path, cv2.cvtColor(pred, cv2.COLOR_RGB2BGR))
                     cv2.imwrite(save_path_depth, pred_depth)
 
@@ -1003,7 +1011,7 @@ class Trainer(object):
 
         if self.model.cuda_ray:
             state['mean_density'] = self.model.mean_density
-        
+
         if self.opt.dmtet:
             state['tet_scale'] = self.model.tet_scale.cpu().numpy()
 
@@ -1013,7 +1021,7 @@ class Trainer(object):
             state['scaler'] = self.scaler.state_dict()
             if self.ema is not None:
                 state['ema'] = self.ema.state_dict()
-        
+
         if not best:
 
             state['model'] = self.model.state_dict()
@@ -1029,14 +1037,14 @@ class Trainer(object):
 
             torch.save(state, os.path.join(self.ckpt_path, file_path))
 
-        else:    
+        else:
             if len(self.stats["results"]) > 0:
                 # always save best since loss cannot reflect performance.
                 if True:
                     # self.log(f"[INFO] New best result: {self.stats['best_result']} --> {self.stats['results'][-1]}")
                     # self.stats["best_result"] = self.stats["results"][-1]
 
-                    # save ema results 
+                    # save ema results
                     if self.ema is not None:
                         self.ema.store()
                         self.ema.copy_to()
@@ -1045,11 +1053,11 @@ class Trainer(object):
 
                     if self.ema is not None:
                         self.ema.restore()
-                    
+
                     torch.save(state, self.best_path)
             else:
                 self.log(f"[WARN] no evaluated results found, skip saving best checkpoint.")
-            
+
     def load_checkpoint(self, checkpoint=None, model_only=False):
         if checkpoint is None:
             checkpoint_list = sorted(glob.glob(f'{self.ckpt_path}/*.pth'))
@@ -1061,7 +1069,7 @@ class Trainer(object):
                 return
 
         checkpoint_dict = torch.load(checkpoint, map_location=self.device)
-        
+
         if 'model' not in checkpoint_dict:
             self.model.load_state_dict(checkpoint_dict)
             self.log("[INFO] loaded model.")
@@ -1072,7 +1080,7 @@ class Trainer(object):
         if len(missing_keys) > 0:
             self.log(f"[WARN] missing keys: {missing_keys}")
         if len(unexpected_keys) > 0:
-            self.log(f"[WARN] unexpected keys: {unexpected_keys}")   
+            self.log(f"[WARN] unexpected keys: {unexpected_keys}")
 
         if self.ema is not None and 'ema' in checkpoint_dict:
             try:
@@ -1084,7 +1092,7 @@ class Trainer(object):
         if self.model.cuda_ray:
             if 'mean_density' in checkpoint_dict:
                 self.model.mean_density = checkpoint_dict['mean_density']
-            
+
         if self.opt.dmtet:
             if 'tet_scale' in checkpoint_dict:
                 new_scale = torch.from_numpy(checkpoint_dict['tet_scale']).to(self.device)
@@ -1098,21 +1106,21 @@ class Trainer(object):
         self.epoch = checkpoint_dict['epoch']
         self.global_step = checkpoint_dict['global_step']
         self.log(f"[INFO] load at epoch {self.epoch}, global step {self.global_step}")
-        
+
         if self.optimizer and 'optimizer' in checkpoint_dict:
             try:
                 self.optimizer.load_state_dict(checkpoint_dict['optimizer'])
                 self.log("[INFO] loaded optimizer.")
             except:
                 self.log("[WARN] Failed to load optimizer.")
-        
+
         if self.lr_scheduler and 'lr_scheduler' in checkpoint_dict:
             try:
                 self.lr_scheduler.load_state_dict(checkpoint_dict['lr_scheduler'])
                 self.log("[INFO] loaded scheduler.")
             except:
                 self.log("[WARN] Failed to load scheduler.")
-        
+
         if self.scaler and 'scaler' in checkpoint_dict:
             try:
                 self.scaler.load_state_dict(checkpoint_dict['scaler'])
