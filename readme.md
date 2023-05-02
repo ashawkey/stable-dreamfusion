@@ -30,6 +30,23 @@ git clone https://github.com/ashawkey/stable-dreamfusion.git
 cd stable-dreamfusion
 ```
 
+### Optional: create a python virtual environment
+
+To avoid python package conflicts, we recommend using a virtual environment, e.g.: using conda or venv: 
+
+```bash
+python -m venv venv_stable-dreamfusion
+source venv_stable-dreamfusion/bin/activate # you need to repeat this step for every new terminal
+```
+
+### Install with pip
+
+```bash
+pip install -r requirements.txt
+```
+
+### Download pre-trained models
+
 To use image-conditioned 3D generation, you need to download some pretrained checkpoints manually:
 * [Zero-1-to-3](https://github.com/cvlab-columbia/zero123) for diffusion backend.
     We use `105000.ckpt` by default, and it is hard-coded in `guidance/zero123_utils.py`.
@@ -40,21 +57,19 @@ To use image-conditioned 3D generation, you need to download some pretrained che
 * [Omnidata](https://github.com/EPFL-VILAB/omnidata/tree/main/omnidata_tools/torch) for depth and normal prediction. 
     These ckpts are hardcoded in `preprocess_image.py`.
     ```bash
+    mkdir pretrained/omnidata
     cd pretrained/omnidata
     # assume gdown is installed
     gdown '1Jrh-bRnJEjyMCS7f-WsaFlccfPjJPPHI&confirm=t' # omnidata_dpt_depth_v2.ckpt
     gdown '1wNxVO4vVbDEMEpnAi_jwQObf2MFodcBR&confirm=t' # omnidata_dpt_normal_v2.ckpt
     ```
 
-### Install with pip
-```bash
-pip install -r requirements.txt
-```
-
 ### Build extension (optional)
 By default, we use [`load`](https://pytorch.org/docs/stable/cpp_extension.html#torch.utils.cpp_extension.load) to build the extension at runtime.
 We also provide the `setup.py` to build each extension:
 ```bash
+cd stable-dreamfusion
+
 # install all extension modules
 bash scripts/install_ext.sh
 
