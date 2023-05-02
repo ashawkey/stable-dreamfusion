@@ -1,5 +1,6 @@
 import torch
 import argparse
+import pandas as pd
 import sys
 
 from nerf.provider import NeRFDataset
@@ -21,6 +22,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=None)
 
     parser.add_argument('--image', default=None, help="image prompt")
+    parser.add_argument('--image_config', default=None, help="image config csv")
+
     parser.add_argument('--known_view_interval', type=int, default=2, help="train default view with RGB loss every & iters, only valid if --image is not None.")
     parser.add_argument('--guidance_scale', type=float, default=100, help="diffusion model classifier-free guidance scale")
 
@@ -80,9 +83,10 @@ if __name__ == '__main__':
     parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 80], help="training camera fovy range")
 
     parser.add_argument('--default_radius', type=float, default=1.2, help="radius for the default view")
-    parser.add_argument('--default_theta', type=float, default=90, help="radius for the default view")
-    parser.add_argument('--default_phi', type=float, default=0, help="radius for the default view")
+    parser.add_argument('--default_theta', type=float, default=90, help="polar for the default view")
+    parser.add_argument('--default_phi', type=float, default=0, help="azimuth for the default view")
     parser.add_argument('--default_fovy', type=float, default=60, help="fovy for the default view")
+    parser.add_argument('--default_img_w', type=float, default=1, help="zero123 weight for the default view")
 
     parser.add_argument('--progressive_view', action='store_true', help="progressively expand view sampling range from default to full")
     parser.add_argument('--progressive_level', action='store_true', help="progressively increase gridencoder's max_level")
@@ -128,31 +132,58 @@ if __name__ == '__main__':
         opt.fp16 = True
         opt.backbone = 'vanilla'
 
+    opt.images, opt.radii, opt.thetas, opt.phis, opt.img_ws = [], [], [], [], []
+
     # parameters for image-conditioned generation
-    if opt.image is not None:
+    if opt.image is not None or opt.image_config is not None:
 
         if opt.text is None:
             # use zero123 guidance model when only providing image
-            opt.guidance = 'zero123' 
+            opt.guidance = 'zero123'
             opt.fovy_range = [opt.default_fovy, opt.default_fovy] # fix fov as zero123 doesn't support changing fov
 
             # very important to keep the image's content
-            opt.guidance_scale = 3 
+            opt.guidance_scale = 3
             opt.lambda_guidance = 0.02
-            
+
         else:
             # use stable-diffusion when providing both text and image
             opt.guidance = 'stable-diffusion'
-        
+
         opt.t_range = [0.02, 0.50]
         opt.lambda_orient = 10
-        
+
         # latent warmup is not needed, we hardcode a 100-iter rgbd loss only warmup.
-        opt.warmup_iters = 0 
-        
+        opt.warmup_iters = 0
+
         # make shape init more stable
-        opt.progressive_view = True 
+        opt.progressive_view = True
         opt.progressive_level = True
+
+        if opt.image is not None:
+            opt.images += [opt.image]
+            opt.radii += [opt.default_radius]
+            opt.thetas += [opt.default_theta]
+            opt.phis += [opt.default_phi]
+            opt.img_ws += [opt.default_img_w]
+
+        if opt.image_config is not None:
+            # for multiview (zero123)
+            conf = pd.read_csv(opt.image_config, skipinitialspace=True)
+            opt.images += list(conf.image)
+            opt.radii += list(conf.radius)
+            opt.thetas += list(conf.theta)
+            opt.phis += list(conf.phi)
+            opt.img_ws += list(conf.zero123_weight)
+            if opt.image is None:
+                opt.default_radius = opt.radii[0]
+                opt.default_theta = opt.thetas[0]
+                opt.default_phi = opt.phis[0]
+                opt.default_img_w = opt.img_ws[0]
+
+    # reset to None
+    if len(opt.images) == 0:
+        opt.images = None
 
     # default parameters for finetuning
     if opt.dmtet:
@@ -168,16 +199,16 @@ if __name__ == '__main__':
 
         if opt.guidance != 'zero123':
             # smaller fovy (zoom in) for better details
-            opt.fovy_range = [opt.fovy_range[0] - 10, opt.fovy_range[1] - 10] 
+            opt.fovy_range = [opt.fovy_range[0] - 10, opt.fovy_range[1] - 10]
 
     # record full range for progressive view expansion
     if opt.progressive_view:
         # disable as they disturb progressive view
         opt.jitter_pose = False
-        opt.uniform_sphere_rate = 0 
+        opt.uniform_sphere_rate = 0
         # back up full range
         opt.full_radius_range = opt.radius_range
-        opt.full_theta_range = opt.theta_range    
+        opt.full_theta_range = opt.theta_range
         opt.full_phi_range = opt.phi_range
         opt.full_fovy_range = opt.fovy_range
 

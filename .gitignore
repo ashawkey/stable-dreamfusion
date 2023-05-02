@@ -14,3 +14,7 @@ TOKEN
 
 densegridencoder
 tets/256_tets.npz
+
+assets/
+launch.json
+settings.json
