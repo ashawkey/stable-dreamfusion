@@ -30,7 +30,7 @@ class SpecifyGradient(torch.autograd.Function):
         return gt_grad, None
 
 # load model
-def load_model_from_config(config, ckpt, device, vram_O=False, verbose=False):
+def load_model_from_config(config, ckpt, device, vram_O=False, zero123_final=False, verbose=False):
 
     pl_sd = torch.load(ckpt, map_location='cpu')
 
@@ -54,7 +54,7 @@ def load_model_from_config(config, ckpt, device, vram_O=False, verbose=False):
         model.model_ema.copy_to(model.model)
         del model.model_ema
 
-    if vram_O:
+    if vram_O and not zero123_final:
         # we don't need decoder
         del model.first_stage_model.decoder
 
@@ -65,19 +65,24 @@ def load_model_from_config(config, ckpt, device, vram_O=False, verbose=False):
     return model
 
 class Zero123(nn.Module):
-    def __init__(self, device, fp16, vram_O=False, t_range=[0.02, 0.98]):
+    def __init__(self, device, fp16,
+                 config='./pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml',
+                 ckpt='./pretrained/zero123/105000.ckpt', vram_O=False, t_range=[0.02, 0.98], zero123_final=False):
         super().__init__()
 
-        # hardcoded
-        config = './pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml'
-        ckpt = './pretrained/zero123/105000.ckpt'
+        # # hardcoded
+        # config = './pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml'
+        # ckpt = './pretrained/zero123/105000.ckpt'
 
         self.device = device
         self.fp16 = fp16
+        self.vram_O = vram_O
+        self.t_range = t_range
+        self.zero123_final = zero123_final
 
         self.config = OmegaConf.load(config)
         # TODO: seems it cannot load into fp16...
-        self.model = load_model_from_config(self.config, ckpt, device=self.device, vram_O=vram_O)
+        self.model = load_model_from_config(self.config, ckpt, device=self.device, vram_O=vram_O, zero123_final=zero123_final)
 
         # timesteps: use diffuser for convenience... hope it's alright.
         self.num_train_timesteps = self.config.model.params.timesteps

@@ -126,6 +126,9 @@ if __name__ == '__main__':
     parser.add_argument('--light_phi', type=float, default=0, help="default GUI light direction in [0, 360), azimuth")
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
 
+    parser.add_argument('--zero123_config', type=str, default='./pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml', help="config file for zero123")
+    parser.add_argument('--zero123_ckpt', type=str, default='./pretrained/zero123/105000.ckpt', help="ckptfor zero123")
+
     parser.add_argument('--dataset_size_train', type=int, default=100, help="Length of train dataset")
     parser.add_argument('--dataset_size_valid', type=int, default=8, help="Length of train dataset")
     parser.add_argument('--dataset_size_test', type=int, default=100, help="Length of train dataset")
@@ -306,7 +309,7 @@ if __name__ == '__main__':
             guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key, opt.t_range)
         elif opt.guidance == 'zero123':
             from guidance.zero123_utils import Zero123
-            guidance = Zero123(device, opt.fp16, opt.vram_O, opt.t_range)
+            guidance = Zero123(device=device, fp16=opt.fp16, config=opt.zero123_config, ckpt=opt.zero123_ckpt, vram_O=opt.vram_O, t_range=opt.t_range, zero123_final=opt.zero123_final)
         elif opt.guidance == 'clip':
             from guidance.clip_utils import CLIP
             guidance = CLIP(device)
