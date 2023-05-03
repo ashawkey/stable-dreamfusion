@@ -941,7 +941,7 @@ class Trainer(object):
                 self.lr_scheduler.step()
 
         cpu_mem, gpu_mem = get_CPU_mem(), get_GPU_mem()[0]
-        self.log(f"==> Finished Epoch {self.epoch}/{max_epochs}. CPU={cpu_mem:.3f}GB, GPU={gpu_mem:.3f}GB.")
+        self.log(f"==> Finished Epoch {self.epoch}/{max_epochs}. CPU={cpu_mem:.1f}GB, GPU={gpu_mem:.1f}GB.")
 
 
     def evaluate_one_epoch(self, loader, name=None):
