@@ -458,6 +458,38 @@ class Trainer(object):
                 lambda_depth = self.opt.lambda_depth * min(1, self.global_step / self.opt.iters)
                 loss = loss + lambda_depth * F.mse_loss(valid_pred_depth, valid_gt_depth)
 
+        # use rgb loss with zero123's final output
+        elif self.opt.zero123_final:
+
+            polar = data['polar']
+            azimuth = data['azimuth']
+            radius = data['radius']
+            embeddings = self.image_z
+
+            # Pick the view with closest phi
+            phi_deltas = [abs(azimuth.item() + self.opt.default_phi - phi) for phi in embeddings['phis']]
+            phi_deltas = [abs(p-360) if p > 180 else p for p in phi_deltas]
+            min_index = phi_deltas.index(min(phi_deltas))
+            theta = embeddings['thetas'][min_index]
+            phi = embeddings['phis'][min_index]
+            rad = embeddings['radii'][min_index]
+            c_crossattn = embeddings['c_crossattn'][min_index]
+            c_concat = embeddings['c_concat'][min_index]
+
+            gt_rgb = self.guidance(None,
+                                   polar=polar+self.opt.default_theta-theta,
+                                   azimuth=azimuth+self.opt.default_phi-phi,
+                                   radius=radius+self.opt.default_radius-rad,
+                                   c_crossattn=c_crossattn,
+                                   c_concat=c_concat,
+                                   scale=self.opt.guidance_scale,
+                                   post_process=False)
+
+            # color loss
+            # gt_rgb = gt_rgb * gt_mask[:, None].float() + bg_color.reshape(B, H, W, 3).permute(0,3,1,2).contiguous() * (1 - gt_mask[:, None].float())
+            gt_rgb = F.interpolate(gt_rgb.float(), pred_rgb.shape[-2:], mode='bilinear', align_corners=False)
+            loss = self.opt.lambda_rgb * F.mse_loss(pred_rgb, gt_rgb)
+
         # novel view loss
         else:
 

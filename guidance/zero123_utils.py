@@ -184,16 +184,18 @@ class Zero123(nn.Module):
             image, # image tensor [1, 3, H, W] in [0, 1]
             polar=0, azimuth=0, radius=0, # new view params
             scale=3, ddim_steps=50, ddim_eta=1, h=256, w=256, # diffusion params
+            c_crossattn=None, c_concat=None, post_process=True,
         ):
 
-        embeddings = self.get_img_embeds(image)
+        if c_crossattn is None:
+            embeddings = self.get_img_embeds(image)
         T = torch.tensor([math.radians(polar), math.sin(math.radians(azimuth)), math.cos(math.radians(azimuth)), radius])
         T = T[None, None, :].to(self.device)
 
         cond = {}
-        clip_emb = self.model.cc_projection(torch.cat([embeddings[0], T], dim=-1))
+        clip_emb = self.model.cc_projection(torch.cat([embeddings['c_crossattn'] if c_crossattn is None else c_crossattn, T], dim=-1))
         cond['c_crossattn'] = [torch.cat([torch.zeros_like(clip_emb).to(self.device), clip_emb], dim=0)]
-        cond['c_concat'] = [torch.cat([torch.zeros_like(embeddings[1]).to(self.device), embeddings[1]], dim=0)]
+        cond['c_concat'] = [torch.cat([torch.zeros_like(embeddings['c_concat']).to(self.device), embeddings['c_concat']], dim=0)] if c_concat is None else [torch.cat([torch.zeros_like(c_concat).to(self.device), c_concat], dim=0)]
 
         # produce latents loop
         latents = torch.randn((1, 4, h // 8, w // 8), device=self.device)
@@ -210,7 +212,7 @@ class Zero123(nn.Module):
             latents = self.scheduler.step(noise_pred, t, latents, eta=ddim_eta)['prev_sample']
 
         imgs = self.decode_latents(latents)
-        imgs = imgs.cpu().numpy().transpose(0, 2, 3, 1)
+        imgs = imgs.cpu().numpy().transpose(0, 2, 3, 1) if post_process else imgs
 
         return imgs
 
