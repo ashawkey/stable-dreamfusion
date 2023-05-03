@@ -328,7 +328,7 @@ if __name__ == '__main__':
 
             max_epoch = np.ceil(opt.iters / len(train_loader)).astype(np.int32)
             epoch_freq = np.ceil((opt.test_freq or opt.iters) / len(train_loader)).astype(np.int32)
-            max_epochs = np.arange(0, max_epoch, epoch_freq) + epoch_freq
+            max_epochs = np.arange(trainer.epoch, max_epoch, epoch_freq) + epoch_freq
 
             for max_epoch in max_epochs:
                 trainer.train(train_loader, valid_loader, max_epoch)
