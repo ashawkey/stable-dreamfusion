@@ -126,6 +126,12 @@ if __name__ == '__main__':
     parser.add_argument('--light_phi', type=float, default=0, help="default GUI light direction in [0, 360), azimuth")
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
 
+    parser.add_argument('--dataset_size_train', type=int, default=100, help="Length of train dataset")
+    parser.add_argument('--dataset_size_valid', type=int, default=8, help="Length of train dataset")
+    parser.add_argument('--dataset_size_test', type=int, default=100, help="Length of train dataset")
+
+    parser.add_argument('--debug', action='store_true', help="debug options")
+
     opt = parser.parse_args()
 
     if opt.O:
@@ -135,6 +141,13 @@ if __name__ == '__main__':
     elif opt.O2:
         opt.fp16 = True
         opt.backbone = 'vanilla'
+
+    if opt.debug:
+        opt.dataset_size_train = 1
+        opt.dataset_size_valid = 1
+        opt.dataset_size_test = 1
+        opt.iters = 4
+        opt.test_freq = 1
 
     opt.images, opt.radii, opt.thetas, opt.phis, opt.img_ws = [], [], [], [], []
 
@@ -265,7 +278,7 @@ if __name__ == '__main__':
             gui.render()
 
         else:
-            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
+            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=opt.dataset_size_test).dataloader()
             trainer.test(test_loader)
 
             if opt.save_mesh:
@@ -273,7 +286,7 @@ if __name__ == '__main__':
 
     else:
 
-        train_loader = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=100).dataloader()
+        train_loader = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=opt.dataset_size_train).dataloader()
 
         if opt.optim == 'adan':
             from optimizer import Adan
@@ -310,8 +323,8 @@ if __name__ == '__main__':
             gui.render()
 
         else:
-            valid_loader = NeRFDataset(opt, device=device, type='val', H=opt.H, W=opt.W, size=8).dataloader()
-            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
+            valid_loader = NeRFDataset(opt, device=device, type='val', H=opt.H, W=opt.W, size=opt.dataset_size_valid).dataloader()
+            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=opt.dataset_size_test).dataloader()
 
             max_epoch = np.ceil(opt.iters / len(train_loader)).astype(np.int32)
             epoch_freq = np.ceil((opt.test_freq or opt.iters) / len(train_loader)).astype(np.int32)
