@@ -24,6 +24,8 @@ if __name__ == '__main__':
     parser.add_argument('--image', default=None, help="image prompt")
     parser.add_argument('--image_config', default=None, help="image config csv")
 
+    parser.add_argument('--zero123_final', action='store_true', help="Use Zero123's final renders to train NeRF as ref view")
+
     parser.add_argument('--known_view_interval', type=int, default=2, help="train default view with RGB loss every & iters, only valid if --image is not None.")
     parser.add_argument('--guidance_scale', type=float, default=100, help="diffusion model classifier-free guidance scale")
 
@@ -94,6 +96,8 @@ if __name__ == '__main__':
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
     parser.add_argument('--t_range', type=float, nargs='*', default=[0.02, 0.98], help="stable diffusion time steps range")
+
+    parser.add_argument('--test_freq', type=int, default=None, help="Test model every n iterations")
 
     ### regularizations
     parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
@@ -307,13 +311,18 @@ if __name__ == '__main__':
 
         else:
             valid_loader = NeRFDataset(opt, device=device, type='val', H=opt.H, W=opt.W, size=8).dataloader()
+            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
 
             max_epoch = np.ceil(opt.iters / len(train_loader)).astype(np.int32)
-            trainer.train(train_loader, valid_loader, max_epoch)
+            epoch_freq = np.ceil((opt.test_freq or opt.iters) / len(train_loader)).astype(np.int32)
+            max_epochs = np.arange(0, max_epoch, epoch_freq) + epoch_freq
 
-            # also test at the end
-            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
-            trainer.test(test_loader)
+            for max_epoch in max_epochs:
+                trainer.train(train_loader, valid_loader, max_epoch)
 
-            if opt.save_mesh:
-                trainer.save_mesh()
+                # also test at the end
+                trainer.test(test_loader)
+
+                if opt.save_mesh:
+                    trainer.save_mesh()
+
