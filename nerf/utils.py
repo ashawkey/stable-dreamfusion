@@ -432,7 +432,7 @@ class Trainer(object):
             gt_rgb = self.rgb # [B, 3, H, W]
 
             # color loss
-            gt_rgb = gt_rgb * gt_mask.float() + bg_color.reshape(H, W, 3).permute(2,0,1).contiguous() * (1 - gt_mask.float())
+            gt_rgb = gt_rgb * gt_mask[:, None].float() + bg_color.reshape(B, H, W, 3).permute(0,3,1,2).contiguous() * (1 - gt_mask[:, None].float())
             loss = self.opt.lambda_rgb * F.mse_loss(pred_rgb, gt_rgb)
 
             # mask loss
