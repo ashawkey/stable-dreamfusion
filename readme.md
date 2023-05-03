@@ -37,7 +37,7 @@ To use image-conditioned 3D generation, you need to download some pretrained che
     cd pretrained/zero123
     wget https://huggingface.co/cvlab/zero123-weights/resolve/main/105000.ckpt
     ```
-* [Omnidata](https://github.com/EPFL-VILAB/omnidata/tree/main/omnidata_tools/torch) for depth and normal prediction. 
+* [Omnidata](https://github.com/EPFL-VILAB/omnidata/tree/main/omnidata_tools/torch) for depth and normal prediction.
     These ckpts are hardcoded in `preprocess_image.py`.
     ```bash
     cd pretrained/omnidata
@@ -93,7 +93,7 @@ First time running will take some time to compile the CUDA extensions.
 # `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
 python main.py --text "a hamburger" --workspace trial -O
 
-# reduce stable-diffusion memory usage with `--vram_O` 
+# reduce stable-diffusion memory usage with `--vram_O`
 # enable various vram savings (https://huggingface.co/docs/diffusers/optimization/fp16).
 python main.py --text "a hamburger" --workspace trial -O --vram_O
 # this makes it possible to train with larger rendering resolution, which leads to better quality (see https://github.com/ashawkey/stable-dreamfusion/pull/174)
@@ -152,7 +152,7 @@ python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5
 ## preprocess input image
 # note: the results of image-to-3D is dependent on zero-1-to-3's capability. For best performance, the input image should contain a single front-facing object. Check the examples under ./data.
 # this will exports `<image>_rgba.png`, `<image>_depth.png`, and `<image>_normal.png` to the directory containing the input image.
-python preprocess_image.py <image>.png 
+python preprocess_image.py <image>.png
 
 ## train
 # pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
@@ -166,6 +166,15 @@ python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious
 ## test / visualize
 python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --save_mesh
 python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --gui
+
+## multiple images
+python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000
+
+## use zero123's final generated image as  ref view:
+python main.py -O --image_config config.<config>.csv --workspace trial_image --iters 5000 --zero123_final
+
+## use test_freq to save .mp4 test videos at regular intervals
+--iters 10000 --test_freq 5000 # will run for 100 epochs (since length of `train_dataloader` is set to 100), and save .mp4 at epochs 50 and 100
 ```
 
 For advanced tips and other developing stuff, check [Advanced Tips](./assets/advanced.md).
@@ -197,7 +206,7 @@ This work is based on an increasing list of amazing research works and open-sour
 * [Zero-1-to-3: Zero-shot One Image to 3D Object](https://github.com/cvlab-columbia/zero123)
     ```
     @misc{liu2023zero1to3,
-        title={Zero-1-to-3: Zero-shot One Image to 3D Object}, 
+        title={Zero-1-to-3: Zero-shot One Image to 3D Object},
         author={Ruoshi Liu and Rundi Wu and Basile Van Hoorick and Pavel Tokmakov and Sergey Zakharov and Carl Vondrick},
         year={2023},
         eprint={2303.11328},
