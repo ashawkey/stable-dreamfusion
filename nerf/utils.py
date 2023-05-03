@@ -211,6 +211,7 @@ class Trainer(object):
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.fp16)
 
         # variable init
+        self.total_train_t = 0
         self.epoch = 0
         self.global_step = 0
         self.local_step = 0
@@ -661,7 +662,9 @@ class Trainer(object):
 
         end_t = time.time()
 
-        self.log(f"[INFO] training takes {(end_t - start_t)/ 60:.4f} minutes.")
+        self.total_train_t = end_t - start_t + self.total_train_t
+
+        self.log(f"[INFO] training takes {(self.total_train_t)/ 60:.4f} minutes.")
 
         if self.use_tensorboardX and self.local_rank == 0:
             self.writer.close()
