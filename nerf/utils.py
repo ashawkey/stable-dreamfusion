@@ -468,24 +468,43 @@ class Trainer(object):
             radius = data['radius']
             embeddings = self.image_z
 
-            # Pick the view with closest phi
-            phi_deltas = [abs(azimuth.item() + self.opt.default_phi - phi) for phi in embeddings['phis']]
-            phi_deltas = [abs(p-360) if p > 180 else p for p in phi_deltas]
-            min_index = phi_deltas.index(min(phi_deltas))
-            theta = embeddings['thetas'][min_index]
-            phi = embeddings['phis'][min_index]
-            rad = embeddings['radii'][min_index]
-            c_crossattn = embeddings['c_crossattn'][min_index]
-            c_concat = embeddings['c_concat'][min_index]
+            # # Pick the view with closest phi
+            # phi_deltas = [abs(azimuth.item() + self.opt.default_phi - phi) for phi in embeddings['phis']]
+            # phi_deltas = [abs(p-360) if p > 180 else p for p in phi_deltas]
+            # min_index = phi_deltas.index(min(phi_deltas))
+            # theta = embeddings['thetas'][min_index]
+            # phi = embeddings['phis'][min_index]
+            # rad = embeddings['radii'][min_index]
+            # c_crossattn = embeddings['c_crossattn'][min_index]
+            # c_concat = embeddings['c_concat'][min_index]
+            # gt_rgb = self.guidance(None,
+            #                        polar=polar+self.opt.default_theta-theta,
+            #                        azimuth=azimuth+self.opt.default_phi-phi,
+            #                        radius=radius+self.opt.default_radius-rad,
+            #                        c_crossattn=c_crossattn,
+            #                        c_concat=c_concat,
+            #                        scale=self.opt.guidance_scale,
+            #                        post_process=False)
 
-            gt_rgb = self.guidance(None,
-                                   polar=polar+self.opt.default_theta-theta,
-                                   azimuth=azimuth+self.opt.default_phi-phi,
-                                   radius=radius+self.opt.default_radius-rad,
-                                   c_crossattn=c_crossattn,
-                                   c_concat=c_concat,
-                                   scale=self.opt.guidance_scale,
-                                   post_process=False)
+            # Set weights acc to closeness in phi
+            if len(embeddings['phis']) > 1:
+                phi_deltas = [abs(azimuth.item() + embeddings['phis'][0] - phi) for phi in embeddings['phis']]
+                phi_deltas = [abs(p-360) if p > 180 else p for p in phi_deltas]
+                inv_phi_deltas = [min(1/p, 1000) if p != 0 else 1000 for p in phi_deltas]
+                inv_phi_deltas = [p/max(inv_phi_deltas) for p in inv_phi_deltas]
+                inv_phi_deltas = [0 if p < 0.1 else p for p in inv_phi_deltas]
+            else:
+                inv_phi_deltas = [1]
+
+            w = [a*b for (a, b) in zip(embeddings['img_ws'], inv_phi_deltas)]
+            w = [ww/max(w) for ww in w]
+            w = [0 if ww < 0.1 else ww for ww in w]
+
+            gt_rgb = self.guidance.gen_from_multiview(
+                                   polar=polar, azimuth=azimuth, radius=radius,
+                                   img_ws=w, thetas=embeddings['thetas'], phis=embeddings['phis'], radii=embeddings['radii'],
+                                   c_crossattns=embeddings['c_crossattn'], c_concats=embeddings['c_concat'],
+                                   scale=self.opt.guidance_scale, post_process=False)
 
             # color loss
             # gt_rgb = gt_rgb * gt_mask[:, None].float() + bg_color.reshape(B, H, W, 3).permute(0,3,1,2).contiguous() * (1 - gt_mask[:, None].float())
