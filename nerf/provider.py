@@ -146,7 +146,7 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 120], phi_ra
     return poses, dirs, thetas, phis, radius
 
 
-def circle_poses(device, radius=1.25, theta=60, phi=0, return_dirs=False, angle_overhead=30, angle_front=60):
+def circle_poses(device, radius=[1.25], theta=[60], phi=[0], return_dirs=False, angle_overhead=30, angle_front=60):
 
     theta = theta / 180 * np.pi
     phi = phi / 180 * np.pi

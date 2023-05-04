@@ -146,7 +146,8 @@ class Zero123(nn.Module):
                 cond['c_concat'] = [torch.cat([torch.zeros_like(c_concat).to(self.device), c_concat], dim=0)]
                 noise_pred = self.model.apply_model(x_in, t_in, cond)
                 noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
-                noise_preds.append(img_w * (noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)))
+                noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)
+                noise_preds.append(img_w * noise_pred)
 
         noise_pred = torch.stack(noise_preds).sum(dim=0) / sum(embeddings['img_ws'])
 
@@ -213,6 +214,52 @@ class Zero123(nn.Module):
             noise_pred = self.model.apply_model(x_in, t_in, cond)
             noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
             noise_pred = noise_pred_uncond + scale * (noise_pred_cond - noise_pred_uncond)
+
+            latents = self.scheduler.step(noise_pred, t, latents, eta=ddim_eta)['prev_sample']
+
+        imgs = self.decode_latents(latents)
+        imgs = imgs.cpu().numpy().transpose(0, 2, 3, 1) if post_process else imgs
+
+        return imgs
+
+    # verification
+    @torch.no_grad()
+    def gen_from_multiview(self,
+            polar=0, azimuth=0, radius=0, # new view params
+            img_ws=None, thetas=None, phis=None, radii=None,
+            c_crossattns=None, c_concats=None, post_process=True,
+            scale=3, ddim_steps=50, ddim_eta=1, h=256, w=256, # diffusion params
+        ):
+
+        Ts = [torch.tensor([math.radians(polar-thetas[0]+theta), math.sin(math.radians(azimuth-phis[0]+phi)), math.cos(math.radians(azimuth-phis[0]+phi)), radius-radii[0]+rad]) for (theta, phi, rad) in zip(thetas, phis, radii)]
+        Ts = [T[None, None, :].to(self.device) for T in Ts]
+
+        clip_embs = [self.model.cc_projection(torch.cat([c_crossattn, T], dim=-1)) for (c_crossattn, T) in zip(c_crossattns, Ts)]
+        conds = []
+        for (clip_emb, c_concat) in zip(clip_embs, c_concats):
+            cond = {}
+            cond['c_crossattn'] = [torch.cat([torch.zeros_like(clip_emb).to(self.device), clip_emb], dim=0)]
+            cond['c_concat'] = [torch.cat([torch.zeros_like(c_concat).to(self.device), c_concat], dim=0)]
+            conds.append(cond)
+
+        # produce latents loop
+        latents = torch.randn((1, 4, h // 8, w // 8), device=self.device)
+        self.scheduler.set_timesteps(ddim_steps)
+
+        for i, t in enumerate(self.scheduler.timesteps):
+            x_in = torch.cat([latents] * 2)
+            t_in = torch.cat([t.view(1)] * 2).to(self.device)
+
+            noise_preds = []
+            for (img_w, cond) in zip(img_ws, conds):
+                if img_w == 0:
+                    continue
+                noise_pred = self.model.apply_model(x_in, t_in, cond)
+                noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
+                noise_pred = noise_pred_uncond + scale * (noise_pred_cond - noise_pred_uncond)
+                noise_preds.append(img_w * noise_pred)
+
+            noise_pred = torch.stack(noise_preds).sum(dim=0) / sum(img_ws)
 
             latents = self.scheduler.step(noise_pred, t, latents, eta=ddim_eta)['prev_sample']
 
