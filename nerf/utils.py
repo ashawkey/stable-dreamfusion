@@ -317,7 +317,7 @@ class Trainer(object):
                     'c_crossattn' : guidance_embeds[0],
                     'c_concat' : guidance_embeds[1],
                     'thetas' : self.opt.thetas,
-                    'phis' : self.opt.phis,
+                    'phis' : [-p for p in self.opt.phis],   # Zero123 has -ve azimuth direction as NeRF
                     'radii' : self.opt.radii,
                 }
             else:
@@ -464,7 +464,7 @@ class Trainer(object):
         elif self.opt.zero123_final:
 
             polar = data['polar']
-            azimuth = data['azimuth']
+            azimuth = -data['azimuth']  # Zero123 has -ve azimuth direction as NeRF
             radius = data['radius']
             embeddings = self.image_z
 
@@ -496,6 +496,7 @@ class Trainer(object):
             else:
                 inv_phi_deltas = [1]
 
+            # Multiply by user-given weights
             w = [a*b for (a, b) in zip(embeddings['img_ws'], inv_phi_deltas)]
             w = [ww/max(w) for ww in w]
             w = [0 if ww < 0.1 else ww for ww in w]
@@ -540,7 +541,7 @@ class Trainer(object):
 
             else: # zero123
                 polar = data['polar']
-                azimuth = data['azimuth']
+                azimuth = -data['azimuth']  # Zero123 has -ve azimuth direction as NeRF
                 radius = data['radius']
 
                 # adjust SDS scale based on how far the novel view is from the known view
@@ -865,7 +866,7 @@ class Trainer(object):
         return outputs
 
     def train_one_epoch(self, loader, max_epochs):
-        self.log(f"==> Start Training {self.workspace} Epoch {self.epoch}/{max_epochs}, lr={self.optimizer.param_groups[0]['lr']:.6f} ...")
+        self.log(f"==> [{time.strftime('%Y-%m-%d_%H-%M-%S')}] Start Training {self.workspace} Epoch {self.epoch}/{max_epochs}, lr={self.optimizer.param_groups[0]['lr']:.6f} ...")
 
         total_loss = 0
         if self.local_rank == 0 and self.report_metric_at_train:
@@ -960,7 +961,7 @@ class Trainer(object):
                 self.lr_scheduler.step()
 
         cpu_mem, gpu_mem = get_CPU_mem(), get_GPU_mem()[0]
-        self.log(f"==> Finished Epoch {self.epoch}/{max_epochs}. CPU={cpu_mem:.1f}GB, GPU={gpu_mem:.1f}GB.")
+        self.log(f"==> [{time.strftime('%Y-%m-%d_%H-%M-%S')}] Finished Epoch {self.epoch}/{max_epochs}. CPU={cpu_mem:.1f}GB, GPU={gpu_mem:.1f}GB.")
 
 
     def evaluate_one_epoch(self, loader, name=None):
