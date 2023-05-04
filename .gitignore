@@ -2,6 +2,7 @@ __pycache__/
 build/
 *.egg-info/
 *.so
+venv_*/
 
 tmp*
 data/
