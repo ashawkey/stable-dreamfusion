@@ -1,5 +1,5 @@
 zero123_weight, radius, theta, phi, image
-4, 1, 90, 0, data/car_left_rgba.png
-1, 0.7, 90, -90, data/car_front_rgba.png
-4, 1, 90, 180, data/car_right_rgba.png
-1, 0.7, 90, 90, data/car_back_rgba.png
+4, 1.2, 90, 0, data/car_left_rgba.png
+1, 1, 90, 90, data/car_front_rgba.png
+4, 1.2, 90, 180, data/car_right_rgba.png
+1, 1, 90, -90, data/car_back_rgba.png
