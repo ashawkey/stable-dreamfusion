@@ -181,6 +181,12 @@ python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious
 ## test / visualize
 python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --save_mesh
 python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --gui
+
+### Debugging
+
+# Can save guidance images for debugging purposes. These get saved in trial_hamburger/guidance.
+# Warning: this slows down training considerably and consumes lots of disk space!
+python main.py --text "a hamburger" --workspace trial_hamburger -O --vram_O --save_guidance --save_guidance_interval 5 # save every 5 steps
 ```
 
 For advanced tips and other developing stuff, check [Advanced Tips](./assets/advanced.md).
