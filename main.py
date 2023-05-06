@@ -8,8 +8,15 @@ from nerf.utils import *
 # torch.autograd.set_detect_anomaly(True)
 
 if __name__ == '__main__':
+    # See https://stackoverflow.com/questions/27433316/how-to-get-argparse-to-read-arguments-from-a-file-with-an-option-rather-than-pre
+    class LoadFromFile (argparse.Action):
+        def __call__ (self, parser, namespace, values, option_string = None):
+            with values as f:
+                # parse arguments in the file and store them in the target namespace
+                parser.parse_args(f.read().split(), namespace)
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--file', type=open, action=LoadFromFile, help="specify a file filled with more arguments")
     parser.add_argument('--text', default=None, help="text prompt")
     parser.add_argument('--negative', default='', type=str, help="negative text prompt")
     parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray")
