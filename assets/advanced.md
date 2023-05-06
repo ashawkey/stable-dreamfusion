@@ -74,3 +74,19 @@ If you'd like to try here's how:
     higher vram usage than before.
 
 The tracing functionality has only been tested in combination with the `-O` option. Using it without `--vram_O` would probably require some changes inside `trace.py`.
+
+# Debugging
+
+`debugpy-run` is a convenient way to remotely debug this project. Simply replace a command like this one:
+
+```bash
+python main.py --text "a hamburger" --workspace trial -O --vram_O
+```
+
+... with:
+
+```bash
+debugpy-run main.py -- --text "a hamburger" --workspace trial -O --vram_O
+```
+
+For more details: https://github.com/bulletmark/debugpy-run 
