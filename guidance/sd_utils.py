@@ -2,6 +2,7 @@ from transformers import CLIPTextModel, CLIPTokenizer, logging
 from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler, DDIMScheduler, StableDiffusionPipeline
 from diffusers.utils.import_utils import is_xformers_available
 from os.path import isfile
+from pathlib import Path
 
 # suppress partial model loading warning
 logging.set_verbosity_error()
@@ -9,6 +10,7 @@ logging.set_verbosity_error()
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.utils import save_image
 
 from torch.cuda.amp import custom_bwd, custom_fwd
 from dataclasses import dataclass
@@ -113,7 +115,8 @@ class StableDiffusion(nn.Module):
         return embeddings
 
 
-    def train_step(self, text_embeddings, pred_rgb, guidance_scale=100, as_latent=False, grad_scale=1):
+    def train_step(self, text_embeddings, pred_rgb, guidance_scale=100, as_latent=False, grad_scale=1,
+                   save_guidance_path:Path=None):
         
         if as_latent:
             latents = F.interpolate(pred_rgb, (64, 64), mode='bilinear', align_corners=False) * 2 - 1
@@ -144,7 +147,6 @@ class StableDiffusion(nn.Module):
 
         noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_pos - noise_pred_uncond)
         
-
         # import kiui
         # latents_tmp = torch.randn((1, 4, 64, 64), device=self.device)
         # latents_tmp = latents_tmp.detach()
@@ -163,6 +165,24 @@ class StableDiffusion(nn.Module):
         w = (1 - self.alphas[t])
         grad = grad_scale * w * (noise_pred - noise)
         grad = torch.nan_to_num(grad)
+
+        if save_guidance_path:
+            with torch.no_grad():
+                if as_latent:
+                    pred_rgb_512 = self.decode_latents(latents)
+                    
+                # visualize predicted denoised image
+                # claforte: discuss this with Vikram!!
+                result_hopefully_less_noisy_image = self.decode_latents(latents + w*(noise_pred - noise))
+                
+                # visualize noisier image
+                result_noisier_image = self.decode_latents(latents_noisy) 
+                
+                # TODO: also denoise all-the-way
+
+                # all 3 input images are [1, 3, H, W], e.g. [1, 3, 512, 512]
+                viz_images = torch.cat([pred_rgb_512, result_noisier_image, result_hopefully_less_noisy_image],dim=-1)
+                save_image(viz_images, save_guidance_path)
 
         # since we omitted an item in grad, we need to use the custom function to specify the gradient
         loss = SpecifyGradient.apply(latents, grad)
