@@ -47,3 +47,6 @@ gdown
 
 # for dpt
 timm
+
+# for remote debugging
+debugpy-run
