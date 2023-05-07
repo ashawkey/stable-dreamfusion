@@ -30,7 +30,7 @@ class SpecifyGradient(torch.autograd.Function):
         return gt_grad, None
 
 # load model
-def load_model_from_config(config, ckpt, device, vram_O=False, zero123_final=False, verbose=False):
+def load_model_from_config(config, ckpt, device, vram_O=False, verbose=False):
 
     pl_sd = torch.load(ckpt, map_location='cpu')
 
@@ -54,7 +54,7 @@ def load_model_from_config(config, ckpt, device, vram_O=False, zero123_final=Fal
         model.model_ema.copy_to(model.model)
         del model.model_ema
 
-    if vram_O and not zero123_final:
+    if vram_O:
         # we don't need decoder
         del model.first_stage_model.decoder
 
@@ -67,7 +67,7 @@ def load_model_from_config(config, ckpt, device, vram_O=False, zero123_final=Fal
 class Zero123(nn.Module):
     def __init__(self, device, fp16,
                  config='./pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml',
-                 ckpt='./pretrained/zero123/105000.ckpt', vram_O=False, t_range=[0.02, 0.98], zero123_final=False):
+                 ckpt='./pretrained/zero123/105000.ckpt', vram_O=False, t_range=[0.02, 0.98]):
         super().__init__()
 
         # # hardcoded
@@ -78,11 +78,10 @@ class Zero123(nn.Module):
         self.fp16 = fp16
         self.vram_O = vram_O
         self.t_range = t_range
-        self.zero123_final = zero123_final
 
         self.config = OmegaConf.load(config)
         # TODO: seems it cannot load into fp16...
-        self.model = load_model_from_config(self.config, ckpt, device=self.device, vram_O=vram_O, zero123_final=zero123_final)
+        self.model = load_model_from_config(self.config, ckpt, device=self.device, vram_O=vram_O)
 
         # timesteps: use diffuser for convenience... hope it's alright.
         self.num_train_timesteps = self.config.model.params.timesteps

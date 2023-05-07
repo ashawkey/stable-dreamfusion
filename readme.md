@@ -32,7 +32,7 @@ cd stable-dreamfusion
 
 ### Optional: create a python virtual environment
 
-To avoid python package conflicts, we recommend using a virtual environment, e.g.: using conda or venv: 
+To avoid python package conflicts, we recommend using a virtual environment, e.g.: using conda or venv:
 
 ```bash
 python -m venv venv_stable-dreamfusion
@@ -184,9 +184,6 @@ python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet
 
 ## multiple images
 python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000
-
-## use zero123's final generated image as  ref view:
-python main.py -O --image_config config.<config>.csv --workspace trial_image --iters 5000 --zero123_final
 
 ## use test_freq to save .mp4 test videos at regular intervals
 --iters 10000 --test_freq 5000 # will run for 100 epochs (since length of `train_dataloader` is set to 100), and save .mp4 at epochs 50 and 100
