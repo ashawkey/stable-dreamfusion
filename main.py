@@ -24,8 +24,6 @@ if __name__ == '__main__':
     parser.add_argument('--image', default=None, help="image prompt")
     parser.add_argument('--image_config', default=None, help="image config csv")
 
-    parser.add_argument('--zero123_final', action='store_true', help="Use Zero123's final renders to train NeRF as ref view")
-
     parser.add_argument('--known_view_interval', type=int, default=2, help="train default view with RGB loss every & iters, only valid if --image is not None.")
     parser.add_argument('--guidance_scale', type=float, default=100, help="diffusion model classifier-free guidance scale")
 
@@ -309,7 +307,7 @@ if __name__ == '__main__':
             guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key, opt.t_range)
         elif opt.guidance == 'zero123':
             from guidance.zero123_utils import Zero123
-            guidance = Zero123(device=device, fp16=opt.fp16, config=opt.zero123_config, ckpt=opt.zero123_ckpt, vram_O=opt.vram_O, t_range=opt.t_range, zero123_final=opt.zero123_final)
+            guidance = Zero123(device=device, fp16=opt.fp16, config=opt.zero123_config, ckpt=opt.zero123_ckpt, vram_O=opt.vram_O, t_range=opt.t_range)
         elif opt.guidance == 'clip':
             from guidance.clip_utils import CLIP
             guidance = CLIP(device)
