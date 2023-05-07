@@ -21,3 +21,4 @@ launch.json
 settings.json
 
 aa*.png
+.vscode/launch.json

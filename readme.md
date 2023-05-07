@@ -111,8 +111,12 @@ python main.py --text "a hamburger" --workspace trial -O
 # reduce stable-diffusion memory usage with `--vram_O`
 # enable various vram savings (https://huggingface.co/docs/diffusers/optimization/fp16).
 python main.py --text "a hamburger" --workspace trial -O --vram_O
+
 # this makes it possible to train with larger rendering resolution, which leads to better quality (see https://github.com/ashawkey/stable-dreamfusion/pull/174)
 python main.py --text "a hamburger" --workspace trial -O --vram_O --w 300 --h 300 # Tested to run fine on 8GB VRAM (Nvidia 3070 Ti).
+
+# You can collect arguments in a file. You can override arguments by specifying them after `--file`. Note that quoted strings can't be loaded from .args files...
+python main.py --file scripts/res64.args --workspace trial_awesome_hamburger --text "a photo of an awesome hamburger"
 
 # use CUDA-free Taichi backend with `--backbone grid_taichi`
 python3 main.py --text "a hamburger" --workspace trial -O --backbone grid_taichi
@@ -187,6 +191,11 @@ python main.py -O --image_config config/<config>.csv --workspace trial_image --i
 
 ## use test_freq to save .mp4 test videos at regular intervals
 --iters 10000 --test_freq 5000 # will run for 100 epochs (since length of `train_dataloader` is set to 100), and save .mp4 at epochs 50 and 100
+### Debugging
+
+# Can save guidance images for debugging purposes. These get saved in trial_hamburger/guidance.
+# Warning: this slows down training considerably and consumes lots of disk space!
+python main.py --text "a hamburger" --workspace trial_hamburger -O --vram_O --save_guidance --save_guidance_interval 5 # save every 5 steps
 ```
 
 For advanced tips and other developing stuff, check [Advanced Tips](./assets/advanced.md).
