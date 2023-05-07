@@ -9,8 +9,15 @@ from nerf.utils import *
 # torch.autograd.set_detect_anomaly(True)
 
 if __name__ == '__main__':
+    # See https://stackoverflow.com/questions/27433316/how-to-get-argparse-to-read-arguments-from-a-file-with-an-option-rather-than-pre
+    class LoadFromFile (argparse.Action):
+        def __call__ (self, parser, namespace, values, option_string = None):
+            with values as f:
+                # parse arguments in the file and store them in the target namespace
+                parser.parse_args(f.read().split(), namespace)
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--file', type=open, action=LoadFromFile, help="specify a file filled with more arguments")
     parser.add_argument('--text', default=None, help="text prompt")
     parser.add_argument('--negative', default='', type=str, help="negative text prompt")
     parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray")
@@ -26,7 +33,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--known_view_interval', type=int, default=2, help="train default view with RGB loss every & iters, only valid if --image is not None.")
     parser.add_argument('--guidance_scale', type=float, default=100, help="diffusion model classifier-free guidance scale")
-
+    
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
     parser.add_argument('--decimate_target', type=int, default=5e4, help="target face number for mesh decimation")
@@ -113,6 +120,10 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_normal', type=float, default=0, help="loss scale for normal map")
     parser.add_argument('--lambda_depth', type=float, default=0.1, help="loss scale for relative depth")
     parser.add_argument('--lambda_2d_normal_smooth', type=float, default=0, help="loss scale for 2D normal image smoothness")
+
+    ### debugging options
+    parser.add_argument('--save_guidance', action='store_true', help="save images of the per-iteration NeRF renders, added noise, denoised (i.e. guidance), fully-denoised. Useful for debugging, but VERY SLOW and takes lots of memory!")
+    parser.add_argument('--save_guidance_interval', type=int, default=10, help="save guidance every X step")
 
     ### GUI options
     parser.add_argument('--gui', action='store_true', help="start a GUI")

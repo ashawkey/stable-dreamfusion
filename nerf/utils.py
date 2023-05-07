@@ -4,6 +4,7 @@ import tqdm
 import math
 import imageio
 import psutil
+from pathlib import Path
 import random
 import warnings
 import tensorboardX
@@ -342,7 +343,12 @@ class Trainer(object):
 
     ### ------------------------------
 
-    def train_step(self, data):
+    def train_step(self, data, save_guidance_path:Path=None):
+        """
+            Args:
+                save_guidance_path: an image that combines the NeRF render, the added latent noise,
+                    the denoised result and optionally the fully-denoised image.
+        """
 
         # perform RGBD loss instead of SDS if is image-conditioned
         do_rgbd_loss = self.opt.images is not None and \
@@ -485,7 +491,8 @@ class Trainer(object):
                 pos_z = r * start_z + (1 - r) * end_z
                 uncond_z = self.text_z['uncond']
                 text_z = torch.cat([uncond_z, pos_z], dim=0)
-                loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance)
+                loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance,
+                                                save_guidance_path=save_guidance_path)
 
             else: # zero123
                 polar = data['polar']
@@ -833,6 +840,10 @@ class Trainer(object):
 
         self.local_step = 0
 
+        if self.opt.save_guidance:
+            save_guidance_folder = Path(self.workspace) / 'guidance'
+            save_guidance_folder.mkdir(parents=True, exist_ok=True)
+
         for data in loader:
 
             # update grid every 16 steps
@@ -846,7 +857,11 @@ class Trainer(object):
             self.optimizer.zero_grad()
 
             with torch.cuda.amp.autocast(enabled=self.fp16):
-                pred_rgbs, pred_depths, loss = self.train_step(data)
+                if self.opt.save_guidance and (self.global_step % self.opt.save_guidance_interval == 0):
+                    save_guidance_path = save_guidance_folder / f'step_{self.global_step:07d}.png'
+                else:
+                    save_guidance_path = None
+                pred_rgbs, pred_depths, loss = self.train_step(data, save_guidance_path=save_guidance_path)
 
             # hooked grad clipping for RGB space
             if self.opt.grad_clip_rgb >= 0:
