@@ -281,6 +281,10 @@ This work is based on an increasing list of amazing research works and open-sour
 
 * The GUI is developed with [DearPyGui](https://github.com/hoffstadt/DearPyGui).
 
+* Puppy image from : https://www.pexels.com/photo/high-angle-photo-of-a-corgi-looking-upwards-2664417/
+
+* Anya images from : https://www.goodsmile.info/en/product/13301/POP+UP+PARADE+Anya+Forger.html
+
 # Citation
 
 If you find this work useful, a citation will be appreciated via:
