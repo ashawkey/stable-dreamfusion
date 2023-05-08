@@ -182,7 +182,7 @@ python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5
 python preprocess_image.py <image>.png
 python preprocess_image.py <image>.png --border_ratio 0.4 # increase border_ratio if the center object appears too large and results are unsatisfying.
 
-## train
+## zero123 train
 # pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
 python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000
 
@@ -194,6 +194,12 @@ python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 
 
 python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --init_with trial_image/checkpoints/df.pth
 
+## zero123 with multiple images
+python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000
+
+## zero123 with multiple images, but process 1 image at a time (to save GPU memory)
+python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000 --batch_size_1
+
 # providing both --text and --image enables stable-diffusion backend (similar to make-it-3d)
 python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text --iters 5000
 
@@ -203,14 +209,9 @@ python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious
 python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --save_mesh
 python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --gui
 
-## multiple images
-python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000
-
-## multiple images but process 1 image at a time (to save GPU memory)
-python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000 --batch_size_1
-
 ## use test_freq to save .mp4 test videos at regular intervals
 --iters 10000 --test_freq 5000 # will run for 100 epochs (since length of `train_dataloader` is set to 100), and save .mp4 at epochs 50 and 100
+
 ### Debugging
 
 # Can save guidance images for debugging purposes. These get saved in trial_hamburger/guidance.
