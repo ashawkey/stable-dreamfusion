@@ -2,9 +2,11 @@
 
 A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) text-to-2D model.
 
-**NEWS (2023.5.6)**: 
+**NEWS (2023.5.8)**: 
 * Support of [DeepFloyd-IF](https://github.com/deep-floyd/IF) as the guidance model.
 * Enhance Image-to-3D quality, support Image + Text condition of [Make-it-3D](https://make-it-3d.github.io/).
+
+https://user-images.githubusercontent.com/25863658/236712982-9f93bd32-83bf-423a-bb7c-f73df7ece2e3.mp4
 
 https://user-images.githubusercontent.com/25863658/232403162-51b69000-a242-4b8c-9cd9-4242b09863fa.mp4
 
