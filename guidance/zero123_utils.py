@@ -151,7 +151,7 @@ class Zero123(nn.Module):
                 a = azimuth + embeddings['phis'][0] - phi
                 a[a > 180] -= 360 # range in [-180, 180]
                 r = radius + embeddings['radii'][0] - rad
-                T = torch.tensor([math.radians(p), math.sin(math.radians(a)), math.cos(math.radians(a)), r])
+                T = torch.tensor([math.radians(p), math.sin(math.radians(-a)), math.cos(math.radians(a)), r])
                 T = T[None, None, :].to(self.device)
                 cond = {}
                 clip_emb = self.model.cc_projection(torch.cat([c_crossattn, T], dim=-1))
@@ -247,7 +247,7 @@ class Zero123(nn.Module):
         # imgs: [B, 3, 256, 256] RGB space image
         # with self.model.ema_scope():
         imgs = imgs * 2 - 1
-        latents = self.model.get_first_stage_encoding(self.model.encode_first_stage(imgs))
+        latents = torch.cat([self.model.get_first_stage_encoding(self.model.encode_first_stage(img.unsqueeze(0))) for img in imgs], dim=0)
         return latents # [B, 4, 32, 32] Latent space image
 
 

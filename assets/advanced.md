@@ -48,32 +48,6 @@ return loss # functional loss
 * Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option.
 * Spatial density bias (density blob): `./nerf/network*.py > NeRFNetwork > density_blob`.
 
-# Speeding Things Up with Tracing
-
-Torch lets us trade away some vram for some ~30% speed gains if we step through a process called tracing first.
-If you'd like to try here's how:
-
- 1. In `guidance/sd_utils.py` you'll find these three lines commented out:
- ```python
-            #torch.save(latent_model_input, "train_latent_model_input.pt")
-            #torch.save(t, "train_t.pt")
-            #torch.save(text_embeddings, "train_text_embeddings.pt")
- ```
- remove the `#` to make the program write those three `.pt` files to your disk next time you start a standard run, for example
- ```bash
- python main.py --text "a hamburger" --workspace trial -O --w 200 --h 200
- ```
- You only need to let it run for a few seconds, until you've confirmed that three `.pt` files have been created.
-
- 2. Run the tracer script, which creates a `unet_traced.pt` file for you:
- ```bash
- python trace.py
- ```
-
- 3. Comment out the three `torch.save` lines in `guidance/sd_utils.py` again, and (re)-start another standard run. This time you should see a siginificant speed-up and maybe a bit
-    higher vram usage than before.
-
-The tracing functionality has only been tested in combination with the `-O` option. Using it without `--vram_O` would probably require some changes inside `trace.py`.
 
 # Debugging
 

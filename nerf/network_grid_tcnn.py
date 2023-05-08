@@ -59,6 +59,7 @@ class NeRFNetwork(NeRFRenderer):
                 "interpolation": "Smoothstep",
                 "per_level_scale": np.exp2(np.log2(2048 * self.bound / 16) / (16 - 1)),
             },
+            dtype=torch.float32, # ENHANCE: default float16 seems unstable...
         )
         self.in_dim = self.encoder.n_output_dims
         # use torch MLP, as tcnn MLP doesn't impl second-order derivative
@@ -89,6 +90,21 @@ class NeRFNetwork(NeRFRenderer):
 
         return sigma, albedo
     
+    def normal(self, x):
+    
+        with torch.enable_grad():
+            with torch.cuda.amp.autocast(enabled=False):
+                x.requires_grad_(True)
+                sigma, albedo = self.common_forward(x)
+                # query gradient
+                normal = - torch.autograd.grad(torch.sum(sigma), x, create_graph=True)[0] # [N, 3]
+        
+        # normal = self.finite_difference_normal(x)
+        normal = safe_normalize(normal)
+        normal = torch.nan_to_num(normal)
+
+        return normal
+    
     def forward(self, x, d, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], view direction, nomalized in [-1, 1]
@@ -103,9 +119,10 @@ class NeRFNetwork(NeRFRenderer):
         
         else: # lambertian shading
             with torch.enable_grad():
-                x.requires_grad_(True)
-                sigma, albedo = self.common_forward(x)
-                normal = - torch.autograd.grad(torch.sum(sigma), x, create_graph=True)[0] # [N, 3]
+                with torch.cuda.amp.autocast(enabled=False):
+                    x.requires_grad_(True)
+                    sigma, albedo = self.common_forward(x)
+                    normal = - torch.autograd.grad(torch.sum(sigma), x, create_graph=True)[0] # [N, 3]
             normal = safe_normalize(normal)
             normal = torch.nan_to_num(normal)
 

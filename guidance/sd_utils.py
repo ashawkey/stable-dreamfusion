@@ -13,8 +13,6 @@ import torch.nn.functional as F
 from torchvision.utils import save_image
 
 from torch.cuda.amp import custom_bwd, custom_fwd
-from dataclasses import dataclass
-
 
 class SpecifyGradient(torch.autograd.Function):
     @staticmethod
@@ -36,10 +34,6 @@ def seed_everything(seed):
     torch.cuda.manual_seed(seed)
     #torch.backends.cudnn.deterministic = True
     #torch.backends.cudnn.benchmark = True
-
-@dataclass
-class UNet2DConditionOutput:
-    sample: torch.HalfTensor # Not sure how to check what unet_traced.pt contains, and user wants. HalfTensor or FloatTensor
 
 class StableDiffusion(nn.Module):
     def __init__(self, device, fp16, vram_O, sd_version='2.1', hf_key=None, t_range=[0.02, 0.98]):
@@ -67,20 +61,6 @@ class StableDiffusion(nn.Module):
         # Create model
         pipe = StableDiffusionPipeline.from_pretrained(model_key, torch_dtype=self.precision_t)
 
-        if isfile('./unet_traced.pt'):
-            # use jitted unet
-            unet_traced = torch.jit.load('./unet_traced.pt')
-            class TracedUNet(torch.nn.Module):
-                def __init__(self):
-                    super().__init__()
-                    self.in_channels = pipe.unet.in_channels
-                    self.device = pipe.unet.device
-
-                def forward(self, latent_model_input, t, encoder_hidden_states):
-                    sample = unet_traced(latent_model_input, t, encoder_hidden_states)[0]
-                    return UNet2DConditionOutput(sample=sample)
-            pipe.unet = TracedUNet()
-
         if vram_O:
             pipe.enable_sequential_cpu_offload()
             pipe.enable_vae_slicing()
@@ -97,6 +77,8 @@ class StableDiffusion(nn.Module):
 
         self.scheduler = DDIMScheduler.from_pretrained(model_key, subfolder="scheduler", torch_dtype=self.precision_t)
 
+        del pipe
+
         self.num_train_timesteps = self.scheduler.config.num_train_timesteps
         self.min_step = int(self.num_train_timesteps * t_range[0])
         self.max_step = int(self.num_train_timesteps * t_range[1])
@@ -106,9 +88,8 @@ class StableDiffusion(nn.Module):
 
     @torch.no_grad()
     def get_text_embeds(self, prompt):
-        # prompt, negative_prompt: [str]
+        # prompt: [str]
 
-        # positive
         inputs = self.tokenizer(prompt, padding='max_length', max_length=self.tokenizer.model_max_length, return_tensors='pt')
         embeddings = self.text_encoder(inputs.input_ids.to(self.device))[0]
 
@@ -136,10 +117,6 @@ class StableDiffusion(nn.Module):
             latents_noisy = self.scheduler.add_noise(latents, noise, t)
             # pred noise
             latent_model_input = torch.cat([latents_noisy] * 2)
-            # Save input tensors for UNet
-            #torch.save(latent_model_input, "train_latent_model_input.pt")
-            #torch.save(t, "train_t.pt")
-            #torch.save(text_embeddings, "train_text_embeddings.pt")
             noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
 
         # perform guidance (high scale from paper!)
@@ -200,11 +177,6 @@ class StableDiffusion(nn.Module):
         for i, t in enumerate(self.scheduler.timesteps):
             # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
             latent_model_input = torch.cat([latents] * 2)
-
-            # Save input tensors for UNet
-            #torch.save(latent_model_input, "produce_latents_latent_model_input.pt")
-            #torch.save(t, "produce_latents_t.pt")
-            #torch.save(text_embeddings, "produce_latents_text_embeddings.pt")
             # predict the noise residual
             noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings)['sample']
 

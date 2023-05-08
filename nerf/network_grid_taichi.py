@@ -94,6 +94,12 @@ class NeRFNetwork(NeRFRenderer):
 
         return -normal
     
+    def normal(self, x):
+        normal = self.finite_difference_normal(x)
+        normal = safe_normalize(normal)
+        normal = torch.nan_to_num(normal)
+        return normal
+    
     def forward(self, x, d, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], view direction, nomalized in [-1, 1]
@@ -108,9 +114,7 @@ class NeRFNetwork(NeRFRenderer):
         
         else: # lambertian shading
             # normal = self.normal_net(enc)
-            normal = self.finite_difference_normal(x)
-            normal = safe_normalize(normal)
-            normal = torch.nan_to_num(normal)
+            normal = self.normal(x)
 
             lambertian = ratio + (1 - ratio) * (normal @ l).clamp(min=0) # [N,]
 
