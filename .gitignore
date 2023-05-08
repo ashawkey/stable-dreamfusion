@@ -7,6 +7,8 @@ venv_*/
 tmp*
 # data/
 ldm/data/
+data2
+scripts2
 trial*/
 .vs/
 
@@ -19,3 +21,10 @@ tets/256_tets.npz
 .vscode/launch.json
 
 data2
+data/car*
+data/chair*
+data/warrior*
+data/wd*
+data/space*
+data/corgi*
+data/turtle*
