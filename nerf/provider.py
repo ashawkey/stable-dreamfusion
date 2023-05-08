@@ -52,13 +52,14 @@ def visualize_poses(poses, dirs, size=0.1):
 def get_view_direction(thetas, phis, overhead, front):
     #                   phis [B,];          thetas: [B,]
     # front = 0         [0, front)
-    # side (left) = 1   [front, 180)
+    # side (right) = 1   [front, 180)
     # back = 2          [180, 180+front)
-    # side (right) = 3  [180+front, 360)
+    # side (left) = 3  [180+front, 360)
     # top = 4                               [0, overhead]
     # bottom = 5                            [180-overhead, 180]
     res = torch.zeros(thetas.shape[0], dtype=torch.long)
     # first determine by phis
+    phis = phis % (2 * np.pi)
     res[(phis < front / 2) | (phis >= 2 * np.pi - front / 2)] = 0
     res[(phis >= front / 2) & (phis < np.pi - front / 2)] = 1
     res[(phis >= np.pi - front / 2) & (phis < np.pi + front / 2)] = 2
