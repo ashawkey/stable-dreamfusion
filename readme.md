@@ -2,9 +2,9 @@
 
 A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) text-to-2D model.
 
-**NEWS (2023.4.17)**: Experimental Image-to-3D generation support!
-
-https://user-images.githubusercontent.com/25863658/232403294-b77409bf-ddc7-4bb8-af32-ee0cc123825a.mp4
+**NEWS (2023.5.6)**: 
+* Support of [DeepFloyd-IF](https://github.com/deep-floyd/IF) as the guidance model.
+* Enhance Image-to-3D quality, support Image + Text condition of [Make-it-3D](https://make-it-3d.github.io/).
 
 https://user-images.githubusercontent.com/25863658/232403162-51b69000-a242-4b8c-9cd9-4242b09863fa.mp4
 
@@ -64,6 +64,11 @@ To use image-conditioned 3D generation, you need to download some pretrained che
     gdown '1wNxVO4vVbDEMEpnAi_jwQObf2MFodcBR&confirm=t' # omnidata_dpt_normal_v2.ckpt
     ```
 
+To use [DeepFloyd-IF](https://github.com/deep-floyd/IF), you need to accept the usage conditions from [hugging face](https://huggingface.co/DeepFloyd/IF-I-XL-v1.0), and login with `huggingface_hub login` in command line.
+
+For DMTet, we port the pre-generated `32/64/128` resolution tetrahedron grids under `tets`. 
+The 256 resolution one can be found [here](https://drive.google.com/file/d/1lgvEKNdsbW5RS4gVxJbgBS4Ac92moGSa/view?usp=sharing).
+
 ### Build extension (optional)
 By default, we use [`load`](https://pytorch.org/docs/stable/cpp_extension.html#torch.utils.cpp_extension.load) to build the extension at runtime.
 We also provide the `setup.py` to build each extension:
@@ -112,9 +117,6 @@ python main.py --text "a hamburger" --workspace trial -O
 # enable various vram savings (https://huggingface.co/docs/diffusers/optimization/fp16).
 python main.py --text "a hamburger" --workspace trial -O --vram_O
 
-# this makes it possible to train with larger rendering resolution, which leads to better quality (see https://github.com/ashawkey/stable-dreamfusion/pull/174)
-python main.py --text "a hamburger" --workspace trial -O --vram_O --w 300 --h 300 # Tested to run fine on 8GB VRAM (Nvidia 3070 Ti).
-
 # You can collect arguments in a file. You can override arguments by specifying them after `--file`. Note that quoted strings can't be loaded from .args files...
 python main.py --file scripts/res64.args --workspace trial_awesome_hamburger --text "a photo of an awesome hamburger"
 
@@ -124,11 +126,15 @@ python3 main.py --text "a hamburger" --workspace trial -O --backbone grid_taichi
 # choose stable-diffusion version (support 1.5, 2.0 and 2.1, default is 2.1 now)
 python main.py --text "a hamburger" --workspace trial -O --sd_version 1.5
 
+# use a custom stable-diffusion checkpoint from hugging face:
+python main.py --text "a hamburger" --workspace trial -O --hf_key andite/anything-v4.0
+
+# use DeepFloyd-IF for guidance (experimental):
+python main.py --text "a hamburger" --workspace trial -O --IF
+python main.py --text "a hamburger" --workspace trial -O --IF --vram_O # requires ~24G GPU memory
+
 # we also support negative text prompt now:
 python main.py --text "a rose" --negative "red" --workspace trial -O
-
-# A Gradio GUI is also possible (with less options):
-python gradio_app.py # open in web browser
 
 ## after the training is finished:
 # test (exporting 360 degree video)
@@ -157,8 +163,8 @@ python main.py --workspace trial2 -O2 --test --gui # not recommended, FPS will b
 
 ### DMTet finetuning
 
-## use --dmtet and --init_ckpt <nerf checkpoint> to finetune the mesh at higher reslution
-python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_ckpt trial/checkpoints/df.pth
+## use --dmtet and --init_with <nerf checkpoint> to finetune the mesh at higher reslution
+python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_with trial/checkpoints/df.pth
 
 ## test & export the mesh
 python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --test --save_mesh
@@ -172,15 +178,24 @@ python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5
 # note: the results of image-to-3D is dependent on zero-1-to-3's capability. For best performance, the input image should contain a single front-facing object. Check the examples under ./data.
 # this will exports `<image>_rgba.png`, `<image>_depth.png`, and `<image>_normal.png` to the directory containing the input image.
 python preprocess_image.py <image>.png 
+python preprocess_image.py <image>.png --border_ratio 0.4 # increase border_ratio if the center object appears too large and results are unsatisfying.
 
 ## train
 # pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
 python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000
-# dmtet finetuning (highly recommended)
-python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --init_ckpt trial_image/checkpoints/df.pth
 
-# experimental: providing both --text and --image enables stable-diffusion backend, but the result may look very different from the provided image. This is still an option if image-only mode cannot produce a satisfactory result.
-python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text
+# if the image is not exactly front-view (elevation = 0), adjust default_theta (we use theta from 0 to 180 to represent elevation from 90 to -90)
+python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --default_theta 80
+
+# by default we leverage monocular depth estimation to aid image-to-3d, but if you find the depth estimation inaccurate and harms results, turn it off by:
+python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --lambda_depth 0
+
+python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --init_with trial_image/checkpoints/df.pth
+
+# providing both --text and --image enables stable-diffusion backend (similar to make-it-3d)
+python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text --iters 5000
+
+python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text_dmtet --dmtet --init_with trial_image_text/checkpoints/df.pth
 
 ## test / visualize
 python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --save_mesh
@@ -192,6 +207,8 @@ python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet
 # Warning: this slows down training considerably and consumes lots of disk space!
 python main.py --text "a hamburger" --workspace trial_hamburger -O --vram_O --save_guidance --save_guidance_interval 5 # save every 5 steps
 ```
+
+For example commands, check [`scripts`](./scripts).
 
 For advanced tips and other developing stuff, check [Advanced Tips](./assets/advanced.md).
 
@@ -248,6 +265,16 @@ This work is based on an increasing list of amazing research works and open-sour
         title={Fantasia3D: Disentangling Geometry and Appearance for High-quality Text-to-3D Content Creation},
         author={Rui Chen and Yongwei Chen and Ningxin Jiao and Kui Jia},
         journal={arXiv preprint arXiv:2303.13873},
+        year={2023}
+    }
+    ```
+
+* [Make-It-3D: High-Fidelity 3D Creation from A Single Image with Diffusion Prior](https://make-it-3d.github.io/)
+    ```
+    @article{tang2023make,
+        title={Make-It-3D: High-Fidelity 3D Creation from A Single Image with Diffusion Prior},
+        author={Tang, Junshu and Wang, Tengfei and Zhang, Bo and Zhang, Ting and Yi, Ran and Ma, Lizhuang and Chen, Dong},
+        journal={arXiv preprint arXiv:2303.14184},
         year={2023}
     }
     ```
