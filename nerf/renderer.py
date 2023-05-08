@@ -691,6 +691,10 @@ class NeRFRenderer(nn.Module):
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.sum(-1).mean()
             
+            if self.opt.lambda_3d_normal_smooth > 0 and normals is not None:
+                normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2)
+                results['loss_normal_perturb'] = (normals - normals_perturb).abs().mean()
+            
             if (self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0) and normals is not None:
                 normal_image = torch.sum(weights.unsqueeze(-1) * (normals + 1) / 2, dim=-2) # [N, 3], in [0, 1]
                 results['normal_image'] = normal_image
@@ -737,6 +741,10 @@ class NeRFRenderer(nn.Module):
                 # orientation loss 
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
+            
+            if self.opt.lambda_3d_normal_smooth > 0 and normals is not None:
+                normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2)
+                results['loss_normal_perturb'] = (normals - normals_perturb).abs().mean()
             
             if (self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0) and normals is not None:
                 _, _, _, normal_image = raymarching.composite_rays_train(sigmas.detach(), (normals + 1) / 2, ts, rays, T_thresh, binarize)
@@ -804,26 +812,46 @@ class NeRFRenderer(nn.Module):
         return results
 
     @torch.no_grad()
-    def init_tet(self):
+    def init_tet(self, mesh=None):
 
-        if self.cuda_ray:
-            density_thresh = min(self.mean_density, self.density_thresh)
+        if mesh is not None:
+            # normalize mesh
+            scale = 0.8 / np.array(mesh.bounds[1] - mesh.bounds[0]).max()
+            center = np.array(mesh.bounds[1] + mesh.bounds[0]) / 2
+            mesh.vertices = (mesh.vertices - center) * scale
+
+            # init scale
+            # self.tet_scale = torch.from_numpy(np.abs(mesh.vertices).max(axis=0) + 1e-1).to(self.verts.dtype).cuda()
+            self.tet_scale = torch.from_numpy(np.array([np.abs(mesh.vertices).max()]) + 1e-1).to(self.verts.dtype).cuda()
+            self.verts = self.verts * self.tet_scale
+
+            # init sdf
+            import cubvh
+            BVH = cubvh.cuBVH(mesh.vertices, mesh.faces)
+            sdf, _, _ = BVH.signed_distance(self.verts, return_uvw=False, mode='watertight')
+            sdf *= -10 # INNER is POSITIVE, also make it stronger
+            self.sdf.data += sdf.to(self.sdf.data.dtype).clamp(-1, 1)
+
         else:
-            density_thresh = self.density_thresh
-    
-        if self.opt.density_activation == 'softplus':
-            density_thresh = density_thresh * 25
 
-        # init scale
-        sigma = self.density(self.verts)['sigma'] # verts covers [-1, 1] now
-        mask = sigma > density_thresh
-        valid_verts = self.verts[mask]
-        self.tet_scale = valid_verts.abs().amax(dim=0) + 1e-1
-        self.verts = self.verts * self.tet_scale
+            if self.cuda_ray:
+                density_thresh = min(self.mean_density, self.density_thresh)
+            else:
+                density_thresh = self.density_thresh
+        
+            if self.opt.density_activation == 'softplus':
+                density_thresh = density_thresh * 25
 
-        # init sigma
-        sigma = self.density(self.verts)['sigma'] # new verts
-        self.sdf.data += (sigma - density_thresh).clamp(-1, 1)
+            # init scale
+            sigma = self.density(self.verts)['sigma'] # verts covers [-1, 1] now
+            mask = sigma > density_thresh
+            valid_verts = self.verts[mask]
+            self.tet_scale = valid_verts.abs().amax(dim=0) + 1e-1
+            self.verts = self.verts * self.tet_scale
+
+            # init sigma
+            sigma = self.density(self.verts)['sigma'] # new verts
+            self.sdf.data += (sigma - density_thresh).clamp(-1, 1)
 
         print(f'[INFO] init dmtet: scale = {self.tet_scale}')
 
@@ -874,6 +902,9 @@ class NeRFRenderer(nn.Module):
         normal = safe_normalize(normal)
 
         xyzs = xyzs.view(-1, 3)
+        # if self.training:
+        #     xyzs = xyzs + torch.randn_like(xyzs) * 1e-3
+
         mask = (alpha > 0).view(-1).detach()
 
         # do the lighting here since we have normal from mesh now.
@@ -968,6 +999,10 @@ class NeRFRenderer(nn.Module):
                 # orientation loss 
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
+            
+            if self.opt.lambda_3d_normal_smooth > 0 and normals is not None:
+                normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2)
+                results['loss_normal_perturb'] = (normals - normals_perturb).abs().mean()
             
             if (self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0) and normals is not None:
                 _, _, _, normal_image, _ = self.volume_render(sigmas.detach(), (normals + 1) / 2, deltas, ts, rays_a, kwargs.get('T_threshold', 1e-4))

@@ -24,11 +24,14 @@ if __name__ == '__main__':
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--eval_interval', type=int, default=1, help="evaluate on the valid set every interval epochs")
     parser.add_argument('--workspace', type=str, default='workspace')
-    parser.add_argument('--guidance', type=str, default='stable-diffusion', help='guidance model')
     parser.add_argument('--seed', default=None)
 
     parser.add_argument('--image', default=None, help="image prompt")
-    parser.add_argument('--known_view_interval', type=int, default=2, help="train default view with RGB loss every & iters, only valid if --image is not None.")
+    parser.add_argument('--known_view_interval', type=int, default=4, help="train default view with RGB loss every & iters, only valid if --image is not None.")
+
+    parser.add_argument('--IF', action='store_true', help="experimental: use DeepFloyd IF as the guidance model for nerf stage")
+
+    parser.add_argument('--guidance', type=str, nargs='*', default=['SD'], help='guidance model')
     parser.add_argument('--guidance_scale', type=float, default=100, help="diffusion model classifier-free guidance scale")
     
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
@@ -37,7 +40,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--dmtet', action='store_true', help="use dmtet finetuning")
     parser.add_argument('--tet_grid_size', type=int, default=128, help="tet grid size")
-    parser.add_argument('--init_ckpt', type=str, default='', help="ckpt to init dmtet")
+    parser.add_argument('--init_with', type=str, default='', help="ckpt to init dmtet")
+    parser.add_argument('--lock_geo', action='store_true', help="disable dmtet to learn geometry")
 
     ### training options
     parser.add_argument('--iters', type=int, default=10000, help="training iters")
@@ -50,17 +54,18 @@ if __name__ == '__main__':
     parser.add_argument('--upsample_steps', type=int, default=32, help="num steps up-sampled per ray (only valid when not using --cuda_ray)")
     parser.add_argument('--update_extra_interval', type=int, default=16, help="iter interval to update extra status (only valid when using --cuda_ray)")
     parser.add_argument('--max_ray_batch', type=int, default=4096, help="batch size of rays at inference to avoid OOM (only valid when not using --cuda_ray)")
-    parser.add_argument('--warmup_iters', type=int, default=2000, help="training iters that only use albedo shading")
+    parser.add_argument('--latent_iter_ratio', type=float, default=0.2, help="training iters that only use albedo shading")
+    parser.add_argument('--albedo_iter_ratio', type=float, default=0, help="training iters that only use albedo shading")
     parser.add_argument('--jitter_pose', action='store_true', help="add jitters to the randomly sampled camera poses")
     parser.add_argument('--uniform_sphere_rate', type=float, default=0, help="likelihood of sampling camera location uniformly on the sphere surface area")
     parser.add_argument('--grad_clip', type=float, default=-1, help="clip grad of all grad to this limit, negative value disables it")
     parser.add_argument('--grad_clip_rgb', type=float, default=-1, help="clip grad of rgb space grad to this limit, negative value disables it")
     # model options
     parser.add_argument('--bg_radius', type=float, default=1.4, help="if positive, use a background model at sphere(bg_radius)")
-    parser.add_argument('--density_activation', type=str, default='softplus', choices=['softplus', 'exp'], help="density activation function")
-    parser.add_argument('--density_thresh', type=float, default=0.1, help="threshold for density grid to be occupied")
-    parser.add_argument('--blob_density', type=float, default=10, help="max (center) density for the density blob")
-    parser.add_argument('--blob_radius', type=float, default=0.5, help="control the radius for the density blob")
+    parser.add_argument('--density_activation', type=str, default='exp', choices=['softplus', 'exp'], help="density activation function")
+    parser.add_argument('--density_thresh', type=float, default=10, help="threshold for density grid to be occupied")
+    parser.add_argument('--blob_density', type=float, default=5, help="max (center) density for the density blob")
+    parser.add_argument('--blob_radius', type=float, default=0.2, help="control the radius for the density blob")
     # network backbone
     parser.add_argument('--backbone', type=str, default='grid', choices=['grid_tcnn', 'grid', 'vanilla', 'grid_taichi'], help="nerf backbone")
     parser.add_argument('--optim', type=str, default='adan', choices=['adan', 'adam'], help="optimizer")
@@ -81,15 +86,15 @@ if __name__ == '__main__':
     parser.add_argument('--dt_gamma', type=float, default=0, help="dt_gamma (>=0) for adaptive ray marching. set to 0 to disable, >0 to accelerate rendering (but usually with worse quality)")
     parser.add_argument('--min_near', type=float, default=0.01, help="minimum near distance for camera")
 
-    parser.add_argument('--radius_range', type=float, nargs='*', default=[1.0, 1.5], help="training camera radius range")
+    parser.add_argument('--radius_range', type=float, nargs='*', default=[3.0, 3.5], help="training camera radius range")
     parser.add_argument('--theta_range', type=float, nargs='*', default=[45, 105], help="training camera fovy range")
     parser.add_argument('--phi_range', type=float, nargs='*', default=[-180, 180], help="training camera fovy range")
-    parser.add_argument('--fovy_range', type=float, nargs='*', default=[40, 80], help="training camera fovy range")
+    parser.add_argument('--fovy_range', type=float, nargs='*', default=[10, 30], help="training camera fovy range")
 
-    parser.add_argument('--default_radius', type=float, default=1.2, help="radius for the default view")
+    parser.add_argument('--default_radius', type=float, default=3.2, help="radius for the default view")
     parser.add_argument('--default_theta', type=float, default=90, help="radius for the default view")
     parser.add_argument('--default_phi', type=float, default=0, help="radius for the default view")
-    parser.add_argument('--default_fovy', type=float, default=60, help="fovy for the default view")
+    parser.add_argument('--default_fovy', type=float, default=20, help="fovy for the default view")
 
     parser.add_argument('--progressive_view', action='store_true', help="progressively expand view sampling range from default to full")
     parser.add_argument('--progressive_level', action='store_true', help="progressively increase gridencoder's max_level")
@@ -109,11 +114,12 @@ if __name__ == '__main__':
     parser.add_argument('--lambda_mesh_laplacian', type=float, default=0.5, help="loss scale for mesh laplacian")
 
     parser.add_argument('--lambda_guidance', type=float, default=1, help="loss scale for SDS")
-    parser.add_argument('--lambda_rgb', type=float, default=10, help="loss scale for RGB")
-    parser.add_argument('--lambda_mask', type=float, default=5, help="loss scale for mask (alpha)")
+    parser.add_argument('--lambda_rgb', type=float, default=1000, help="loss scale for RGB")
+    parser.add_argument('--lambda_mask', type=float, default=500, help="loss scale for mask (alpha)")
     parser.add_argument('--lambda_normal', type=float, default=0, help="loss scale for normal map")
-    parser.add_argument('--lambda_depth', type=float, default=0.1, help="loss scale for relative depth")
+    parser.add_argument('--lambda_depth', type=float, default=10, help="loss scale for relative depth")
     parser.add_argument('--lambda_2d_normal_smooth', type=float, default=0, help="loss scale for 2D normal image smoothness")
+    parser.add_argument('--lambda_3d_normal_smooth', type=float, default=0, help="loss scale for 3D normal image smoothness")
 
     ### debugging options
     parser.add_argument('--save_guidance', action='store_true', help="save images of the per-iteration NeRF renders, added noise, denoised (i.e. guidance), fully-denoised. Useful for debugging, but VERY SLOW and takes lots of memory!")
@@ -123,8 +129,8 @@ if __name__ == '__main__':
     parser.add_argument('--gui', action='store_true', help="start a GUI")
     parser.add_argument('--W', type=int, default=800, help="GUI width")
     parser.add_argument('--H', type=int, default=800, help="GUI height")
-    parser.add_argument('--radius', type=float, default=3, help="default GUI camera radius from center")
-    parser.add_argument('--fovy', type=float, default=60, help="default GUI camera fovy")
+    parser.add_argument('--radius', type=float, default=5, help="default GUI camera radius from center")
+    parser.add_argument('--fovy', type=float, default=20, help="default GUI camera fovy")
     parser.add_argument('--light_theta', type=float, default=60, help="default GUI light direction in [0, 180], corresponding to elevation [90, -90]")
     parser.add_argument('--light_phi', type=float, default=0, help="default GUI light direction in [0, 360), azimuth")
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
@@ -144,42 +150,56 @@ if __name__ == '__main__':
 
         if opt.text is None:
             # use zero123 guidance model when only providing image
-            opt.guidance = 'zero123' 
+            opt.guidance = ['zero123']
             opt.fovy_range = [opt.default_fovy, opt.default_fovy] # fix fov as zero123 doesn't support changing fov
+            opt.guidance_scale = 5
 
-            # very important to keep the image's content
-            opt.guidance_scale = 3 
-            opt.lambda_guidance = 0.02
-            
+            opt.lambda_3d_normal_smooth = 10
+
         else:
             # use stable-diffusion when providing both text and image
-            opt.guidance = 'stable-diffusion'
+            opt.guidance = ['SD', 'clip']
+            opt.guidance_scale = 10
+
+            opt.t_range = [0.2, 0.6]
+            opt.known_view_interval = 2
+            opt.lambda_3d_normal_smooth = 20
+            opt.bg_radius = -1
+
+        # smoothness
+        opt.lambda_entropy = 1
+        opt.lambda_orient = 1
         
-        opt.t_range = [0.02, 0.50]
-        opt.lambda_orient = 10
-        
-        # latent warmup is not needed, we hardcode a 100-iter rgbd loss only warmup.
-        opt.warmup_iters = 0 
+        # latent warmup is not needed
+        opt.latent_iter_ratio = 0 
+        opt.albedo_iter_ratio = 0
         
         # make shape init more stable
-        opt.progressive_view = True 
-        opt.progressive_level = True
+        opt.progressive_view = True
+        # opt.progressive_level = True
+
 
     # default parameters for finetuning
     if opt.dmtet:
+
         opt.h = int(opt.h * opt.dmtet_reso_scale)
         opt.w = int(opt.w * opt.dmtet_reso_scale)
+        opt.known_view_scale = 1
 
         opt.t_range = [0.02, 0.50] # ref: magic3D
 
+        if opt.image is not None:
+            opt.lambda_normal = 0
+            opt.lambda_depth = 0
+
+            if opt.text is not None:
+                opt.t_range = [0.20, 0.50]
+
         # assume finetuning
-        opt.warmup_iters = 0
+        opt.latent_iter_ratio = 0
+        opt.albedo_iter_ratio = 0
         opt.progressive_view = False
         opt.progressive_level = False
-
-        if opt.guidance != 'zero123':
-            # smaller fovy (zoom in) for better details
-            opt.fovy_range = [opt.fovy_range[0] - 10, opt.fovy_range[1] - 10] 
 
     # record full range for progressive view expansion
     if opt.progressive_view:
@@ -191,6 +211,13 @@ if __name__ == '__main__':
         opt.full_theta_range = opt.theta_range    
         opt.full_phi_range = opt.phi_range
         opt.full_fovy_range = opt.fovy_range
+
+    # Experimental: simply replace sd
+    if opt.IF:
+        if 'SD' in opt.guidance:
+            opt.guidance.remove('SD')
+            opt.guidance.append('IF')
+        opt.latent_iter_ratio = 0 # must not do as_latent
 
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
@@ -220,13 +247,19 @@ if __name__ == '__main__':
 
     model = NeRFNetwork(opt).to(device)
 
-    if opt.dmtet and opt.init_ckpt != '':
-        # load pretrained weights to init dmtet
-        state_dict = torch.load(opt.init_ckpt, map_location=device)
-        model.load_state_dict(state_dict['model'], strict=False)
-        if opt.cuda_ray:
-            model.mean_density = state_dict['mean_density']
-        model.init_tet()
+    if opt.dmtet and opt.init_with != '':
+        if opt.init_with.endswith('.pth'):
+            # load pretrained weights to init dmtet
+            state_dict = torch.load(opt.init_with, map_location=device)
+            model.load_state_dict(state_dict['model'], strict=False)
+            if opt.cuda_ray:
+                model.mean_density = state_dict['mean_density']
+            model.init_tet()
+        else:
+            # assume a mesh to init dmtet (experimental, not working well now!)
+            import trimesh
+            mesh = trimesh.load(opt.init_with, force='mesh', skip_material=True, process=False)
+            model.init_tet(mesh=mesh)
 
     print(model)
 
@@ -264,18 +297,24 @@ if __name__ == '__main__':
             scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 1) # fixed
             # scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(optimizer, lambda iter: 0.1 ** min(iter / opt.iters, 1))
 
-        if opt.guidance == 'stable-diffusion':
-            from guidance.sd_utils import StableDiffusion
-            guidance = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key, opt.t_range)
-        elif opt.guidance == 'zero123':
-            from guidance.zero123_utils import Zero123
-            guidance = Zero123(device, opt.fp16, opt.vram_O, opt.t_range)
-        elif opt.guidance == 'clip':
-            from guidance.clip_utils import CLIP
-            guidance = CLIP(device)
-        else:
-            raise NotImplementedError(f'--guidance {opt.guidance} is not implemented.')
+        guidance = nn.ModuleDict()
 
+        if 'SD' in opt.guidance:
+            from guidance.sd_utils import StableDiffusion
+            guidance['SD'] = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key, opt.t_range)
+        
+        if 'IF' in opt.guidance:
+            from guidance.if_utils import IF
+            guidance['IF'] = IF(device, opt.vram_O, opt.t_range)
+
+        if 'zero123' in opt.guidance:
+            from guidance.zero123_utils import Zero123
+            guidance['zero123'] = Zero123(device, opt.fp16, opt.vram_O, opt.t_range)
+
+        if 'clip' in opt.guidance:
+            from guidance.clip_utils import CLIP
+            guidance['clip'] = CLIP(device)
+        
         trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
 
         trainer.default_view_data = train_loader._data.get_default_view_data()

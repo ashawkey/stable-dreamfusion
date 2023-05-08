@@ -121,7 +121,7 @@ class Zero123(nn.Module):
 
             x_in = torch.cat([latents_noisy] * 2)
             t_in = torch.cat([t] * 2)
-            T = torch.tensor([math.radians(polar), math.sin(math.radians(azimuth)), math.cos(math.radians(azimuth)), radius])
+            T = torch.tensor([math.radians(polar), math.sin(math.radians(-azimuth)), math.cos(math.radians(azimuth)), radius])
             T = T[None, None, :].to(self.device)
             cond = {}
             clip_emb = self.model.cc_projection(torch.cat([embeddings[0], T], dim=-1))

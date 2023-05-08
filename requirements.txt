@@ -50,3 +50,6 @@ timm
 
 # for remote debugging
 debugpy-run
+
+# for deepfloyd if
+sentencepiece
