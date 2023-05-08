@@ -7,6 +7,8 @@ venv_*/
 tmp*
 data/
 ldm/data/
+data2
+scripts2
 trial*/
 .vs/
 
@@ -22,3 +24,12 @@ settings.json
 
 aa*.png
 .vscode/launch.json
+
+data2
+data/car*
+data/chair*
+data/warrior*
+data/wd*
+data/space*
+data/corgi*
+data/turtle*

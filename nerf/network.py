@@ -156,7 +156,7 @@ class NeRFNetwork(NeRFRenderer):
         
         # normal = self.finite_difference_normal(x)
         normal = safe_normalize(normal)
-        # normal = torch.nan_to_num(normal)
+        normal = torch.nan_to_num(normal)
 
         return normal
         

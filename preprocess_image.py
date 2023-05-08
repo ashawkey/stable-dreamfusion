@@ -117,6 +117,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('path', type=str, help="path to image (png, jpeg, etc.)")
+    parser.add_argument('--size', default=256, type=int, help="output resolution")
+    parser.add_argument('--border_ratio', default=0.2, type=float, help="output border ratio")
     opt = parser.parse_args()
     
     out_dir = os.path.dirname(opt.path)
@@ -136,7 +138,6 @@ if __name__ == '__main__':
     # carve background
     print(f'[INFO] background removal...')
     carved_image = BackgroundRemoval()(image) # [H, W, 4]
-    cv2.imwrite(out_rgba, cv2.cvtColor(carved_image, cv2.COLOR_RGBA2BGRA))
     mask = carved_image[..., -1] > 0
 
     # predict depth
@@ -146,7 +147,6 @@ if __name__ == '__main__':
     depth[mask] = (depth[mask] - depth[mask].min()) / (depth[mask].max() - depth[mask].min() + 1e-9)
     depth[~mask] = 0
     depth = (depth * 255).astype(np.uint8)
-    cv2.imwrite(out_depth, depth)
     del dpt_depth_model
 
     # predict normal
@@ -155,8 +155,34 @@ if __name__ == '__main__':
     normal = dpt_normal_model(image)[0]
     normal = (normal * 255).astype(np.uint8).transpose(1, 2, 0)
     normal[~mask] = 0
-    cv2.imwrite(out_normal, normal)
     del dpt_normal_model
+
+    # rescale and recenter
+    final_rgba = np.zeros((opt.size, opt.size, 4), dtype=np.uint8)
+    final_depth = np.zeros((opt.size, opt.size), dtype=np.uint8)
+    final_normal = np.zeros((opt.size, opt.size, 3), dtype=np.uint8)
+
+    coords = np.nonzero(mask)
+    x_min, x_max = coords[0].min(), coords[0].max()
+    y_min, y_max = coords[1].min(), coords[1].max()
+    h = x_max - x_min
+    w = y_max - y_min
+    desired_size = int(opt.size * (1 - opt.border_ratio))
+    scale = desired_size / max(h, w)
+    h2 = int(h * scale)
+    w2 = int(w * scale)
+    x2_min = (opt.size - h2) // 2
+    x2_max = x2_min + h2
+    y2_min = (opt.size - w2) // 2
+    y2_max = y2_min + w2
+    final_rgba[x2_min:x2_max, y2_min:y2_max] = cv2.resize(carved_image[x_min:x_max, y_min:y_max], (w2, h2), interpolation=cv2.INTER_AREA)
+    final_depth[x2_min:x2_max, y2_min:y2_max] = cv2.resize(depth[x_min:x_max, y_min:y_max], (w2, h2), interpolation=cv2.INTER_AREA)
+    final_normal[x2_min:x2_max, y2_min:y2_max] = cv2.resize(normal[x_min:x_max, y_min:y_max], (w2, h2), interpolation=cv2.INTER_AREA)
+    
+    # write output
+    cv2.imwrite(out_rgba, cv2.cvtColor(final_rgba, cv2.COLOR_RGBA2BGRA))
+    cv2.imwrite(out_depth, final_depth)
+    cv2.imwrite(out_normal, final_normal)
 
     # predict caption (it's too slow... use your brain instead)
     # print(f'[INFO] captioning...')

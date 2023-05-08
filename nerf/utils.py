@@ -22,7 +22,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torch.distributed as dist
 import torchvision.transforms.functional as TF
-
+from torchmetrics import PearsonCorrCoef
 
 from rich.console import Console
 from torch_ema import ExponentialMovingAverage
@@ -184,16 +184,22 @@ class Trainer(object):
 
         # guide model
         self.guidance = guidance
+        self.embeddings = {}
 
-        # text prompt
+        # text prompt / images
         if self.guidance is not None:
-            for p in self.guidance.parameters():
-                p.requires_grad = False
+            for key in self.guidance:
+                for p in self.guidance[key].parameters():
+                    p.requires_grad = False
+                self.embeddings[key] = {}
             self.prepare_embeddings()
 
         if isinstance(criterion, nn.Module):
             criterion.to(self.device)
         self.criterion = criterion
+
+        if self.opt.images is not None:
+            self.pearson = PearsonCorrCoef().to(self.device)
 
         if optimizer is None:
             self.optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=5e-4) # naive adam
@@ -265,20 +271,28 @@ class Trainer(object):
                 self.load_checkpoint(self.use_checkpoint)
 
     # calculate the text embs.
+    @torch.no_grad()
     def prepare_embeddings(self):
 
         # text embeddings (stable-diffusion)
         if self.opt.text is not None:
 
-            self.text_z = {}
+            if 'SD' in self.guidance:
+                self.embeddings['SD']['default'] = self.guidance['SD'].get_text_embeds([self.opt.text])
+                self.embeddings['SD']['uncond'] = self.guidance['SD'].get_text_embeds([self.opt.negative])
 
-            self.text_z['default'] = self.guidance.get_text_embeds([self.opt.text])
-            self.text_z['uncond'] = self.guidance.get_text_embeds([self.opt.negative])
+                for d in ['front', 'side', 'back']:
+                    self.embeddings['SD'][d] = self.guidance['SD'].get_text_embeds([f"{self.opt.text}, {d} view"])
 
-            for d in ['front', 'side', 'back']:
-                self.text_z[d] = self.guidance.get_text_embeds([f"{self.opt.text}, {d} view"])
-        else:
-            self.text_z = None
+            if 'IF' in self.guidance:
+                self.embeddings['IF']['default'] = self.guidance['IF'].get_text_embeds([self.opt.text])
+                self.embeddings['IF']['uncond'] = self.guidance['IF'].get_text_embeds([self.opt.negative])
+
+                for d in ['front', 'side', 'back']:
+                    self.embeddings['IF'][d] = self.guidance['IF'].get_text_embeds([f"{self.opt.text}, {d} view"])
+
+            if 'clip' in self.guidance:
+                self.embeddings['clip']['text'] = self.guidance['clip'].get_text_embeds(self.opt.text)
 
         if self.opt.images is not None:
 
@@ -307,25 +321,24 @@ class Trainer(object):
             self.normal = torch.from_numpy(normal.astype(np.float32) / 255).to(self.device)
             print(f'[INFO] dataset: load normal prompt {normal_paths} {self.normal.shape}')
 
-            # encode image_z for zero123
-            if self.opt.guidance == 'zero123':
+            # encode embeddings for zero123
+            if 'zero123' in self.guidance:
                 rgba_256 = np.stack([cv2.resize(rgba, (256, 256), interpolation=cv2.INTER_AREA).astype(np.float32) / 255 for rgba in rgbas])
                 rgbs_256 = rgba_256[..., :3] * rgba_256[..., 3:] + (1 - rgba_256[..., 3:])
                 rgb_256 = torch.from_numpy(rgbs_256).permute(0,3,1,2).contiguous().to(self.device)
-                guidance_embeds = self.guidance.get_img_embeds(rgb_256)
-                self.image_z = {
+                guidance_embeds = self.guidance['zero123'].get_img_embeds(rgb_256)
+                self.embeddings['zero123']['default'] = {
                     'img_ws' : self.opt.img_ws,
                     'c_crossattn' : guidance_embeds[0],
                     'c_concat' : guidance_embeds[1],
                     'thetas' : self.opt.thetas,
-                    'phis' : [-p for p in self.opt.phis],   # Zero123 has -ve azimuth direction as NeRF
+                    'phis' : self.opt.phis,
                     'radii' : self.opt.radii,
                 }
-            else:
-                self.image_z = None
 
-        else:
-            self.image_z = None
+            if 'clip' in self.guidance:
+                self.embeddings['clip']['image'] = self.guidance['clip'].get_img_embeds(self.rgb)
+
 
     def __del__(self):
         if self.log_ptr:
@@ -381,9 +394,16 @@ class Trainer(object):
         B, N = rays_o.shape[:2]
         H, W = data['H'], data['W']
 
+        if self.opt.batch_size_1:
+            B = 1
+            choice = np.random.choice(np.arange(B))
+            rays_o = rays_o[choice].unsqueeze(0)
+            rays_d = rays_d[choice].unsqueeze(0)
+            mvp = mvp[choice].unsqueeze(0)
+
         if do_rgbd_loss:
             ambient_ratio = 1.0
-            shading = 'ambient'
+            shading = 'lambertian' # use lambertian instead of albedo to get normal
             as_latent = False
             binarize = False
             bg_color = torch.rand((B * N, 3), device=rays_o.device)
@@ -394,20 +414,27 @@ class Trainer(object):
                 rays_o = rays_o + torch.randn(3, device=self.device) * noise_scale
                 rays_d = rays_d + torch.randn(3, device=self.device) * noise_scale
 
-        elif self.global_step < self.opt.warmup_iters:
+        elif self.global_step < (self.opt.latent_iter_ratio * self.opt.iters):
             ambient_ratio = 1.0
             shading = 'normal'
             as_latent = True
             binarize = False
             bg_color = None
+
         else:
-            # random shading
-            ambient_ratio = 0.1 + 0.9 * random.random()
-            rand = random.random()
-            if rand > 0.8:
-                shading = 'textureless'
+
+            if self.global_step < (self.opt.albedo_iter_ratio * self.opt.iters):
+                ambient_ratio = 1.0
+                shading = 'albedo'
             else:
-                shading = 'lambertian'
+                # random shading
+                ambient_ratio = 0.1 + 0.9 * random.random()
+                rand = random.random()
+                if rand > 0.8:
+                    shading = 'textureless'
+                else:
+                    shading = 'lambertian'
+
             as_latent = False
 
             # random weights binarization (like mobile-nerf) [NOT WORKING NOW]
@@ -417,7 +444,7 @@ class Trainer(object):
 
             # random background
             rand = random.random()
-            if rand > 0.5:
+            if self.opt.bg_radius > 0 and rand > 0.5:
                 bg_color = None # use bg_net
             else:
                 bg_color = torch.rand(3).to(self.device) # single color random bg
@@ -437,7 +464,15 @@ class Trainer(object):
         # known view loss
         if do_rgbd_loss:
             gt_mask = self.mask # [B, H, W]
-            gt_rgb = self.rgb # [B, 3, H, W]
+            gt_rgb = self.rgb   # [B, 3, H, W]
+            gt_normal = self.normal # [B, H, W, 3]
+            gt_depth = self.depth   # [B, H, W]
+
+            if self.opt.batch_size_1:
+                gt_mask = gt_mask[choice].unsqueeze(0)
+                gt_rgb = gt_rgb[choice].unsqueeze(0)
+                gt_normal = gt_normal[choice].unsqueeze(0)
+                gt_depth = gt_depth[choice].unsqueeze(0)
 
             # color loss
             gt_rgb = gt_rgb * gt_mask[:, None].float() + bg_color.reshape(B, H, W, 3).permute(0,3,1,2).contiguous() * (1 - gt_mask[:, None].float())
@@ -448,7 +483,7 @@ class Trainer(object):
 
             # normal loss
             if self.opt.lambda_normal > 0 and 'normal_image' in outputs:
-                valid_gt_normal = 1 - 2 * self.normal[gt_mask] # [B, 3]
+                valid_gt_normal = 1 - 2 * gt_normal[gt_mask] # [B, 3]
                 valid_pred_normal = 2 * pred_normal[gt_mask] - 1 # [B, 3]
 
                 lambda_normal = self.opt.lambda_normal * min(1, self.global_step / self.opt.iters)
@@ -456,20 +491,25 @@ class Trainer(object):
 
             # relative depth loss
             if self.opt.lambda_depth > 0:
-                valid_gt_depth = self.depth[gt_mask].unsqueeze(1) # [B, 1]
-                valid_pred_depth = pred_depth[:, 0][gt_mask].unsqueeze(1) # [B, 1]
-                # scale-invariant
-                with torch.no_grad():
-                    A = torch.cat([valid_gt_depth, torch.ones_like(valid_gt_depth)], dim=-1) # [B, 2]
-                    X = torch.linalg.lstsq(A, valid_pred_depth).solution # [2, 1]
-                    valid_gt_depth = A @ X # [B, 1]
+                valid_gt_depth = gt_depth[gt_mask] # [B,]
+                valid_pred_depth = pred_depth[:, 0][gt_mask] # [B,]
                 lambda_depth = self.opt.lambda_depth * min(1, self.global_step / self.opt.iters)
-                loss = loss + lambda_depth * F.mse_loss(valid_pred_depth, valid_gt_depth)
+                loss = loss + lambda_depth * (1 - self.pearson(valid_pred_depth, valid_gt_depth))
+
+                # # scale-invariant
+                # with torch.no_grad():
+                #     A = torch.cat([valid_gt_depth, torch.ones_like(valid_gt_depth)], dim=-1) # [B, 2]
+                #     X = torch.linalg.lstsq(A, valid_pred_depth).solution # [2, 1]
+                #     valid_gt_depth = A @ X # [B, 1]
+                # lambda_depth = self.opt.lambda_depth #* min(1, self.global_step / self.opt.iters)
+                # loss = loss + lambda_depth * F.mse_loss(valid_pred_depth, valid_gt_depth)
 
         # novel view loss
         else:
 
-            if self.opt.guidance == 'stable-diffusion':
+            loss = 0
+
+            if 'SD' in self.guidance:
                 # interpolate text_z
                 azimuth = data['azimuth'] # [-180, 180]
 
@@ -478,31 +518,64 @@ class Trainer(object):
                         r = 1 - azimuth / 90
                     else:
                         r = 1 + azimuth / 90
-                    start_z = self.text_z['front']
-                    end_z = self.text_z['side']
+                    start_z = self.embeddings['SD']['front']
+                    end_z = self.embeddings['SD']['side']
                 else:
                     if azimuth >= 0:
                         r = 1 - (azimuth - 90) / 90
                     else:
                         r = 1 + (azimuth + 90) / 90
-                    start_z = self.text_z['side']
-                    end_z = self.text_z['back']
+                    start_z = self.embeddings['SD']['side']
+                    end_z = self.embeddings['SD']['back']
 
                 pos_z = r * start_z + (1 - r) * end_z
-                uncond_z = self.text_z['uncond']
+                uncond_z = self.embeddings['SD']['uncond']
                 text_z = torch.cat([uncond_z, pos_z], dim=0)
-                loss = self.guidance.train_step(text_z, pred_rgb, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance,
-                                                save_guidance_path=save_guidance_path)
+                loss = loss + self.guidance['SD'].train_step(text_z, pred_rgb, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance,
+                                                             save_guidance_path=save_guidance_path)
 
-            else: # zero123
+            if 'IF' in self.guidance:
+                # interpolate text_z
+                azimuth = data['azimuth'] # [-180, 180]
+
+                if azimuth >= -90 and azimuth < 90:
+                    if azimuth >= 0:
+                        r = 1 - azimuth / 90
+                    else:
+                        r = 1 + azimuth / 90
+                    start_z = self.embeddings['IF']['front']
+                    end_z = self.embeddings['IF']['side']
+                else:
+                    if azimuth >= 0:
+                        r = 1 - (azimuth - 90) / 90
+                    else:
+                        r = 1 + (azimuth + 90) / 90
+                    start_z = self.embeddings['IF']['side']
+                    end_z = self.embeddings['IF']['back']
+
+                pos_z = r * start_z + (1 - r) * end_z
+                uncond_z = self.embeddings['IF']['uncond']
+                text_z = torch.cat([uncond_z, pos_z], dim=0)
+                loss = loss + self.guidance['IF'].train_step(text_z, pred_rgb, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance)
+
+            if 'zero123' in self.guidance:
+
                 polar = data['polar']
-                azimuth = -data['azimuth']  # Zero123 has -ve azimuth direction as NeRF
+                azimuth = data['azimuth']
                 radius = data['radius']
 
                 # adjust SDS scale based on how far the novel view is from the known view
-                lambda_guidance = (abs(azimuth) / 180) * self.opt.lambda_guidance
+                phis = self.embeddings['zero123']['default']['phis']
+                lambda_guidance = (min([abs(azimuth + phis[0] - phi) for phi in phis]) / (180/len(phis))) * self.opt.lambda_guidance
 
-                loss = self.guidance.train_step(self.image_z, pred_rgb, polar, azimuth, radius, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=lambda_guidance)
+                loss = loss + self.guidance['zero123'].train_step(self.embeddings['zero123']['default'], pred_rgb, polar, azimuth, radius, guidance_scale=self.opt.guidance_scale, as_latent=as_latent, grad_scale=lambda_guidance)
+
+            if 'clip' in self.guidance:
+
+                # empirical, far view should apply smaller CLIP loss
+                lambda_guidance = 10 * (1 - abs(azimuth) / 180) * self.opt.lambda_guidance
+
+                loss = loss + self.guidance['clip'].train_step(self.embeddings['clip'], pred_rgb, grad_scale=lambda_guidance)
 
         # regularizations
         if not self.opt.dmtet:
@@ -530,6 +603,11 @@ class Trainer(object):
             if self.opt.lambda_orient > 0 and 'loss_orient' in outputs:
                 loss_orient = outputs['loss_orient']
                 loss = loss + self.opt.lambda_orient * loss_orient
+
+            if self.opt.lambda_3d_normal_smooth > 0 and 'loss_normal_perturb' in outputs:
+                loss_normal_perturb = outputs['loss_normal_perturb']
+                loss = loss + self.opt.lambda_3d_normal_smooth * loss_normal_perturb
+
         else:
 
             if self.opt.lambda_mesh_normal > 0:
