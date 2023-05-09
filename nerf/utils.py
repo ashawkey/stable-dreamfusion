@@ -328,12 +328,12 @@ class Trainer(object):
                 rgb_256 = torch.from_numpy(rgbs_256).permute(0,3,1,2).contiguous().to(self.device)
                 guidance_embeds = self.guidance['zero123'].get_img_embeds(rgb_256)
                 self.embeddings['zero123']['default'] = {
-                    'img_ws' : self.opt.img_ws,
+                    'zero123_ws' : self.opt.zero123_ws,
                     'c_crossattn' : guidance_embeds[0],
                     'c_concat' : guidance_embeds[1],
-                    'thetas' : self.opt.thetas,
-                    'phis' : self.opt.phis,
-                    'radii' : self.opt.radii,
+                    'ref_polars' : self.opt.ref_polars,
+                    'ref_azimuths' : self.opt.ref_azimuths,
+                    'ref_radii' : self.opt.ref_radii,
                 }
 
             if 'clip' in self.guidance:
@@ -565,8 +565,8 @@ class Trainer(object):
                 radius = data['radius']
 
                 # adjust SDS scale based on how far the novel view is from the known view
-                phis = self.embeddings['zero123']['default']['phis']
-                lambda_guidance = (min([abs(azimuth + phis[0] - phi) for phi in phis]) / (180/len(phis))) * self.opt.lambda_guidance
+                ref_azimuths = self.embeddings['zero123']['default']['ref_azimuths']
+                lambda_guidance = (min([abs(azimuth + ref_azimuths[0] - ref_azimuth) for ref_azimuth in ref_azimuths]) / (180/len(ref_azimuths))) * self.opt.lambda_guidance
 
                 loss = loss + self.guidance['zero123'].train_step(self.embeddings['zero123']['default'], pred_rgb, polar, azimuth, radius, guidance_scale=self.opt.guidance_scale, as_latent=as_latent, grad_scale=lambda_guidance)
 

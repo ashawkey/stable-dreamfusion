@@ -120,8 +120,8 @@ class Zero123(nn.Module):
         t = torch.randint(self.min_step, self.max_step + 1, [1], dtype=torch.long, device=self.device)
 
         # Set weights acc to closeness in phi
-        if len(embeddings['phis']) > 1:
-            phi_deltas = [abs(azimuth.item() + embeddings['phis'][0] - phi) for phi in embeddings['phis']]
+        if len(embeddings['ref_azimuths']) > 1:
+            phi_deltas = [abs(azimuth.item() + embeddings['ref_azimuths'][0] - ref_azimuth) for ref_azimuth in embeddings['ref_azimuths']]
             phi_deltas = [abs(p-360) if p > 180 else p for p in phi_deltas]
             inv_phi_deltas = [min(1/p, 1000) if p != 0 else 1000 for p in phi_deltas]
             inv_phi_deltas = [p/max(inv_phi_deltas) for p in inv_phi_deltas]
@@ -130,9 +130,9 @@ class Zero123(nn.Module):
             inv_phi_deltas = [1]
 
         # Multiply closeness-weight by user-given weights
-        img_ws = [a*b for (a, b) in zip(embeddings['img_ws'], inv_phi_deltas)]
-        img_ws = [img_w/max(img_ws) for img_w in img_ws]
-        img_ws = [0 if img_w < 0.1 else img_w for img_w in img_ws]
+        zero123_ws = [a*b for (a, b) in zip(embeddings['zero123_ws'], inv_phi_deltas)]
+        zero123_ws = [zero123_w/max(zero123_ws) for zero123_w in zero123_ws]
+        zero123_ws = [0 if zero123_w < 0.1 else zero123_w for zero123_w in zero123_ws]
 
         with torch.no_grad():
             noise = torch.randn_like(latents)
@@ -142,15 +142,15 @@ class Zero123(nn.Module):
             t_in = torch.cat([t] * 2)
 
             noise_preds = []
-            for (img_w, c_crossattn, c_concat, theta, phi, rad) in zip(img_ws, embeddings['c_crossattn'], embeddings['c_concat'],
-                                                                       embeddings['thetas'], embeddings['phis'], embeddings['radii']):
-                if img_w == 0:
+            for (zero123_w, c_crossattn, c_concat, ref_polar, ref_azimuth, ref_radius) in zip(zero123_ws, embeddings['c_crossattn'], embeddings['c_concat'],
+                                                                                          embeddings['ref_polars'], embeddings['ref_azimuths'], embeddings['ref_radii']):
+                if zero123_w == 0:
                     continue
                 # polar,azimuth,radius are all actually delta wrt default
-                p = polar + embeddings['thetas'][0] - theta
-                a = azimuth + embeddings['phis'][0] - phi
+                p = polar + embeddings['ref_polars'][0] - ref_polar
+                a = azimuth + embeddings['ref_azimuths'][0] - ref_azimuth
                 a[a > 180] -= 360 # range in [-180, 180]
-                r = radius + embeddings['radii'][0] - rad
+                r = radius + embeddings['ref_radii'][0] - ref_radius
                 T = torch.tensor([math.radians(p), math.sin(math.radians(-a)), math.cos(math.radians(a)), r])
                 T = T[None, None, :].to(self.device)
                 cond = {}
@@ -160,9 +160,9 @@ class Zero123(nn.Module):
                 noise_pred = self.model.apply_model(x_in, t_in, cond)
                 noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
                 noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)
-                noise_preds.append(img_w * noise_pred)
+                noise_preds.append(zero123_w * noise_pred)
 
-        noise_pred = torch.stack(noise_preds).sum(dim=0) / sum(img_ws)
+        noise_pred = torch.stack(noise_preds).sum(dim=0) / sum(zero123_ws)
 
         w = (1 - self.alphas[t])
         grad = grad_scale * w * (noise_pred - noise)

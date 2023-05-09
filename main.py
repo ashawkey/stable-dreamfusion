@@ -96,10 +96,10 @@ if __name__ == '__main__':
     parser.add_argument('--fovy_range', type=float, nargs='*', default=[10, 30], help="training camera fovy range")
 
     parser.add_argument('--default_radius', type=float, default=3.2, help="radius for the default view")
-    parser.add_argument('--default_theta', type=float, default=90, help="radius for the default view")
-    parser.add_argument('--default_phi', type=float, default=0, help="radius for the default view")
+    parser.add_argument('--default_polar', type=float, default=90, help="polar for the default view")
+    parser.add_argument('--default_azimuth', type=float, default=0, help="azimuth for the default view")
     parser.add_argument('--default_fovy', type=float, default=20, help="fovy for the default view")
-    parser.add_argument('--default_img_w', type=float, default=1, help="zero123 weight for the default view")
+    parser.add_argument('--default_zero123_w', type=float, default=1, help="zero123 weight for the default view")
 
     parser.add_argument('--progressive_view', action='store_true', help="progressively expand view sampling range from default to full")
     parser.add_argument('--progressive_level', action='store_true', help="progressively increase gridencoder's max_level")
@@ -168,7 +168,7 @@ if __name__ == '__main__':
         opt.iters = 4
         opt.test_freq = 1
 
-    opt.images, opt.radii, opt.thetas, opt.phis, opt.img_ws = [], [], [], [], []
+    opt.images, opt.ref_radii, opt.ref_polars, opt.ref_azimuths, opt.zero123_ws = [], [], [], [], []
 
     # parameters for image-conditioned generation
     if opt.image is not None or opt.image_config is not None:
@@ -206,24 +206,24 @@ if __name__ == '__main__':
 
         if opt.image is not None:
             opt.images += [opt.image]
-            opt.radii += [opt.default_radius]
-            opt.thetas += [opt.default_theta]
-            opt.phis += [opt.default_phi]
-            opt.img_ws += [opt.default_img_w]
+            opt.ref_radii += [opt.default_radius]
+            opt.ref_polars += [opt.default_polar]
+            opt.ref_azimuths += [opt.default_azimuth]
+            opt.zero123_ws += [opt.default_zero123_w]
 
         if opt.image_config is not None:
             # for multiview (zero123)
             conf = pd.read_csv(opt.image_config, skipinitialspace=True)
             opt.images += list(conf.image)
-            opt.radii += list(conf.radius)
-            opt.thetas += list(conf.theta)
-            opt.phis += list(conf.phi)
-            opt.img_ws += list(conf.zero123_weight)
+            opt.ref_radii += list(conf.radius)
+            opt.ref_polars += list(conf.polar)
+            opt.ref_azimuths += list(conf.azimuth)
+            opt.zero123_ws += list(conf.zero123_weight)
             if opt.image is None:
-                opt.default_radius = opt.radii[0]
-                opt.default_theta = opt.thetas[0]
-                opt.default_phi = opt.phis[0]
-                opt.default_img_w = opt.img_ws[0]
+                opt.default_radius = opt.ref_radii[0]
+                opt.default_polar = opt.ref_polars[0]
+                opt.default_azimuth = opt.ref_azimuths[0]
+                opt.default_zero123_w = opt.zero123_ws[0]
 
     # reset to None
     if len(opt.images) == 0:
