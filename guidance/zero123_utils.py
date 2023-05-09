@@ -1,4 +1,5 @@
 import math
+import numpy as np
 from omegaconf import OmegaConf
 
 import torch
@@ -70,10 +71,6 @@ class Zero123(nn.Module):
                  ckpt='./pretrained/zero123/105000.ckpt', vram_O=False, t_range=[0.02, 0.98]):
         super().__init__()
 
-        # # hardcoded
-        # config = './pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml'
-        # ckpt = './pretrained/zero123/105000.ckpt'
-
         self.device = device
         self.fp16 = fp16
         self.vram_O = vram_O
@@ -119,18 +116,28 @@ class Zero123(nn.Module):
 
         t = torch.randint(self.min_step, self.max_step + 1, [1], dtype=torch.long, device=self.device)
 
+        def angle_between(sph_v1, sph_v2):
+            def sph2cart(sph_v):
+                r, theta, phi = sph_v
+                return (r * np.sin(theta) * np.cos(phi), r * np.sin(theta) * np.sin(phi), r * np.cos(theta))
+            v1, v2 = sph2cart(sph_v1), sph2cart(sph_v2)
+            def unit_vector(v):
+                return v / np.linalg.norm(v)
+            v1_u, v2_u = unit_vector(v1), unit_vector(v2)
+            return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+
         # Set weights acc to closeness in phi
         if len(embeddings['ref_azimuths']) > 1:
-            phi_deltas = [abs(azimuth.item() + embeddings['ref_azimuths'][0] - ref_azimuth) for ref_azimuth in embeddings['ref_azimuths']]
-            phi_deltas = [abs(p-360) if p > 180 else p for p in phi_deltas]
-            inv_phi_deltas = [min(1/p, 1000) if p != 0 else 1000 for p in phi_deltas]
-            inv_phi_deltas = [p/max(inv_phi_deltas) for p in inv_phi_deltas]
-            inv_phi_deltas = [0 if p < 0.1 else p for p in inv_phi_deltas]
+            v1 = (radius.item(), np.deg2rad(polar.item()), np.deg2rad(azimuth.item()))
+            angles = [np.rad2deg(angle_between(v1, (ref_radius.item(), np.deg2rad(ref_polar.item()), np.deg2rad(ref_azimuth.item())))) for (ref_radius, ref_polar, ref_azimuth) in zip(embeddings['ref_radii'], embeddings['ref_polars'], embeddings['ref_azimuths'])]
+            inv_angles = [min(1/a, 10000) if a != 0 else 10000 for a in angles]
+            inv_angles = [a/max(inv_angles) for a in inv_angles]
+            inv_angles = [0 if a < 0.1 else a for a in inv_angles]
         else:
-            inv_phi_deltas = [1]
+            inv_angles = [1]
 
         # Multiply closeness-weight by user-given weights
-        zero123_ws = [a*b for (a, b) in zip(embeddings['zero123_ws'], inv_phi_deltas)]
+        zero123_ws = [a*b for (a, b) in zip(embeddings['zero123_ws'], inv_angles)]
         zero123_ws = [zero123_w/max(zero123_ws) for zero123_w in zero123_ws]
         zero123_ws = [0 if zero123_w < 0.1 else zero123_w for zero123_w in zero123_ws]
 
