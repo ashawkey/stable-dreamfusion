@@ -255,7 +255,7 @@ class NeRFDataset:
             fov = random.random() * (self.opt.fovy_range[1] - self.opt.fovy_range[0]) + self.opt.fovy_range[0]
         else:
             # circle pose
-            thetas = torch.FloatTensor([self.opt.default_theta]).to(self.device)
+            thetas = torch.FloatTensor([self.opt.default_polar]).to(self.device)
             phis = torch.FloatTensor([(index[0] / self.size) * 360]).to(self.device)
             radius = torch.FloatTensor([self.opt.default_radius]).to(self.device)
             poses, dirs = circle_poses(self.device, radius=radius, theta=thetas, phi=phis, return_dirs=True, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front)
@@ -279,8 +279,8 @@ class NeRFDataset:
         rays = get_rays(poses, intrinsics, self.H, self.W, -1)
 
         # delta polar/azimuth/radius to default view
-        delta_polar = thetas - self.opt.default_theta
-        delta_azimuth = phis - self.opt.default_phi
+        delta_polar = thetas - self.opt.default_polar
+        delta_azimuth = phis - self.opt.default_azimuth
         delta_azimuth[delta_azimuth > 180] -= 360 # range in [-180, 180]
         delta_radius = radius - self.opt.default_radius
 

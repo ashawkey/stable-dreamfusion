@@ -374,10 +374,10 @@ class Trainer(object):
         # progressively relaxing view range
         if self.opt.progressive_view:
             r = min(1.0, 0.2 + self.global_step / (0.5 * self.opt.iters))
-            self.opt.phi_range = [self.opt.default_phi * (1 - r) + self.opt.full_phi_range[0] * r,
-                                  self.opt.default_phi * (1 - r) + self.opt.full_phi_range[1] * r]
-            self.opt.theta_range = [self.opt.default_theta * (1 - r) + self.opt.full_theta_range[0] * r,
-                                    self.opt.default_theta * (1 - r) + self.opt.full_theta_range[1] * r]
+            self.opt.phi_range = [self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[0] * r,
+                                  self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[1] * r]
+            self.opt.theta_range = [self.opt.default_polar * (1 - r) + self.opt.full_theta_range[0] * r,
+                                    self.opt.default_polar * (1 - r) + self.opt.full_theta_range[1] * r]
             self.opt.radius_range = [self.opt.default_radius * (1 - r) + self.opt.full_radius_range[0] * r,
                                     self.opt.default_radius * (1 - r) + self.opt.full_radius_range[1] * r]
             self.opt.fovy_range = [self.opt.default_fovy * (1 - r) + self.opt.full_fovy_range[0] * r,

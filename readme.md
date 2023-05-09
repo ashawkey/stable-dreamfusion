@@ -186,8 +186,8 @@ python preprocess_image.py <image>.png --border_ratio 0.4 # increase border_rati
 # pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
 python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000
 
-# if the image is not exactly front-view (elevation = 0), adjust default_theta (we use theta from 0 to 180 to represent elevation from 90 to -90)
-python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --default_theta 80
+# if the image is not exactly front-view (elevation = 0), adjust default_polar (we use polar from 0 to 180 to represent elevation from 90 to -90)
+python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --default_polar 80
 
 # by default we leverage monocular depth estimation to aid image-to-3d, but if you find the depth estimation inaccurate and harms results, turn it off by:
 python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --lambda_depth 0
