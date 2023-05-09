@@ -5,7 +5,7 @@ build/
 venv_*/
 
 tmp*
-data/
+# data/
 ldm/data/
 data2
 scripts2
@@ -18,11 +18,6 @@ TOKEN
 densegridencoder
 tets/256_tets.npz
 
-assets/
-launch.json
-settings.json
-
-aa*.png
 .vscode/launch.json
 
 data2

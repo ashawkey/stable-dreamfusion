@@ -209,9 +209,9 @@ class NeRFDataset:
         cx = H / 2
         cy = W / 2
 
-        radii = torch.FloatTensor(self.opt.radii).to(self.device)
-        thetas = torch.FloatTensor(self.opt.thetas).to(self.device)
-        phis = torch.FloatTensor(self.opt.phis).to(self.device)
+        radii = torch.FloatTensor(self.opt.ref_radii).to(self.device)
+        thetas = torch.FloatTensor(self.opt.ref_polars).to(self.device)
+        phis = torch.FloatTensor(self.opt.ref_azimuths).to(self.device)
         poses, dirs = circle_poses(self.device, radius=radii, theta=thetas, phi=phis, return_dirs=True, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front)
         fov = self.opt.default_fovy
         focal = H / (2 * np.tan(np.deg2rad(fov) / 2))
@@ -236,9 +236,9 @@ class NeRFDataset:
             'rays_d': rays['rays_d'],
             'dir': dirs,
             'mvp': mvp,
-            'polar': self.opt.thetas,
-            'azimuth': self.opt.phis,
-            'radius': self.opt.radii,
+            'polar': self.opt.ref_polars,
+            'azimuth': self.opt.ref_azimuths,
+            'radius': self.opt.ref_radii,
         }
 
         return data

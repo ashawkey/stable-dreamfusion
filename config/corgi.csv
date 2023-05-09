@@ -1,2 +1,2 @@
-zero123_weight, radius, theta, phi, image
-1, 1.2, 90, 0, data/corgi_puppy_sitting_looking_up_rgba.png
+zero123_weight, radius, polar, azimuth, image
+1, 3.2, 90, 0, data/corgi_puppy_sitting_looking_up_rgba.png
