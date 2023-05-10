@@ -230,6 +230,7 @@ class Zero123(nn.Module):
 
         if c_crossattn is None:
             embeddings = self.get_img_embeds(image)
+
         T = torch.tensor([math.radians(polar), math.sin(math.radians(azimuth)), math.cos(math.radians(azimuth)), radius])
         T = T[None, None, :].to(self.device)
 

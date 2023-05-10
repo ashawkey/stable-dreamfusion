@@ -229,6 +229,7 @@ if __name__ == '__main__':
         opt.t_range = [0.02, 0.50] # ref: magic3D
 
         if opt.images is not None:
+
             opt.lambda_normal = 0
             opt.lambda_depth = 0
 
