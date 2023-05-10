@@ -147,10 +147,7 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 120], phi_ra
     return poses, dirs, thetas, phis, radius
 
 
-def circle_poses(device, radius=None, theta=None, phi=None, return_dirs=False, angle_overhead=30, angle_front=60):
-    radius = radius or [1.25]
-    theta = theta or [60]
-    phi = phi or [0]
+def circle_poses(device, radius=torch.tensor([3.2]), theta=torch.tensor([60]), phi=torch.tensor([0]), return_dirs=False, angle_overhead=30, angle_front=60):
 
     theta = theta / 180 * np.pi
     phi = phi / 180 * np.pi
