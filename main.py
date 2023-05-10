@@ -99,7 +99,6 @@ if __name__ == '__main__':
     parser.add_argument('--default_polar', type=float, default=90, help="polar for the default view")
     parser.add_argument('--default_azimuth', type=float, default=0, help="azimuth for the default view")
     parser.add_argument('--default_fovy', type=float, default=20, help="fovy for the default view")
-    parser.add_argument('--default_zero123_w', type=float, default=1, help="zero123 weight for the default view")
 
     parser.add_argument('--progressive_view', action='store_true', help="progressively expand view sampling range from default to full")
     parser.add_argument('--progressive_level', action='store_true', help="progressively increase gridencoder's max_level")
@@ -108,7 +107,7 @@ if __name__ == '__main__':
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
     parser.add_argument('--t_range', type=float, nargs='*', default=[0.02, 0.98], help="stable diffusion time steps range")
 
-    parser.add_argument('--test_freq', type=int, default=None, help="Test model every n iterations")
+    parser.add_argument('--test_freq', type=int, default=None, help="Test the model every n iterations, by recording a turntable video. (By default, this is only done after the final epoch)")
 
     ### regularizations
     parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
@@ -143,13 +142,11 @@ if __name__ == '__main__':
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
 
     parser.add_argument('--zero123_config', type=str, default='./pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml', help="config file for zero123")
-    parser.add_argument('--zero123_ckpt', type=str, default='./pretrained/zero123/105000.ckpt', help="ckptfor zero123")
+    parser.add_argument('--zero123_ckpt', type=str, default='./pretrained/zero123/105000.ckpt', help="ckpt for zero123")
 
-    parser.add_argument('--dataset_size_train', type=int, default=100, help="Length of train dataset")
-    parser.add_argument('--dataset_size_valid', type=int, default=8, help="Length of train dataset")
-    parser.add_argument('--dataset_size_test', type=int, default=100, help="Length of train dataset")
-
-    parser.add_argument('--debug', action='store_true', help="debug options")
+    parser.add_argument('--dataset_size_train', type=int, default=100, help="Length of train dataset i.e. # of iterations per epoch")
+    parser.add_argument('--dataset_size_valid', type=int, default=8, help="# of frames to render in the turntable video in validation")
+    parser.add_argument('--dataset_size_test', type=int, default=100, help="# of frames to render in the turntable video at test time")
 
     opt = parser.parse_args()
 
@@ -161,14 +158,8 @@ if __name__ == '__main__':
         opt.fp16 = True
         opt.backbone = 'vanilla'
 
-    if opt.debug:
-        opt.dataset_size_train = 1
-        opt.dataset_size_valid = 1
-        opt.dataset_size_test = 1
-        opt.iters = 4
-        opt.test_freq = 1
-
     opt.images, opt.ref_radii, opt.ref_polars, opt.ref_azimuths, opt.zero123_ws = [], [], [], [], []
+    opt.default_zero123_w = 1
 
     # parameters for image-conditioned generation
     if opt.image is not None or opt.image_config is not None:
