@@ -197,8 +197,8 @@ python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet
 ## zero123 with multiple images
 python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000
 
-## zero123 with multiple images, but process 1 image at a time (to save GPU memory)
-python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000 --batch_size_1
+## render <num> images per batch (default 1)
+python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000 --num_images_per_batch 4
 
 # providing both --text and --image enables stable-diffusion backend (similar to make-it-3d)
 python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text --iters 5000

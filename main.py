@@ -77,13 +77,13 @@ if __name__ == '__main__':
     # try this if CUDA OOM
     parser.add_argument('--fp16', action='store_true', help="use float16 for training")
     parser.add_argument('--vram_O', action='store_true', help="optimization for low VRAM usage")
-    parser.add_argument('--batch_size_1', action='store_true', help="render only one image using NeRF")
     # rendering resolution in training, increase these for better quality / decrease these if CUDA OOM even if --vram_O enabled.
     parser.add_argument('--w', type=int, default=64, help="render width for NeRF in training")
     parser.add_argument('--h', type=int, default=64, help="render height for NeRF in training")
     parser.add_argument('--known_view_scale', type=float, default=1.5, help="multiply --h/w by this for known view rendering")
     parser.add_argument('--known_view_noise_scale', type=float, default=2e-3, help="random camera noise added to rays_o and rays_d")
     parser.add_argument('--dmtet_reso_scale', type=float, default=8, help="multiply --h/w by this for dmtet finetuning")
+    parser.add_argument('--num_images_per_batch', type=int, default=1, help="images to render per batch using NeRF")
 
     ### dataset options
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
@@ -202,7 +202,6 @@ if __name__ == '__main__':
         # make shape init more stable
         opt.progressive_view = True
         # opt.progressive_level = True
-
 
         if opt.image is not None:
             opt.images += [opt.image]
