@@ -394,12 +394,14 @@ class Trainer(object):
         B, N = rays_o.shape[:2]
         H, W = data['H'], data['W']
 
-        if self.opt.batch_size_1:
-            B = 1
-            choice = np.random.choice(np.arange(B))
-            rays_o = rays_o[choice].unsqueeze(0)
-            rays_d = rays_d[choice].unsqueeze(0)
-            mvp = mvp[choice].unsqueeze(0)
+        # When ref_data has B images > opt.num_images_per_batch
+        if B > self.opt.num_images_per_batch:
+            # choose num_images_per_batch images out of those B images
+            choice = torch.randperm(B)[:self.opt.num_images_per_batch]
+            B = self.opt.num_images_per_batch
+            rays_o = rays_o[choice]
+            rays_d = rays_d[choice]
+            mvp = mvp[choice]
 
         if do_rgbd_loss:
             ambient_ratio = 1.0
@@ -468,11 +470,11 @@ class Trainer(object):
             gt_normal = self.normal # [B, H, W, 3]
             gt_depth = self.depth   # [B, H, W]
 
-            if self.opt.batch_size_1:
-                gt_mask = gt_mask[choice].unsqueeze(0)
-                gt_rgb = gt_rgb[choice].unsqueeze(0)
-                gt_normal = gt_normal[choice].unsqueeze(0)
-                gt_depth = gt_depth[choice].unsqueeze(0)
+            if len(gt_rgb) > self.opt.num_images_per_batch:
+                gt_mask = gt_mask[choice]
+                gt_rgb = gt_rgb[choice]
+                gt_normal = gt_normal[choice]
+                gt_depth = gt_depth[choice]
 
             # color loss
             gt_rgb = gt_rgb * gt_mask[:, None].float() + bg_color.reshape(B, H, W, 3).permute(0,3,1,2).contiguous() * (1 - gt_mask[:, None].float())
@@ -564,11 +566,7 @@ class Trainer(object):
                 azimuth = data['azimuth']
                 radius = data['radius']
 
-                # adjust SDS scale based on how far the novel view is from the known view
-                ref_azimuths = self.embeddings['zero123']['default']['ref_azimuths']
-                lambda_guidance = (min([abs(azimuth + ref_azimuths[0] - ref_azimuth) for ref_azimuth in ref_azimuths]) / (180/len(ref_azimuths))) * self.opt.lambda_guidance
-
-                loss = loss + self.guidance['zero123'].train_step(self.embeddings['zero123']['default'], pred_rgb, polar, azimuth, radius, guidance_scale=self.opt.guidance_scale, as_latent=as_latent, grad_scale=lambda_guidance)
+                loss = loss + self.guidance['zero123'].train_step(self.embeddings['zero123']['default'], pred_rgb, polar, azimuth, radius, guidance_scale=self.opt.guidance_scale, as_latent=as_latent, grad_scale=self.opt.lambda_guidance)
 
             if 'clip' in self.guidance:
 

@@ -105,8 +105,33 @@ class Zero123(nn.Module):
         v = [self.model.encode_first_stage(xx.unsqueeze(0)).mode() for xx in x]
         return c, v
 
+    def angle_between(self, sph_v1, sph_v2):
+        def sph2cart(sv):
+            r, theta, phi = sv[0], sv[1], sv[2]
+            return torch.tensor([r * torch.sin(theta) * torch.cos(phi), r * torch.sin(theta) * torch.sin(phi), r * torch.cos(theta)])
+        def unit_vector(v):
+            return v / torch.linalg.norm(v)
+        def angle_between_2_sph(sv1, sv2):
+            v1, v2 = sph2cart(sv1), sph2cart(sv2)
+            v1_u, v2_u = unit_vector(v1), unit_vector(v2)
+            return torch.arccos(torch.clip(torch.dot(v1_u, v2_u), -1.0, 1.0))
+        angles = torch.empty(len(sph_v1), len(sph_v2))
+        for i, sv1 in enumerate(sph_v1):
+            for j, sv2 in enumerate(sph_v2):
+                angles[i][j] = angle_between_2_sph(sv1, sv2)
+        return angles
+
     def train_step(self, embeddings, pred_rgb, polar, azimuth, radius, guidance_scale=3, as_latent=False, grad_scale=1):
         # pred_rgb: tensor [1, 3, H, W] in [0, 1]
+
+        # adjust SDS scale based on how far the novel view is from the known view
+        ref_radii = embeddings['ref_radii']
+        ref_polars = embeddings['ref_polars']
+        ref_azimuths = embeddings['ref_azimuths']
+        v1 = torch.stack([radius + ref_radii[0], torch.deg2rad(polar + ref_polars[0]), torch.deg2rad(azimuth + ref_azimuths[0])], dim=-1)   # polar,azimuth,radius are all actually delta wrt default
+        v2 = torch.stack([torch.tensor(ref_radii), torch.deg2rad(torch.tensor(ref_polars)), torch.deg2rad(torch.tensor(ref_azimuths))], dim=-1)
+        angles = torch.rad2deg(self.angle_between(v1, v2)).to(self.device)
+        grad_scale = (angles.min(dim=1)[0] / (180/len(ref_azimuths))) * grad_scale  # rethink 180/len(ref_azimuths)
 
         if as_latent:
             latents = F.interpolate(pred_rgb, (32, 32), mode='bilinear', align_corners=False) * 2 - 1
@@ -114,32 +139,21 @@ class Zero123(nn.Module):
             pred_rgb_256 = F.interpolate(pred_rgb, (256, 256), mode='bilinear', align_corners=False)
             latents = self.encode_imgs(pred_rgb_256)
 
-        t = torch.randint(self.min_step, self.max_step + 1, [1], dtype=torch.long, device=self.device)
+        t = torch.randint(self.min_step, self.max_step + 1, (latents.shape[0],), dtype=torch.long, device=self.device)
 
-        def angle_between(sph_v1, sph_v2):
-            def sph2cart(sph_v):
-                r, theta, phi = sph_v
-                return (r * np.sin(theta) * np.cos(phi), r * np.sin(theta) * np.sin(phi), r * np.cos(theta))
-            v1, v2 = sph2cart(sph_v1), sph2cart(sph_v2)
-            def unit_vector(v):
-                return v / np.linalg.norm(v)
-            v1_u, v2_u = unit_vector(v1), unit_vector(v2)
-            return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
-
-        # Set weights acc to closeness in phi
-        if len(embeddings['ref_azimuths']) > 1:
-            v1 = (radius.item(), np.deg2rad(polar.item()), np.deg2rad(azimuth.item()))
-            angles = [np.rad2deg(angle_between(v1, (ref_radius.item(), np.deg2rad(ref_polar.item()), np.deg2rad(ref_azimuth.item())))) for (ref_radius, ref_polar, ref_azimuth) in zip(embeddings['ref_radii'], embeddings['ref_polars'], embeddings['ref_azimuths'])]
-            inv_angles = [min(1/a, 10000) if a != 0 else 10000 for a in angles]
-            inv_angles = [a/max(inv_angles) for a in inv_angles]
-            inv_angles = [0 if a < 0.1 else a for a in inv_angles]
+        # Set weights acc to closeness in angle
+        if len(ref_azimuths) > 1:
+            inv_angles = 1/angles
+            inv_angles[inv_angles > 100] = 100
+            inv_angles /= inv_angles.max(dim=-1, keepdim=True)[0]
+            inv_angles[inv_angles < 0.1] = 0
         else:
-            inv_angles = [1]
+            inv_angles = torch.tensor([1])
 
         # Multiply closeness-weight by user-given weights
-        zero123_ws = [a*b for (a, b) in zip(embeddings['zero123_ws'], inv_angles)]
-        zero123_ws = [zero123_w/max(zero123_ws) for zero123_w in zero123_ws]
-        zero123_ws = [0 if zero123_w < 0.1 else zero123_w for zero123_w in zero123_ws]
+        zero123_ws = torch.tensor(embeddings['zero123_ws'])[None, :].to(self.device) * inv_angles
+        zero123_ws /= zero123_ws.max(dim=-1, keepdim=True)[0]
+        zero123_ws[zero123_ws < 0.1] = 0
 
         with torch.no_grad():
             noise = torch.randn_like(latents)
@@ -149,30 +163,31 @@ class Zero123(nn.Module):
             t_in = torch.cat([t] * 2)
 
             noise_preds = []
-            for (zero123_w, c_crossattn, c_concat, ref_polar, ref_azimuth, ref_radius) in zip(zero123_ws, embeddings['c_crossattn'], embeddings['c_concat'],
-                                                                                          embeddings['ref_polars'], embeddings['ref_azimuths'], embeddings['ref_radii']):
-                if zero123_w == 0:
-                    continue
+            # Loop through each ref image
+            for (zero123_w, c_crossattn, c_concat, ref_polar, ref_azimuth, ref_radius) in zip(zero123_ws.T,
+                                                                                              embeddings['c_crossattn'], embeddings['c_concat'],
+                                                                                              ref_polars, ref_azimuths, ref_radii):
                 # polar,azimuth,radius are all actually delta wrt default
-                p = polar + embeddings['ref_polars'][0] - ref_polar
-                a = azimuth + embeddings['ref_azimuths'][0] - ref_azimuth
+                p = polar + ref_polars[0] - ref_polar
+                a = azimuth + ref_azimuths[0] - ref_azimuth
                 a[a > 180] -= 360 # range in [-180, 180]
-                r = radius + embeddings['ref_radii'][0] - ref_radius
-                T = torch.tensor([math.radians(p), math.sin(math.radians(-a)), math.cos(math.radians(a)), r])
-                T = T[None, None, :].to(self.device)
+                r = radius + ref_radii[0] - ref_radius
+                # T = torch.tensor([math.radians(p), math.sin(math.radians(-a)), math.cos(math.radians(a)), r])
+                # T = T[None, None, :].to(self.device)
+                T = torch.stack([torch.deg2rad(p), torch.sin(torch.deg2rad(-a)), torch.cos(torch.deg2rad(a)), r], dim=-1)[:, None, :]
                 cond = {}
-                clip_emb = self.model.cc_projection(torch.cat([c_crossattn, T], dim=-1))
+                clip_emb = self.model.cc_projection(torch.cat([c_crossattn.repeat(len(T), 1, 1), T], dim=-1))
                 cond['c_crossattn'] = [torch.cat([torch.zeros_like(clip_emb).to(self.device), clip_emb], dim=0)]
-                cond['c_concat'] = [torch.cat([torch.zeros_like(c_concat).to(self.device), c_concat], dim=0)]
+                cond['c_concat'] = [torch.cat([torch.zeros_like(c_concat).repeat(len(T), 1, 1, 1).to(self.device), c_concat.repeat(len(T), 1, 1, 1)], dim=0)]
                 noise_pred = self.model.apply_model(x_in, t_in, cond)
                 noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
                 noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)
-                noise_preds.append(zero123_w * noise_pred)
+                noise_preds.append(zero123_w[:, None, None, None] * noise_pred)
 
-        noise_pred = torch.stack(noise_preds).sum(dim=0) / sum(zero123_ws)
+        noise_pred = torch.stack(noise_preds).sum(dim=0) / zero123_ws.sum(dim=-1)[:, None, None, None]
 
         w = (1 - self.alphas[t])
-        grad = grad_scale * w * (noise_pred - noise)
+        grad = (grad_scale * w)[:, None, None, None] * (noise_pred - noise)
         grad = torch.nan_to_num(grad)
 
         # import kiui

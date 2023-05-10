@@ -298,8 +298,8 @@ class NeRFDataset:
 
         return data
 
-
-    def dataloader(self):
-        loader = DataLoader(list(range(self.size)), batch_size=1, collate_fn=self.collate, shuffle=self.training, num_workers=0)
+    def dataloader(self, batch_size=None):
+        batch_size = batch_size or self.opt.num_images_per_batch
+        loader = DataLoader(list(range(self.size)), batch_size=batch_size, collate_fn=self.collate, shuffle=self.training, num_workers=0)
         loader._data = self
         return loader
