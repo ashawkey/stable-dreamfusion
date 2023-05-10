@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--guidance', type=str, nargs='*', default=['SD'], help='guidance model')
     parser.add_argument('--guidance_scale', type=float, default=100, help="diffusion model classifier-free guidance scale")
-
+    
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
     parser.add_argument('--decimate_target', type=int, default=5e4, help="target face number for mesh decimation")
@@ -229,6 +229,7 @@ if __name__ == '__main__':
         opt.t_range = [0.02, 0.50] # ref: magic3D
 
         if opt.images is not None:
+
             opt.lambda_normal = 0
             opt.lambda_depth = 0
 

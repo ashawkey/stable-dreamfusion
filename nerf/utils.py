@@ -575,6 +575,22 @@ class Trainer(object):
 
                 loss = loss + self.guidance['clip'].train_step(self.embeddings['clip'], pred_rgb, grad_scale=lambda_guidance)
 
+                polar = data['polar']
+                azimuth = data['azimuth']
+                radius = data['radius']
+
+                # adjust SDS scale based on how far the novel view is from the known view
+                lambda_guidance = (abs(azimuth) / 180) * self.opt.lambda_guidance
+
+                loss = loss + self.guidance['zero123'].train_step(self.embeddings['zero123']['default'], pred_rgb, polar, azimuth, radius, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=lambda_guidance)
+
+            if 'clip' in self.guidance:
+                
+                # empirical, far view should apply smaller CLIP loss
+                lambda_guidance = 10 * (1 - abs(azimuth) / 180) * self.opt.lambda_guidance
+
+                loss = loss + self.guidance['clip'].train_step(self.embeddings['clip'], pred_rgb, grad_scale=lambda_guidance)
+                
         # regularizations
         if not self.opt.dmtet:
 

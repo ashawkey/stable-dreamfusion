@@ -230,6 +230,7 @@ class Zero123(nn.Module):
 
         if c_crossattn is None:
             embeddings = self.get_img_embeds(image)
+
         T = torch.tensor([math.radians(polar), math.sin(math.radians(azimuth)), math.cos(math.radians(azimuth)), radius])
         T = T[None, None, :].to(self.device)
 
@@ -254,7 +255,6 @@ class Zero123(nn.Module):
 
         imgs = self.decode_latents(latents)
         imgs = imgs.cpu().numpy().transpose(0, 2, 3, 1) if post_process else imgs
-
         return imgs
 
     def decode_latents(self, latents):
@@ -271,7 +271,6 @@ class Zero123(nn.Module):
         imgs = imgs * 2 - 1
         latents = torch.cat([self.model.get_first_stage_encoding(self.model.encode_first_stage(img.unsqueeze(0))) for img in imgs], dim=0)
         return latents # [B, 4, 32, 32] Latent space image
-
 
 if __name__ == '__main__':
     import cv2

@@ -147,7 +147,10 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 120], phi_ra
     return poses, dirs, thetas, phis, radius
 
 
-def circle_poses(device, radius=[1.25], theta=[60], phi=[0], return_dirs=False, angle_overhead=30, angle_front=60):
+def circle_poses(device, radius=None, theta=None, phi=None, return_dirs=False, angle_overhead=30, angle_front=60):
+    radius = radius or [1.25]
+    theta = theta or [60]
+    phi = phi or [0]
 
     theta = theta / 180 * np.pi
     phi = phi / 180 * np.pi
@@ -274,7 +277,6 @@ class NeRFDataset:
         ], dtype=torch.float32, device=self.device).unsqueeze(0)
 
         mvp = projection @ torch.inverse(poses) # [1, 4, 4]
-
         # sample a low-resolution but full image
         rays = get_rays(poses, intrinsics, self.H, self.W, -1)
 
