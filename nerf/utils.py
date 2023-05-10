@@ -1230,38 +1230,10 @@ def get_CPU_mem():
 
 
 def get_GPU_mem():
-    try:
-        num = torch.cuda.device_count()
-        mem, mems = 0, []
-        for i in range(num):
-            mem_free, mem_total = torch.cuda.mem_get_info(i)
-            mems.append(int(((mem_total - mem_free)/1024**3)*1000)/1000)
-            mem += mems[-1]
-        return mem, mems
-    except:
-        try:
-            def get_gpu_memory_map():
-                import subprocess
-                """Get the current gpu usage.
-
-                Returns
-                -------
-                usage: dict
-                    Keys are device ids as integers.
-                    Values are memory usage as integers in MB.
-                """
-                result = subprocess.check_output(
-                    [
-                        'nvidia-smi', '--query-gpu=memory.used',
-                        '--format=csv,nounits,noheader'
-                    ], encoding='utf-8')
-                # Convert lines into a dictionary
-                gpu_memory = [int(x) for x in result.strip().split('\n')]
-                gpu_memory_map = dict(zip(range(len(gpu_memory)), gpu_memory))
-                return gpu_memory_map
-            mems = get_gpu_memory_map()
-            mems = [int(mems[k]/1024*1000)/1000 for k in mems]
-            mem = int(sum([m for m in mems])*1000)/1000
-            return mem, mems
-        except:
-            return 0, "CPU"
+    num = torch.cuda.device_count()
+    mem, mems = 0, []
+    for i in range(num):
+        mem_free, mem_total = torch.cuda.mem_get_info(i)
+        mems.append(int(((mem_total - mem_free)/1024**3)*1000)/1000)
+        mem += mems[-1]
+    return mem, mems
