@@ -148,7 +148,7 @@ class Zero123(nn.Module):
             inv_angles /= inv_angles.max(dim=-1, keepdim=True)[0]
             inv_angles[inv_angles < 0.1] = 0
         else:
-            inv_angles = torch.tensor([1]).to(self.device)
+            inv_angles = torch.tensor([1.]).to(self.device)
 
         # Multiply closeness-weight by user-given weights
         zero123_ws = torch.tensor(embeddings['zero123_ws'])[None, :].to(self.device) * inv_angles
