@@ -117,12 +117,12 @@ class StableDiffusion(nn.Module):
             latents_noisy = self.scheduler.add_noise(latents, noise, t)
             # pred noise
             latent_model_input = torch.cat([latents_noisy] * 2)
-            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+            tt = torch.cat([t] * 2)
+            noise_pred = self.unet(latent_model_input, tt, encoder_hidden_states=text_embeddings).sample
 
-        # perform guidance (high scale from paper!)
-        noise_pred_uncond, noise_pred_pos = noise_pred.chunk(2)
-
-        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_pos - noise_pred_uncond)
+            # perform guidance (high scale from paper!)
+            noise_pred_uncond, noise_pred_pos = noise_pred.chunk(2)
+            noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_pos - noise_pred_uncond)
 
         # import kiui
         # latents_tmp = torch.randn((1, 4, 64, 64), device=self.device)
@@ -140,7 +140,7 @@ class StableDiffusion(nn.Module):
 
         # w(t), sigma_t^2
         w = (1 - self.alphas[t])
-        grad = grad_scale * w * (noise_pred - noise)
+        grad = grad_scale * w[:, None, None, None] * (noise_pred - noise)
         grad = torch.nan_to_num(grad)
 
         if save_guidance_path:

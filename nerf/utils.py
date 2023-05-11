@@ -143,7 +143,6 @@ class Trainer(object):
                  device=None, # device to use, usually setting to None is OK. (auto choose device)
                  mute=False, # whether to mute all print
                  fp16=False, # amp optimize level
-                 eval_interval=1, # eval once every $ epoch
                  max_keep_ckpt=2, # max num of saved ckpts in disk
                  workspace='workspace', # workspace to save logs & ckpts
                  best_mode='min', # the smaller/larger result, the better
@@ -168,7 +167,6 @@ class Trainer(object):
         self.use_loss_as_metric = use_loss_as_metric
         self.report_metric_at_train = report_metric_at_train
         self.max_keep_ckpt = max_keep_ckpt
-        self.eval_interval = eval_interval
         self.use_checkpoint = use_checkpoint
         self.use_tensorboardX = use_tensorboardX
         self.time_stamp = time.strftime("%Y-%m-%d_%H-%M-%S")
@@ -394,11 +392,11 @@ class Trainer(object):
         B, N = rays_o.shape[:2]
         H, W = data['H'], data['W']
 
-        # When ref_data has B images > opt.num_images_per_batch
-        if B > self.opt.num_images_per_batch:
-            # choose num_images_per_batch images out of those B images
-            choice = torch.randperm(B)[:self.opt.num_images_per_batch]
-            B = self.opt.num_images_per_batch
+        # When ref_data has B images > opt.batch_size
+        if B > self.opt.batch_size:
+            # choose batch_size images out of those B images
+            choice = torch.randperm(B)[:self.opt.batch_size]
+            B = self.opt.batch_size
             rays_o = rays_o[choice]
             rays_d = rays_d[choice]
             mvp = mvp[choice]
@@ -470,7 +468,7 @@ class Trainer(object):
             gt_normal = self.normal # [B, H, W, 3]
             gt_depth = self.depth   # [B, H, W]
 
-            if len(gt_rgb) > self.opt.num_images_per_batch:
+            if len(gt_rgb) > self.opt.batch_size:
                 gt_mask = gt_mask[choice]
                 gt_rgb = gt_rgb[choice]
                 gt_normal = gt_normal[choice]
@@ -515,24 +513,26 @@ class Trainer(object):
                 # interpolate text_z
                 azimuth = data['azimuth'] # [-180, 180]
 
-                if azimuth >= -90 and azimuth < 90:
-                    if azimuth >= 0:
-                        r = 1 - azimuth / 90
+                # ENHANCE: remove loop to handle batch size > 1
+                text_z = [self.embeddings['SD']['uncond']] * azimuth.shape[0]
+                for b in range(azimuth.shape[0]):
+                    if azimuth[b] >= -90 and azimuth[b] < 90:
+                        if azimuth[b] >= 0:
+                            r = 1 - azimuth[b] / 90
+                        else:
+                            r = 1 + azimuth[b] / 90
+                        start_z = self.embeddings['SD']['front']
+                        end_z = self.embeddings['SD']['side']
                     else:
-                        r = 1 + azimuth / 90
-                    start_z = self.embeddings['SD']['front']
-                    end_z = self.embeddings['SD']['side']
-                else:
-                    if azimuth >= 0:
-                        r = 1 - (azimuth - 90) / 90
-                    else:
-                        r = 1 + (azimuth + 90) / 90
-                    start_z = self.embeddings['SD']['side']
-                    end_z = self.embeddings['SD']['back']
+                        if azimuth[b] >= 0:
+                            r = 1 - (azimuth[b] - 90) / 90
+                        else:
+                            r = 1 + (azimuth[b] + 90) / 90
+                        start_z = self.embeddings['SD']['side']
+                        end_z = self.embeddings['SD']['back']
+                    text_z.append(r * start_z + (1 - r) * end_z)
+                text_z = torch.cat(text_z, dim=0)
 
-                pos_z = r * start_z + (1 - r) * end_z
-                uncond_z = self.embeddings['SD']['uncond']
-                text_z = torch.cat([uncond_z, pos_z], dim=0)
                 loss = loss + self.guidance['SD'].train_step(text_z, pred_rgb, as_latent=as_latent, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance,
                                                              save_guidance_path=save_guidance_path)
 
@@ -540,24 +540,26 @@ class Trainer(object):
                 # interpolate text_z
                 azimuth = data['azimuth'] # [-180, 180]
 
-                if azimuth >= -90 and azimuth < 90:
-                    if azimuth >= 0:
-                        r = 1 - azimuth / 90
+                # ENHANCE: remove loop to handle batch size > 1
+                text_z = [self.embeddings['IF']['uncond']] * azimuth.shape[0]
+                for b in range(azimuth.shape[0]):
+                    if azimuth[b] >= -90 and azimuth[b] < 90:
+                        if azimuth[b] >= 0:
+                            r = 1 - azimuth[b] / 90
+                        else:
+                            r = 1 + azimuth[b] / 90
+                        start_z = self.embeddings['IF']['front']
+                        end_z = self.embeddings['IF']['side']
                     else:
-                        r = 1 + azimuth / 90
-                    start_z = self.embeddings['IF']['front']
-                    end_z = self.embeddings['IF']['side']
-                else:
-                    if azimuth >= 0:
-                        r = 1 - (azimuth - 90) / 90
-                    else:
-                        r = 1 + (azimuth + 90) / 90
-                    start_z = self.embeddings['IF']['side']
-                    end_z = self.embeddings['IF']['back']
+                        if azimuth[b] >= 0:
+                            r = 1 - (azimuth[b] - 90) / 90
+                        else:
+                            r = 1 + (azimuth[b] + 90) / 90
+                        start_z = self.embeddings['IF']['side']
+                        end_z = self.embeddings['IF']['back']
+                    text_z.append(r * start_z + (1 - r) * end_z)
+                text_z = torch.cat(text_z, dim=0)
 
-                pos_z = r * start_z + (1 - r) * end_z
-                uncond_z = self.embeddings['IF']['uncond']
-                text_z = torch.cat([uncond_z, pos_z], dim=0)
                 loss = loss + self.guidance['IF'].train_step(text_z, pred_rgb, guidance_scale=self.opt.guidance_scale, grad_scale=self.opt.lambda_guidance)
 
             if 'zero123' in self.guidance:
@@ -693,7 +695,7 @@ class Trainer(object):
 
     ### ------------------------------
 
-    def train(self, train_loader, valid_loader, max_epochs):
+    def train(self, train_loader, valid_loader, test_loader, max_epochs):
 
         if self.use_tensorboardX and self.local_rank == 0:
             self.writer = tensorboardX.SummaryWriter(os.path.join(self.workspace, "run", self.name))
@@ -708,9 +710,12 @@ class Trainer(object):
             if self.workspace is not None and self.local_rank == 0:
                 self.save_checkpoint(full=True, best=False)
 
-            if self.epoch % self.eval_interval == 0:
+            if self.epoch % self.opt.eval_interval == 0:
                 self.evaluate_one_epoch(valid_loader)
                 self.save_checkpoint(full=False, best=True)
+            
+            if self.epoch % self.opt.test_interval == 0 or self.epoch == max_epochs:
+                self.test(test_loader)
 
         end_t = time.time()
 

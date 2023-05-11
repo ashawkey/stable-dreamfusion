@@ -101,7 +101,8 @@ class IF(nn.Module):
             # pred noise
             model_input = torch.cat([images_noisy] * 2)
             model_input = self.scheduler.scale_model_input(model_input, t)
-            noise_pred = self.unet(model_input, t, encoder_hidden_states=text_embeddings).sample
+            tt = torch.cat([t] * 2)
+            noise_pred = self.unet(model_input, tt, encoder_hidden_states=text_embeddings).sample
             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
             noise_pred_uncond, _ = noise_pred_uncond.split(model_input.shape[1], dim=1)
             noise_pred_text, predicted_variance = noise_pred_text.split(model_input.shape[1], dim=1)
@@ -112,7 +113,7 @@ class IF(nn.Module):
 
         # w(t), sigma_t^2
         w = (1 - self.alphas[t])
-        grad = grad_scale * w * (noise_pred - noise)
+        grad = grad_scale * w[:, None, None, None] * (noise_pred - noise)
         grad = torch.nan_to_num(grad)
 
         # since we omitted an item in grad, we need to use the custom function to specify the gradient

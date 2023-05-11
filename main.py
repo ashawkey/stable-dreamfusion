@@ -24,6 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('-O2', action='store_true', help="equals --backbone vanilla")
     parser.add_argument('--test', action='store_true', help="test mode")
     parser.add_argument('--eval_interval', type=int, default=1, help="evaluate on the valid set every interval epochs")
+    parser.add_argument('--test_interval', type=int, default=100, help="test on the test set every interval epochs")
     parser.add_argument('--workspace', type=str, default='workspace')
     parser.add_argument('--seed', default=None)
 
@@ -83,7 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('--known_view_scale', type=float, default=1.5, help="multiply --h/w by this for known view rendering")
     parser.add_argument('--known_view_noise_scale', type=float, default=2e-3, help="random camera noise added to rays_o and rays_d")
     parser.add_argument('--dmtet_reso_scale', type=float, default=8, help="multiply --h/w by this for dmtet finetuning")
-    parser.add_argument('--num_images_per_batch', type=int, default=1, help="images to render per batch using NeRF")
+    parser.add_argument('--batch_size', type=int, default=1, help="images to render per batch using NeRF")
 
     ### dataset options
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
@@ -106,8 +107,6 @@ if __name__ == '__main__':
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
     parser.add_argument('--t_range', type=float, nargs='*', default=[0.02, 0.98], help="stable diffusion time steps range")
-
-    parser.add_argument('--test_freq', type=int, default=None, help="Test the model every n iterations, by recording a turntable video. (By default, this is only done after the final epoch)")
 
     ### regularizations
     parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
@@ -157,6 +156,13 @@ if __name__ == '__main__':
     elif opt.O2:
         opt.fp16 = True
         opt.backbone = 'vanilla'
+    
+    if opt.IF:
+        if 'SD' in opt.guidance:
+            opt.guidance.remove('SD')
+            opt.guidance.append('IF')
+        opt.latent_iter_ratio = 0 # must not do as_latent
+        opt.guidance_scale = 20
 
     opt.images, opt.ref_radii, opt.ref_polars, opt.ref_azimuths, opt.zero123_ws = [], [], [], [], []
     opt.default_zero123_w = 1
@@ -253,13 +259,6 @@ if __name__ == '__main__':
         opt.full_phi_range = opt.phi_range
         opt.full_fovy_range = opt.fovy_range
 
-    # Experimental: simply replace sd
-    if opt.IF:
-        if 'SD' in opt.guidance:
-            opt.guidance.remove('SD')
-            opt.guidance.append('IF')
-        opt.latent_iter_ratio = 0 # must not do as_latent
-
     if opt.backbone == 'vanilla':
         from nerf.network import NeRFNetwork
     elif opt.backbone == 'grid':
@@ -315,7 +314,7 @@ if __name__ == '__main__':
             gui.render()
 
         else:
-            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=opt.dataset_size_test).dataloader()
+            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=opt.dataset_size_test).dataloader(batch_size=1)
             trainer.test(test_loader)
 
             if opt.save_mesh:
@@ -323,7 +322,7 @@ if __name__ == '__main__':
 
     else:
 
-        train_loader = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=opt.dataset_size_train).dataloader()
+        train_loader = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=opt.dataset_size_train * opt.batch_size).dataloader()
 
         if opt.optim == 'adan':
             from optimizer import Adan
@@ -356,7 +355,7 @@ if __name__ == '__main__':
             from guidance.clip_utils import CLIP
             guidance['clip'] = CLIP(device)
 
-        trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
+        trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, scheduler_update_every_step=True)
 
         trainer.default_view_data = train_loader._data.get_default_view_data()
 
@@ -366,18 +365,11 @@ if __name__ == '__main__':
             gui.render()
 
         else:
-            valid_loader = NeRFDataset(opt, device=device, type='val', H=opt.H, W=opt.W, size=opt.dataset_size_valid).dataloader()
-            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=opt.dataset_size_test).dataloader()
+            valid_loader = NeRFDataset(opt, device=device, type='val', H=opt.H, W=opt.W, size=opt.dataset_size_valid).dataloader(batch_size=1)
+            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=opt.dataset_size_test).dataloader(batch_size=1)
 
             max_epoch = np.ceil(opt.iters / len(train_loader)).astype(np.int32)
-            epoch_freq = np.ceil((opt.test_freq or opt.iters) / len(train_loader)).astype(np.int32)
-            max_epochs = np.arange(trainer.epoch, max_epoch, epoch_freq) + epoch_freq
-
-            for max_epoch in max_epochs:
-                trainer.train(train_loader, valid_loader, max_epoch)
-
-                # also test at the end
-                trainer.test(test_loader)
-
-                if opt.save_mesh:
-                    trainer.save_mesh()
+            trainer.train(train_loader, valid_loader, test_loader, max_epoch)
+        
+            if opt.save_mesh:
+                trainer.save_mesh()
