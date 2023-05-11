@@ -1,5 +1,6 @@
 import torch
 import argparse
+import pandas as pd
 import sys
 
 from nerf.provider import NeRFDataset
@@ -27,13 +28,15 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=None)
 
     parser.add_argument('--image', default=None, help="image prompt")
+    parser.add_argument('--image_config', default=None, help="image config csv")
+
     parser.add_argument('--known_view_interval', type=int, default=4, help="train default view with RGB loss every & iters, only valid if --image is not None.")
 
     parser.add_argument('--IF', action='store_true', help="experimental: use DeepFloyd IF as the guidance model for nerf stage")
 
     parser.add_argument('--guidance', type=str, nargs='*', default=['SD'], help='guidance model')
     parser.add_argument('--guidance_scale', type=float, default=100, help="diffusion model classifier-free guidance scale")
-    
+
     parser.add_argument('--save_mesh', action='store_true', help="export an obj mesh with texture")
     parser.add_argument('--mcubes_resolution', type=int, default=256, help="mcubes resolution for extracting mesh")
     parser.add_argument('--decimate_target', type=int, default=5e4, help="target face number for mesh decimation")
@@ -80,6 +83,7 @@ if __name__ == '__main__':
     parser.add_argument('--known_view_scale', type=float, default=1.5, help="multiply --h/w by this for known view rendering")
     parser.add_argument('--known_view_noise_scale', type=float, default=2e-3, help="random camera noise added to rays_o and rays_d")
     parser.add_argument('--dmtet_reso_scale', type=float, default=8, help="multiply --h/w by this for dmtet finetuning")
+    parser.add_argument('--num_images_per_batch', type=int, default=1, help="images to render per batch using NeRF")
 
     ### dataset options
     parser.add_argument('--bound', type=float, default=1, help="assume the scene is bounded in box(-bound, bound)")
@@ -92,8 +96,8 @@ if __name__ == '__main__':
     parser.add_argument('--fovy_range', type=float, nargs='*', default=[10, 30], help="training camera fovy range")
 
     parser.add_argument('--default_radius', type=float, default=3.2, help="radius for the default view")
-    parser.add_argument('--default_theta', type=float, default=90, help="radius for the default view")
-    parser.add_argument('--default_phi', type=float, default=0, help="radius for the default view")
+    parser.add_argument('--default_polar', type=float, default=90, help="polar for the default view")
+    parser.add_argument('--default_azimuth', type=float, default=0, help="azimuth for the default view")
     parser.add_argument('--default_fovy', type=float, default=20, help="fovy for the default view")
 
     parser.add_argument('--progressive_view', action='store_true', help="progressively expand view sampling range from default to full")
@@ -102,6 +106,8 @@ if __name__ == '__main__':
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
     parser.add_argument('--t_range', type=float, nargs='*', default=[0.02, 0.98], help="stable diffusion time steps range")
+
+    parser.add_argument('--test_freq', type=int, default=None, help="Test the model every n iterations, by recording a turntable video. (By default, this is only done after the final epoch)")
 
     ### regularizations
     parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
@@ -135,6 +141,13 @@ if __name__ == '__main__':
     parser.add_argument('--light_phi', type=float, default=0, help="default GUI light direction in [0, 360), azimuth")
     parser.add_argument('--max_spp', type=int, default=1, help="GUI rendering max sample per pixel")
 
+    parser.add_argument('--zero123_config', type=str, default='./pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml', help="config file for zero123")
+    parser.add_argument('--zero123_ckpt', type=str, default='./pretrained/zero123/105000.ckpt', help="ckpt for zero123")
+
+    parser.add_argument('--dataset_size_train', type=int, default=100, help="Length of train dataset i.e. # of iterations per epoch")
+    parser.add_argument('--dataset_size_valid', type=int, default=8, help="# of frames to render in the turntable video in validation")
+    parser.add_argument('--dataset_size_test', type=int, default=100, help="# of frames to render in the turntable video at test time")
+
     opt = parser.parse_args()
 
     if opt.O:
@@ -145,8 +158,11 @@ if __name__ == '__main__':
         opt.fp16 = True
         opt.backbone = 'vanilla'
 
+    opt.images, opt.ref_radii, opt.ref_polars, opt.ref_azimuths, opt.zero123_ws = [], [], [], [], []
+    opt.default_zero123_w = 1
+
     # parameters for image-conditioned generation
-    if opt.image is not None:
+    if opt.image is not None or opt.image_config is not None:
 
         if opt.text is None:
             # use zero123 guidance model when only providing image
@@ -169,15 +185,39 @@ if __name__ == '__main__':
         # smoothness
         opt.lambda_entropy = 1
         opt.lambda_orient = 1
-        
+
         # latent warmup is not needed
-        opt.latent_iter_ratio = 0 
+        opt.latent_iter_ratio = 0
         opt.albedo_iter_ratio = 0
-        
+
         # make shape init more stable
         opt.progressive_view = True
         # opt.progressive_level = True
 
+        if opt.image is not None:
+            opt.images += [opt.image]
+            opt.ref_radii += [opt.default_radius]
+            opt.ref_polars += [opt.default_polar]
+            opt.ref_azimuths += [opt.default_azimuth]
+            opt.zero123_ws += [opt.default_zero123_w]
+
+        if opt.image_config is not None:
+            # for multiview (zero123)
+            conf = pd.read_csv(opt.image_config, skipinitialspace=True)
+            opt.images += list(conf.image)
+            opt.ref_radii += list(conf.radius)
+            opt.ref_polars += list(conf.polar)
+            opt.ref_azimuths += list(conf.azimuth)
+            opt.zero123_ws += list(conf.zero123_weight)
+            if opt.image is None:
+                opt.default_radius = opt.ref_radii[0]
+                opt.default_polar = opt.ref_polars[0]
+                opt.default_azimuth = opt.ref_azimuths[0]
+                opt.default_zero123_w = opt.zero123_ws[0]
+
+    # reset to None
+    if len(opt.images) == 0:
+        opt.images = None
 
     # default parameters for finetuning
     if opt.dmtet:
@@ -188,7 +228,8 @@ if __name__ == '__main__':
 
         opt.t_range = [0.02, 0.50] # ref: magic3D
 
-        if opt.image is not None:
+        if opt.images is not None:
+
             opt.lambda_normal = 0
             opt.lambda_depth = 0
 
@@ -205,10 +246,10 @@ if __name__ == '__main__':
     if opt.progressive_view:
         # disable as they disturb progressive view
         opt.jitter_pose = False
-        opt.uniform_sphere_rate = 0 
+        opt.uniform_sphere_rate = 0
         # back up full range
         opt.full_radius_range = opt.radius_range
-        opt.full_theta_range = opt.theta_range    
+        opt.full_theta_range = opt.theta_range
         opt.full_phi_range = opt.phi_range
         opt.full_fovy_range = opt.fovy_range
 
@@ -274,7 +315,7 @@ if __name__ == '__main__':
             gui.render()
 
         else:
-            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
+            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=opt.dataset_size_test).dataloader()
             trainer.test(test_loader)
 
             if opt.save_mesh:
@@ -282,7 +323,7 @@ if __name__ == '__main__':
 
     else:
 
-        train_loader = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=100).dataloader()
+        train_loader = NeRFDataset(opt, device=device, type='train', H=opt.h, W=opt.w, size=opt.dataset_size_train).dataloader()
 
         if opt.optim == 'adan':
             from optimizer import Adan
@@ -302,19 +343,19 @@ if __name__ == '__main__':
         if 'SD' in opt.guidance:
             from guidance.sd_utils import StableDiffusion
             guidance['SD'] = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key, opt.t_range)
-        
+
         if 'IF' in opt.guidance:
             from guidance.if_utils import IF
             guidance['IF'] = IF(device, opt.vram_O, opt.t_range)
 
         if 'zero123' in opt.guidance:
             from guidance.zero123_utils import Zero123
-            guidance['zero123'] = Zero123(device, opt.fp16, opt.vram_O, opt.t_range)
+            guidance['zero123'] = Zero123(device=device, fp16=opt.fp16, config=opt.zero123_config, ckpt=opt.zero123_ckpt, vram_O=opt.vram_O, t_range=opt.t_range)
 
         if 'clip' in opt.guidance:
             from guidance.clip_utils import CLIP
             guidance['clip'] = CLIP(device)
-        
+
         trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, optimizer=optimizer, ema_decay=0.95, fp16=opt.fp16, lr_scheduler=scheduler, use_checkpoint=opt.ckpt, eval_interval=opt.eval_interval, scheduler_update_every_step=True)
 
         trainer.default_view_data = train_loader._data.get_default_view_data()
@@ -325,14 +366,18 @@ if __name__ == '__main__':
             gui.render()
 
         else:
-            valid_loader = NeRFDataset(opt, device=device, type='val', H=opt.H, W=opt.W, size=5).dataloader()
+            valid_loader = NeRFDataset(opt, device=device, type='val', H=opt.H, W=opt.W, size=opt.dataset_size_valid).dataloader()
+            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=opt.dataset_size_test).dataloader()
 
             max_epoch = np.ceil(opt.iters / len(train_loader)).astype(np.int32)
-            trainer.train(train_loader, valid_loader, max_epoch)
+            epoch_freq = np.ceil((opt.test_freq or opt.iters) / len(train_loader)).astype(np.int32)
+            max_epochs = np.arange(trainer.epoch, max_epoch, epoch_freq) + epoch_freq
 
-            # also test at the end
-            test_loader = NeRFDataset(opt, device=device, type='test', H=opt.H, W=opt.W, size=100).dataloader()
-            trainer.test(test_loader)
+            for max_epoch in max_epochs:
+                trainer.train(train_loader, valid_loader, max_epoch)
 
-            if opt.save_mesh:
-                trainer.save_mesh()
+                # also test at the end
+                trainer.test(test_loader)
+
+                if opt.save_mesh:
+                    trainer.save_mesh()

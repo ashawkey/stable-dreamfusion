@@ -1,7 +1,8 @@
 tqdm
 rich
 ninja
-numpy 
+numpy
+pandas 
 scipy
 scikit-learn
 matplotlib
