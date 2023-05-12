@@ -98,7 +98,7 @@ class StableDiffusion(nn.Module):
 
     def train_step(self, text_embeddings, pred_rgb, guidance_scale=100, as_latent=False, grad_scale=1,
                    save_guidance_path:Path=None):
-        
+
         if as_latent:
             latents = F.interpolate(pred_rgb, (64, 64), mode='bilinear', align_corners=False) * 2 - 1
         else:
@@ -108,7 +108,7 @@ class StableDiffusion(nn.Module):
             latents = self.encode_imgs(pred_rgb_512)
 
         # timestep ~ U(0.02, 0.98) to avoid very high/low noise level
-        t = torch.randint(self.min_step, self.max_step + 1, [1], dtype=torch.long, device=self.device)
+        t = torch.randint(self.min_step, self.max_step + 1, (latents.shape[0],), dtype=torch.long, device=self.device)
 
         # predict the noise residual with unet, NO grad!
         with torch.no_grad():
@@ -117,13 +117,13 @@ class StableDiffusion(nn.Module):
             latents_noisy = self.scheduler.add_noise(latents, noise, t)
             # pred noise
             latent_model_input = torch.cat([latents_noisy] * 2)
-            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+            tt = torch.cat([t] * 2)
+            noise_pred = self.unet(latent_model_input, tt, encoder_hidden_states=text_embeddings).sample
 
-        # perform guidance (high scale from paper!)
-        noise_pred_uncond, noise_pred_pos = noise_pred.chunk(2)
+            # perform guidance (high scale from paper!)
+            noise_pred_uncond, noise_pred_pos = noise_pred.chunk(2)
+            noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_pos - noise_pred_uncond)
 
-        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_pos - noise_pred_uncond)
-        
         # import kiui
         # latents_tmp = torch.randn((1, 4, 64, 64), device=self.device)
         # latents_tmp = latents_tmp.detach()
@@ -140,21 +140,21 @@ class StableDiffusion(nn.Module):
 
         # w(t), sigma_t^2
         w = (1 - self.alphas[t])
-        grad = grad_scale * w * (noise_pred - noise)
+        grad = grad_scale * w[:, None, None, None] * (noise_pred - noise)
         grad = torch.nan_to_num(grad)
 
         if save_guidance_path:
             with torch.no_grad():
                 if as_latent:
                     pred_rgb_512 = self.decode_latents(latents)
-                    
+
                 # visualize predicted denoised image
                 # claforte: discuss this with Vikram!!
                 result_hopefully_less_noisy_image = self.decode_latents(latents + w*(noise_pred - noise))
-                
+
                 # visualize noisier image
-                result_noisier_image = self.decode_latents(latents_noisy) 
-                
+                result_noisier_image = self.decode_latents(latents_noisy)
+
                 # TODO: also denoise all-the-way
 
                 # all 3 input images are [1, 3, H, W], e.g. [1, 3, 512, 512]
@@ -186,7 +186,7 @@ class StableDiffusion(nn.Module):
 
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents)['prev_sample']
-        
+
         return latents
 
     def decode_latents(self, latents):
@@ -195,7 +195,7 @@ class StableDiffusion(nn.Module):
 
         imgs = self.vae.decode(latents).sample
         imgs = (imgs / 2 + 0.5).clamp(0, 1)
-        
+
         return imgs
 
     def encode_imgs(self, imgs):
@@ -212,7 +212,7 @@ class StableDiffusion(nn.Module):
 
         if isinstance(prompts, str):
             prompts = [prompts]
-        
+
         if isinstance(negative_prompts, str):
             negative_prompts = [negative_prompts]
 
@@ -223,7 +223,7 @@ class StableDiffusion(nn.Module):
 
         # Text embeds -> img latents
         latents = self.produce_latents(text_embeds, height=height, width=width, latents=latents, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale) # [1, 4, 64, 64]
-        
+
         # Img latents -> imgs
         imgs = self.decode_latents(latents) # [1, 3, 512, 512]
 

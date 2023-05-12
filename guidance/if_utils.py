@@ -85,12 +85,12 @@ class IF(nn.Module):
 
 
     def train_step(self, text_embeddings, pred_rgb, guidance_scale=100, grad_scale=1):
-        
+
         # [0, 1] to [-1, 1] and make sure shape is [64, 64]
         images = F.interpolate(pred_rgb, (64, 64), mode='bilinear', align_corners=False) * 2 - 1
-        
+
         # timestep ~ U(0.02, 0.98) to avoid very high/low noise level
-        t = torch.randint(self.min_step, self.max_step + 1, [1], dtype=torch.long, device=self.device)
+        t = torch.randint(self.min_step, self.max_step + 1, (images.shape[0],), dtype=torch.long, device=self.device)
 
         # predict the noise residual with unet, NO grad!
         with torch.no_grad():
@@ -101,7 +101,8 @@ class IF(nn.Module):
             # pred noise
             model_input = torch.cat([images_noisy] * 2)
             model_input = self.scheduler.scale_model_input(model_input, t)
-            noise_pred = self.unet(model_input, t, encoder_hidden_states=text_embeddings).sample
+            tt = torch.cat([t] * 2)
+            noise_pred = self.unet(model_input, tt, encoder_hidden_states=text_embeddings).sample
             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
             noise_pred_uncond, _ = noise_pred_uncond.split(model_input.shape[1], dim=1)
             noise_pred_text, predicted_variance = noise_pred_text.split(model_input.shape[1], dim=1)
@@ -109,10 +110,10 @@ class IF(nn.Module):
 
             # TODO: how to use the variance here?
             # noise_pred = torch.cat([noise_pred, predicted_variance], dim=1)
-        
+
         # w(t), sigma_t^2
         w = (1 - self.alphas[t])
-        grad = grad_scale * w * (noise_pred - noise)
+        grad = grad_scale * w[:, None, None, None] * (noise_pred - noise)
         grad = torch.nan_to_num(grad)
 
         # since we omitted an item in grad, we need to use the custom function to specify the gradient
@@ -145,9 +146,9 @@ class IF(nn.Module):
 
             # compute the previous noisy sample x_t -> x_t-1
             images = self.scheduler.step(noise_pred, t, images).prev_sample
-        
+
         images = (images + 1) / 2
-        
+
         return images
 
 
@@ -155,7 +156,7 @@ class IF(nn.Module):
 
         if isinstance(prompts, str):
             prompts = [prompts]
-        
+
         if isinstance(negative_prompts, str):
             negative_prompts = [negative_prompts]
 
@@ -166,7 +167,7 @@ class IF(nn.Module):
 
         # Text embeds -> img
         imgs = self.produce_imgs(text_embeds, height=height, width=width, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale) # [1, 4, 64, 64]
-        
+
         # Img to Numpy
         imgs = imgs.detach().cpu().permute(0, 2, 3, 1).numpy()
         imgs = (imgs * 255).round().astype('uint8')

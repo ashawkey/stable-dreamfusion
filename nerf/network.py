@@ -187,7 +187,7 @@ class NeRFNetwork(NeRFRenderer):
             # normal = normal.detach()
 
             # lambertian shading
-            lambertian = ratio + (1 - ratio) * (normal @ l).clamp(min=0) # [N,]
+            lambertian = ratio + (1 - ratio) * (normal * l).sum(-1).clamp(min=0) # [N,]
 
             if shading == 'textureless':
                 color = lambertian.unsqueeze(-1).repeat(1, 3)
