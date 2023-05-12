@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 import argparse
 import numpy as np
@@ -26,7 +27,7 @@ class BackgroundRemoval():
             trimap_erosion_iters=5,
             fp16=True,
         )
-    
+
     @torch.no_grad()
     def __call__(self, image):
         # image: [H, W, 3] array in [0, 255].
@@ -36,7 +37,7 @@ class BackgroundRemoval():
         image = np.array(image)
 
         return image
-    
+
 class BLIP2():
     def __init__(self, device='cuda'):
         self.device = device
@@ -91,7 +92,7 @@ class DPT():
         self.model.load_state_dict(state_dict)
         self.model.eval().to(device)
 
-        
+
     @torch.no_grad()
     def __call__(self, image):
         # image: np.ndarray, uint8, [H, W, 3]
@@ -119,8 +120,9 @@ if __name__ == '__main__':
     parser.add_argument('path', type=str, help="path to image (png, jpeg, etc.)")
     parser.add_argument('--size', default=256, type=int, help="output resolution")
     parser.add_argument('--border_ratio', default=0.2, type=float, help="output border ratio")
+    parser.add_argument('--dont_recenter_resize', action='store_true', help="dont recenter and resize, helpful for objaverse")
     opt = parser.parse_args()
-    
+
     out_dir = os.path.dirname(opt.path)
     out_rgba = os.path.join(out_dir, os.path.basename(opt.path).split('.')[0] + '_rgba.png')
     out_depth = os.path.join(out_dir, os.path.basename(opt.path).split('.')[0] + '_depth.png')
@@ -157,6 +159,13 @@ if __name__ == '__main__':
     normal[~mask] = 0
     del dpt_normal_model
 
+    if opt.dont_recenter_resize:
+        # write output
+        cv2.imwrite(out_rgba, cv2.cvtColor(carved_image, cv2.COLOR_RGBA2BGRA))
+        cv2.imwrite(out_depth, depth)
+        cv2.imwrite(out_normal, normal)
+        sys.exit()
+
     # rescale and recenter
     final_rgba = np.zeros((opt.size, opt.size, 4), dtype=np.uint8)
     final_depth = np.zeros((opt.size, opt.size), dtype=np.uint8)
@@ -178,7 +187,7 @@ if __name__ == '__main__':
     final_rgba[x2_min:x2_max, y2_min:y2_max] = cv2.resize(carved_image[x_min:x_max, y_min:y_max], (w2, h2), interpolation=cv2.INTER_AREA)
     final_depth[x2_min:x2_max, y2_min:y2_max] = cv2.resize(depth[x_min:x_max, y_min:y_max], (w2, h2), interpolation=cv2.INTER_AREA)
     final_normal[x2_min:x2_max, y2_min:y2_max] = cv2.resize(normal[x_min:x_max, y_min:y_max], (w2, h2), interpolation=cv2.INTER_AREA)
-    
+
     # write output
     cv2.imwrite(out_rgba, cv2.cvtColor(final_rgba, cv2.COLOR_RGBA2BGRA))
     cv2.imwrite(out_depth, final_depth)
@@ -190,7 +199,4 @@ if __name__ == '__main__':
     # caption = blip2(image)
     # with open(out_caption, 'w') as f:
     #     f.write(caption)
-
-
-    
 

@@ -6,6 +6,7 @@ import imageio
 import psutil
 from pathlib import Path
 import random
+import shutil
 import warnings
 import tensorboardX
 
@@ -243,6 +244,9 @@ class Trainer(object):
             self.ckpt_path = os.path.join(self.workspace, 'checkpoints')
             self.best_path = f"{self.ckpt_path}/{self.name}.pth"
             os.makedirs(self.ckpt_path, exist_ok=True)
+
+            if opt.image_config is not None:
+                shutil.copyfile(opt.image_config, os.path.join(self.workspace, os.path.basename(opt.image_config)))
 
         self.log(f'[INFO] Cmdline: {self.argv}')
         self.log(f'[INFO] Trainer: {self.name} | {self.time_stamp} | {self.device} | {"fp16" if self.fp16 else "fp32"} | {self.workspace}')
@@ -713,7 +717,7 @@ class Trainer(object):
             if self.epoch % self.opt.eval_interval == 0:
                 self.evaluate_one_epoch(valid_loader)
                 self.save_checkpoint(full=False, best=True)
-            
+
             if self.epoch % self.opt.test_interval == 0 or self.epoch == max_epochs:
                 self.test(test_loader)
 
