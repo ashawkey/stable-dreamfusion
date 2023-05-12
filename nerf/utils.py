@@ -408,7 +408,7 @@ class Trainer(object):
             binarize = False
             bg_color = torch.rand((B * N, 3), device=rays_o.device)
 
-            # add camera noise to avoid grid-like artifect
+            # add camera noise to avoid grid-like artifact
             if self.opt.known_view_noise_scale > 0:
                 noise_scale = self.opt.known_view_noise_scale #* (1 - self.global_step / self.opt.iters)
                 rays_o = rays_o + torch.randn(3, device=self.device) * noise_scale
@@ -422,7 +422,6 @@ class Trainer(object):
             bg_color = None
 
         else:
-
             if self.global_step < (self.opt.albedo_iter_ratio * self.opt.iters):
                 ambient_ratio = 1.0
                 shading = 'albedo'
@@ -568,7 +567,8 @@ class Trainer(object):
                 azimuth = data['azimuth']
                 radius = data['radius']
 
-                loss = loss + self.guidance['zero123'].train_step(self.embeddings['zero123']['default'], pred_rgb, polar, azimuth, radius, guidance_scale=self.opt.guidance_scale, as_latent=as_latent, grad_scale=self.opt.lambda_guidance)
+                loss = loss + self.guidance['zero123'].train_step(self.embeddings['zero123']['default'], pred_rgb, polar, azimuth, radius, guidance_scale=self.opt.guidance_scale,
+                                                                  as_latent=as_latent, grad_scale=self.opt.lambda_guidance, save_guidance_path=save_guidance_path)
 
             if 'clip' in self.guidance:
 

@@ -1,11 +1,13 @@
 import math
 import numpy as np
 from omegaconf import OmegaConf
+from pathlib import Path
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.cuda.amp import custom_bwd, custom_fwd
+from torchvision.utils import save_image
 
 from diffusers import DDIMScheduler
 
@@ -121,7 +123,7 @@ class Zero123(nn.Module):
                 angles[i][j] = angle_between_2_sph(sv1, sv2)
         return angles
 
-    def train_step(self, embeddings, pred_rgb, polar, azimuth, radius, guidance_scale=3, as_latent=False, grad_scale=1):
+    def train_step(self, embeddings, pred_rgb, polar, azimuth, radius, guidance_scale=3, as_latent=False, grad_scale=1, save_guidance_path:Path=None):
         # pred_rgb: tensor [1, 3, H, W] in [0, 1]
 
         # adjust SDS scale based on how far the novel view is from the known view
@@ -131,8 +133,9 @@ class Zero123(nn.Module):
         v1 = torch.stack([radius + ref_radii[0], torch.deg2rad(polar + ref_polars[0]), torch.deg2rad(azimuth + ref_azimuths[0])], dim=-1)   # polar,azimuth,radius are all actually delta wrt default
         v2 = torch.stack([torch.tensor(ref_radii), torch.deg2rad(torch.tensor(ref_polars)), torch.deg2rad(torch.tensor(ref_azimuths))], dim=-1)
         angles = torch.rad2deg(self.angle_between(v1, v2)).to(self.device)
-        grad_scale = (angles.min(dim=1)[0] / (180/len(ref_azimuths))) * grad_scale  # rethink 180/len(ref_azimuths)
-
+        grad_scale = (angles.min(dim=1)[0] / (180/len(ref_azimuths))) * grad_scale  # rethink 180/len(ref_azimuths) # claforte: try inverting grad_scale or just fixing it to 1.0
+        grad_scale = 1.0 # claforte: HACK! I think this might converge faster
+        
         if as_latent:
             latents = F.interpolate(pred_rgb, (32, 32), mode='bilinear', align_corners=False) * 2 - 1
         else:
@@ -213,6 +216,23 @@ class Zero123(nn.Module):
         # imgs = self.decode_latents(latents)
         # print(polar, azimuth, radius)
         # kiui.vis.plot_image(pred_rgb_256, imgs)
+
+        if save_guidance_path:
+            with torch.no_grad():
+                if as_latent:
+                    pred_rgb_256 = self.decode_latents(latents) # claforte: test!
+
+                # visualize predicted denoised image
+                result_hopefully_less_noisy_image = self.decode_latents(self.model.predict_start_from_noise(latents_noisy, t, noise_pred))
+
+                # visualize noisier image
+                result_noisier_image = self.decode_latents(latents_noisy)
+
+                # TODO: also denoise all-the-way
+
+                # all 3 input images are [1, 3, H, W], e.g. [1, 3, 512, 512]
+                viz_images = torch.cat([pred_rgb_256, result_noisier_image, result_hopefully_less_noisy_image],dim=-1)
+                save_image(viz_images, save_guidance_path)
 
         # since we omitted an item in grad, we need to use the custom function to specify the gradient
         loss = SpecifyGradient.apply(latents, grad)

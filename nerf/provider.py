@@ -116,8 +116,9 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 120], phi_ra
 
     # jitters
     if jitter:
-        centers = centers + (torch.rand_like(centers) * 0.2 - 0.1)
-        targets = targets + torch.randn_like(centers) * 0.2
+        jit_pos = 0.015  # was 0.2
+        centers = centers + (torch.rand_like(centers) * jit_pos - jit_pos/2.0)
+        targets = targets + torch.randn_like(centers) * jit_pos
 
     # lookat
     forward_vector = safe_normalize(centers - targets)
@@ -125,7 +126,7 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 120], phi_ra
     right_vector = safe_normalize(torch.cross(forward_vector, up_vector, dim=-1))
 
     if jitter:
-        up_noise = torch.randn_like(up_vector) * 0.02
+        up_noise = torch.randn_like(up_vector) * 0.01 # was 0.02
     else:
         up_noise = 0
 
