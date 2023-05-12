@@ -245,6 +245,7 @@ class Trainer(object):
             self.best_path = f"{self.ckpt_path}/{self.name}.pth"
             os.makedirs(self.ckpt_path, exist_ok=True)
 
+            # Save a copy of image_config in the experiment workspace
             if opt.image_config is not None:
                 shutil.copyfile(opt.image_config, os.path.join(self.workspace, os.path.basename(opt.image_config)))
 
