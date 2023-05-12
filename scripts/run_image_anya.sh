@@ -1,8 +1,8 @@
 # Phase 1 - barely fits in A100 40GB.
 # Conclusion: results in concave-ish face, no neck, excess hair in the back
-# CUDA_VISIBLE_DEVICES=0 python main.py -O --image data/anya_front_rgba.png --workspace trial_anya_1_refimage \
-#   --iters 10000 --save_guidance --save_guidance_interval 10 --ckpt scratch --batch_size 2 --test_interval 2 \
-#   --h 128 --w 128 
+CUDA_VISIBLE_DEVICES=0 python main.py -O --image data/anya_front_rgba.png --workspace trial_anya_1_refimage \
+  --iters 10000 --save_guidance --save_guidance_interval 10 --ckpt scratch --batch_size 2 --test_interval 2 \
+  --h 128 --w 128 --zero123_grad_scale None
 
 # Phase 2 - barely fits in A100 40GB.
 # Conclusion: Excess hair in the back turns into an extra arm. Takes way too long.
