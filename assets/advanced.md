@@ -64,3 +64,8 @@ debugpy-run main.py -- --text "a hamburger" --workspace trial -O --vram_O
 ```
 
 For more details: https://github.com/bulletmark/debugpy-run 
+
+# Axes and directions of polar, azimuth, etc. in NeRF and Zero123
+
+<img width="1119" alt="NeRF_Zero123" src="https://github.com/ashawkey/stable-dreamfusion/assets/22424247/a0f432ff-2d08-45a4-a390-bda64f5cbc94">
+
