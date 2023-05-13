@@ -245,7 +245,7 @@ class NeRFDataset:
 
     def collate(self, index):
 
-        B = len(index) # always 1
+        B = len(index)
 
         if self.training:
             # random pose on the fly
@@ -253,6 +253,19 @@ class NeRFDataset:
 
             # random focal
             fov = random.random() * (self.opt.fovy_range[1] - self.opt.fovy_range[0]) + self.opt.fovy_range[0]
+
+        elif self.type == 'six_views':
+            # six views
+            thetas_six = [90]*4 + [1e-6] + [180]
+            phis_six = [0, 90, 180, -90, 0, 0]
+            thetas = torch.FloatTensor([thetas_six[index[0]]]).to(self.device)
+            phis = torch.FloatTensor([phis_six[index[0]]]).to(self.device)
+            radius = torch.FloatTensor([self.opt.default_radius]).to(self.device)
+            poses, dirs = circle_poses(self.device, radius=radius, theta=thetas, phi=phis, return_dirs=True, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front)
+
+            # fixed focal
+            fov = self.opt.default_fovy
+
         else:
             # circle pose
             thetas = torch.FloatTensor([self.opt.default_polar]).to(self.device)

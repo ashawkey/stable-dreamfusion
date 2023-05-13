@@ -23,6 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('-O', action='store_true', help="equals --fp16 --cuda_ray")
     parser.add_argument('-O2', action='store_true', help="equals --backbone vanilla")
     parser.add_argument('--test', action='store_true', help="test mode")
+    parser.add_argument('--six_views', action='store_true', help="six_views mode: save the images of the six views")
     parser.add_argument('--eval_interval', type=int, default=1, help="evaluate on the valid set every interval epochs")
     parser.add_argument('--test_interval', type=int, default=100, help="test on the test set every interval epochs")
     parser.add_argument('--workspace', type=str, default='workspace')
@@ -156,7 +157,7 @@ if __name__ == '__main__':
     elif opt.O2:
         opt.fp16 = True
         opt.backbone = 'vanilla'
-    
+
     if opt.IF:
         if 'SD' in opt.guidance:
             opt.guidance.remove('SD')
@@ -303,7 +304,18 @@ if __name__ == '__main__':
 
     print(model)
 
-    if opt.test:
+    if opt.six_views:
+        guidance = None # no need to load guidance model at test
+
+        trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, fp16=opt.fp16, use_checkpoint=opt.ckpt)
+
+        test_loader = NeRFDataset(opt, device=device, type='six_views', H=opt.H, W=opt.W, size=6).dataloader(batch_size=1)
+        trainer.test(test_loader, write_video=False)
+
+        if opt.save_mesh:
+            trainer.save_mesh()
+
+    elif opt.test:
         guidance = None # no need to load guidance model at test
 
         trainer = Trainer(' '.join(sys.argv), 'df', opt, model, guidance, device=device, workspace=opt.workspace, fp16=opt.fp16, use_checkpoint=opt.ckpt)
@@ -370,6 +382,6 @@ if __name__ == '__main__':
 
             max_epoch = np.ceil(opt.iters / len(train_loader)).astype(np.int32)
             trainer.train(train_loader, valid_loader, test_loader, max_epoch)
-        
+
             if opt.save_mesh:
                 trainer.save_mesh()
