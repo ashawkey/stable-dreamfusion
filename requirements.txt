@@ -2,7 +2,7 @@ tqdm
 rich
 ninja
 numpy
-pandas 
+pandas
 scipy
 scikit-learn
 matplotlib
@@ -24,7 +24,7 @@ dearpygui
 
 # for stable-diffusion
 huggingface_hub
-diffusers >= 0.9.0 
+diffusers >= 0.9.0
 accelerate
 transformers
 
