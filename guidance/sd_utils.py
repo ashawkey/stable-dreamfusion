@@ -149,16 +149,25 @@ class StableDiffusion(nn.Module):
                     pred_rgb_512 = self.decode_latents(latents)
 
                 # visualize predicted denoised image
-                # claforte: discuss this with Vikram!!
-                result_hopefully_less_noisy_image = self.decode_latents(latents + w*(noise_pred - noise))
+                # The following block of code is equivalent to `predict_start_from_noise`...
+                # see zero123_utils.py's version for a simpler implementation.
+                alphas = self.scheduler.alphas.to(latents)
+                total_timesteps = self.max_step - self.min_step + 1
+                index = total_timesteps - t.to(latents.device) - 1 
+                b = len(noise_pred)
+                a_t = alphas[index].reshape(b,1,1,1).to(self.device)
+                sqrt_one_minus_alphas = torch.sqrt(1 - alphas)
+                sqrt_one_minus_at = sqrt_one_minus_alphas[index].reshape((b,1,1,1)).to(self.device)                
+                pred_x0 = (latents_noisy - sqrt_one_minus_at * noise_pred) / a_t.sqrt() # current prediction for x_0
+                result_hopefully_less_noisy_image = self.decode_latents(pred_x0.to(latents.type(self.precision_t)))
 
                 # visualize noisier image
-                result_noisier_image = self.decode_latents(latents_noisy)
+                result_noisier_image = self.decode_latents(latents_noisy.to(pred_x0).type(self.precision_t))
 
                 # TODO: also denoise all-the-way
 
                 # all 3 input images are [1, 3, H, W], e.g. [1, 3, 512, 512]
-                viz_images = torch.cat([pred_rgb_512, result_noisier_image, result_hopefully_less_noisy_image],dim=-1)
+                viz_images = torch.cat([pred_rgb_512, result_noisier_image, result_hopefully_less_noisy_image],dim=0)
                 save_image(viz_images, save_guidance_path)
 
         # since we omitted an item in grad, we need to use the custom function to specify the gradient

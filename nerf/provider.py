@@ -70,7 +70,7 @@ def get_view_direction(thetas, phis, overhead, front):
     return res
 
 
-def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 120], phi_range=[0, 360], return_dirs=False, angle_overhead=30, angle_front=60, jitter=False, uniform_sphere_rate=0.5):
+def rand_poses(size, device, opt, radius_range=[1, 1.5], theta_range=[0, 120], phi_range=[0, 360], return_dirs=False, angle_overhead=30, angle_front=60, uniform_sphere_rate=0.5):
     ''' generate random poses from an orbit camera
     Args:
         size: batch size of generated poses.
@@ -115,17 +115,19 @@ def rand_poses(size, device, radius_range=[1, 1.5], theta_range=[0, 120], phi_ra
     targets = 0
 
     # jitters
-    if jitter:
-        centers = centers + (torch.rand_like(centers) * 0.2 - 0.1)
-        targets = targets + torch.randn_like(centers) * 0.2
+    if opt.jitter_pose:
+        jit_center = opt.jitter_center # 0.015  # was 0.2
+        jit_target = opt.jitter_target
+        centers += torch.rand_like(centers) * jit_center - jit_center/2.0
+        targets += torch.randn_like(centers) * jit_target
 
     # lookat
     forward_vector = safe_normalize(centers - targets)
     up_vector = torch.FloatTensor([0, 1, 0]).to(device).unsqueeze(0).repeat(size, 1)
     right_vector = safe_normalize(torch.cross(forward_vector, up_vector, dim=-1))
 
-    if jitter:
-        up_noise = torch.randn_like(up_vector) * 0.02
+    if opt.jitter_pose:
+        up_noise = torch.randn_like(up_vector) * opt.jitter_up
     else:
         up_noise = 0
 
@@ -199,7 +201,7 @@ class NeRFDataset:
         self.far = 1000 # infinite
 
         # [debug] visualize poses
-        # poses, dirs, _, _, _ = rand_poses(100, self.device, radius_range=self.opt.radius_range, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose, uniform_sphere_rate=1)
+        # poses, dirs, _, _, _ = rand_poses(100, self.device, opt, radius_range=self.opt.radius_range, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose, uniform_sphere_rate=1)
         # visualize_poses(poses.detach().cpu().numpy(), dirs.detach().cpu().numpy())
 
     def get_default_view_data(self):
@@ -249,7 +251,7 @@ class NeRFDataset:
 
         if self.training:
             # random pose on the fly
-            poses, dirs, thetas, phis, radius = rand_poses(B, self.device, radius_range=self.opt.radius_range, theta_range=self.opt.theta_range, phi_range=self.opt.phi_range, return_dirs=True, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, jitter=self.opt.jitter_pose, uniform_sphere_rate=self.opt.uniform_sphere_rate)
+            poses, dirs, thetas, phis, radius = rand_poses(B, self.device, self.opt, radius_range=self.opt.radius_range, theta_range=self.opt.theta_range, phi_range=self.opt.phi_range, return_dirs=True, angle_overhead=self.opt.angle_overhead, angle_front=self.opt.angle_front, uniform_sphere_rate=self.opt.uniform_sphere_rate)
 
             # random focal
             fov = random.random() * (self.opt.fovy_range[1] - self.opt.fovy_range[0]) + self.opt.fovy_range[0]
