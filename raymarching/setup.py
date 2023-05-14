@@ -21,9 +21,6 @@ elif os.name == "nt":
             for edition in ["Enterprise", "Professional", "BuildTools", "Community"]:
                 paths = sorted(glob.glob(r"%s\\Microsoft Visual Studio\\*\\%s\\VC\\Tools\\MSVC\\*\\bin\\Hostx64\\x64" % (program_files, edition)), reverse=True)
                 if paths:
-                    print("Found paths:")
-                    for p in paths:
-                        print(f"\t{p}")
                     return paths[0]
 
     # If cl.exe is not on path, try to find it.
