@@ -121,7 +121,9 @@ if __name__ == '__main__':
     parser.add_argument('--size', default=256, type=int, help="output resolution")
     parser.add_argument('--border_ratio', default=0.2, type=float, help="output border ratio")
     parser.add_argument('--recenter', type=bool, default=True, help="recenter, potentially not helpful for multiview zero123")
+    parser.add_argument('--dont_recenter', dest='recenter', action='store_false')
     parser.add_argument('--resize', type=bool, default=True, help="resize image to opt.size")
+    parser.add_argument('--dont_resize', dest='resize', action='store_false')
     opt = parser.parse_args()
 
     out_dir = os.path.dirname(opt.path)
@@ -162,6 +164,7 @@ if __name__ == '__main__':
 
     # recenter
     if opt.recenter:
+        print(f'[INFO] recenter...')
         final_rgba = np.zeros((opt.size, opt.size, 4), dtype=np.uint8)
         final_depth = np.zeros((opt.size, opt.size), dtype=np.uint8)
         final_normal = np.zeros((opt.size, opt.size, 3), dtype=np.uint8)
@@ -190,6 +193,7 @@ if __name__ == '__main__':
 
     # resize
     if opt.resize:
+        print(f'[INFO] resize...')
         final_rgba = cv2.resize(final_rgba, (w2, h2), interpolation=cv2.INTER_AREA)
         final_depth = cv2.resize(final_depth, (w2, h2), interpolation=cv2.INTER_AREA)
         final_normal = cv2.resize(final_normal, (w2, h2), interpolation=cv2.INTER_AREA)
