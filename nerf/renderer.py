@@ -657,7 +657,7 @@ class NeRFRenderer(nn.Module):
             density_outputs[k] = v.view(-1, v.shape[-1])
 
         dirs = safe_normalize(dirs)
-        sigmas, rgbs, normals = self(xyzs.reshape(-1, 3), dirs.reshape(-1, 3), light_d, ratio=ambient_ratio, shading=shading)
+        sigmas, rgbs, normals = self(xyzs.reshape(-1, 3), dirs.reshape(-1, 3), light_d.reshape(-1, 3), ratio=ambient_ratio, shading=shading)
         rgbs = rgbs.view(N, -1, 3) # [N, T+t, 3]
         if normals is not None:
             normals = normals.view(N, -1, 3)

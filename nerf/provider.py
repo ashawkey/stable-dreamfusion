@@ -92,9 +92,9 @@ def rand_poses(size, device, opt, radius_range=[1, 1.5], theta_range=[0, 120], p
     if random.random() < uniform_sphere_rate:
         unit_centers = F.normalize(
             torch.stack([
-                (torch.rand(size, device=device) - 0.5) * 2.0,
-                torch.rand(size, device=device),
-                (torch.rand(size, device=device) - 0.5) * 2.0,
+                torch.randn(size, device=device),
+                torch.abs(torch.randn(size, device=device)),
+                torch.randn(size, device=device),
             ], dim=-1), p=2, dim=1
         )
         thetas = torch.acos(unit_centers[:,1])

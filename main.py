@@ -161,13 +161,13 @@ if __name__ == '__main__':
     elif opt.O2:
         opt.fp16 = True
         opt.backbone = 'vanilla'
-
+        opt.progressive_level = True
+    
     if opt.IF:
         if 'SD' in opt.guidance:
             opt.guidance.remove('SD')
             opt.guidance.append('IF')
         opt.latent_iter_ratio = 0 # must not do as_latent
-        opt.guidance_scale = 20
 
     opt.images, opt.ref_radii, opt.ref_polars, opt.ref_azimuths, opt.zero123_ws = [], [], [], [], []
     opt.default_zero123_w = 1
