@@ -134,12 +134,12 @@ class Zero123(nn.Module):
         v1 = torch.stack([radius + ref_radii[0], torch.deg2rad(polar + ref_polars[0]), torch.deg2rad(azimuth + ref_azimuths[0])], dim=-1)   # polar,azimuth,radius are all actually delta wrt default
         v2 = torch.stack([torch.tensor(ref_radii), torch.deg2rad(torch.tensor(ref_polars)), torch.deg2rad(torch.tensor(ref_azimuths))], dim=-1)
         angles = torch.rad2deg(self.angle_between(v1, v2)).to(self.device)
-        if opt.zero123_grad_scale == 'angle':
+        if self.opt.zero123_grad_scale == 'angle':
             grad_scale = (angles.min(dim=1)[0] / (180/len(ref_azimuths))) * grad_scale  # rethink 180/len(ref_azimuths) # claforte: try inverting grad_scale or just fixing it to 1.0
-        elif opt.zero123_grad_scale == 'None':
+        elif self.opt.zero123_grad_scale == 'None':
             grad_scale = 1.0 # claforte: I think this might converge faster...?
         else:
-            assert False, f'Unrecognized `zero123_grad_scale`: {opt.zero123_grad_scale}'
+            assert False, f'Unrecognized `zero123_grad_scale`: {self.opt.zero123_grad_scale}'
         
         if as_latent:
             latents = F.interpolate(pred_rgb, (32, 32), mode='bilinear', align_corners=False) * 2 - 1
