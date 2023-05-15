@@ -558,7 +558,7 @@ class NeRFRenderer(nn.Module):
         _export(v, f)
 
     def run(self, rays_o, rays_d, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, perturb=False, **kwargs):
-        # rays_o, rays_d: [B, N, 3], assumes B == 1
+        # rays_o, rays_d: [B, N, 3]
         # bg_color: [BN, 3] in range [0, 1]
         # return: image: [B, N, 3], depth: [B, N]
 
@@ -583,8 +583,7 @@ class NeRFRenderer(nn.Module):
         # random sample light_d if not provided
         if light_d is None:
             # gaussian noise around the ray origin, so the light always face the view dir (avoid dark face)
-            light_d = (rays_o[0] + torch.randn(3, device=device, dtype=torch.float))
-            light_d = safe_normalize(light_d)
+            light_d = safe_normalize(rays_o + torch.randn(3, device=rays_o.device)) # [N, 3]
 
         #print(f'nears = {nears.min().item()} ~ {nears.max().item()}, fars = {fars.min().item()} ~ {fars.max().item()}')
 
@@ -653,11 +652,12 @@ class NeRFRenderer(nn.Module):
         weights = alphas * torch.cumprod(alphas_shifted, dim=-1)[..., :-1] # [N, T+t]
 
         dirs = rays_d.view(-1, 1, 3).expand_as(xyzs)
+        light_d = light_d.view(-1, 1, 3).expand_as(xyzs)
         for k, v in density_outputs.items():
             density_outputs[k] = v.view(-1, v.shape[-1])
 
         dirs = safe_normalize(dirs)
-        sigmas, rgbs, normals = self(xyzs.reshape(-1, 3), dirs.reshape(-1, 3), light_d, ratio=ambient_ratio, shading=shading)
+        sigmas, rgbs, normals = self(xyzs.reshape(-1, 3), dirs.reshape(-1, 3), light_d.reshape(-1, 3), ratio=ambient_ratio, shading=shading)
         rgbs = rgbs.view(N, -1, 3) # [N, T+t, 3]
         if normals is not None:
             normals = normals.view(N, -1, 3)
@@ -691,7 +691,11 @@ class NeRFRenderer(nn.Module):
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.sum(-1).mean()
             
-            if self.opt.lambda_normal_smooth > 0 and normals is not None:
+            if self.opt.lambda_3d_normal_smooth > 0 and normals is not None:
+                normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2)
+                results['loss_normal_perturb'] = (normals - normals_perturb).abs().mean()
+            
+            if (self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0) and normals is not None:
                 normal_image = torch.sum(weights.unsqueeze(-1) * (normals + 1) / 2, dim=-2) # [N, 3], in [0, 1]
                 results['normal_image'] = normal_image
         
@@ -704,14 +708,14 @@ class NeRFRenderer(nn.Module):
 
 
     def run_cuda(self, rays_o, rays_d, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, perturb=False, T_thresh=1e-4, binarize=False, **kwargs):
-        # rays_o, rays_d: [B, N, 3], assumes B == 1
+        # rays_o, rays_d: [B, N, 3]
         # return: image: [B, N, 3], depth: [B, N]
 
         prefix = rays_o.shape[:-1]
         rays_o = rays_o.contiguous().view(-1, 3)
         rays_d = rays_d.contiguous().view(-1, 3)
 
-        N = rays_o.shape[0] # N = B * N, in fact
+        N = rays_o.shape[0] # B * N, in fact
         device = rays_o.device
 
         # pre-calculate near far
@@ -720,15 +724,18 @@ class NeRFRenderer(nn.Module):
         # random sample light_d if not provided
         if light_d is None:
             # gaussian noise around the ray origin, so the light always face the view dir (avoid dark face)
-            light_d = (rays_o[0] + torch.randn(3, device=device, dtype=torch.float))
-            light_d = safe_normalize(light_d)
+            light_d = safe_normalize(rays_o + torch.randn(3, device=rays_o.device)) # [N, 3]
 
         results = {}
 
         if self.training:
             xyzs, dirs, ts, rays = raymarching.march_rays_train(rays_o, rays_d, self.bound, self.density_bitfield, self.cascade, self.grid_size, nears, fars, perturb, self.opt.dt_gamma, self.opt.max_steps)
             dirs = safe_normalize(dirs)
-            # plot_pointcloud(xyzs.reshape(-1, 3).detach().cpu().numpy())
+
+            if light_d.shape[0] > 1:
+                flatten_rays = raymarching.flatten_rays(rays, xyzs.shape[0]).long()
+                light_d = light_d[flatten_rays]
+            
             sigmas, rgbs, normals = self(xyzs, dirs, light_d, ratio=ambient_ratio, shading=shading)
             weights, weights_sum, depth, image = raymarching.composite_rays_train(sigmas, rgbs, ts, rays, T_thresh, binarize)
             
@@ -738,7 +745,11 @@ class NeRFRenderer(nn.Module):
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
             
-            if self.opt.lambda_normal_smooth > 0 and normals is not None:
+            if self.opt.lambda_3d_normal_smooth > 0 and normals is not None:
+                normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2)
+                results['loss_normal_perturb'] = (normals - normals_perturb).abs().mean()
+            
+            if (self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0) and normals is not None:
                 _, _, _, normal_image = raymarching.composite_rays_train(sigmas.detach(), (normals + 1) / 2, ts, rays, T_thresh, binarize)
                 results['normal_image'] = normal_image
             
@@ -804,41 +815,60 @@ class NeRFRenderer(nn.Module):
         return results
 
     @torch.no_grad()
-    def init_tet(self):
+    def init_tet(self, mesh=None):
 
-        if self.cuda_ray:
-            density_thresh = min(self.mean_density, self.density_thresh)
+        if mesh is not None:
+            # normalize mesh
+            scale = 0.8 / np.array(mesh.bounds[1] - mesh.bounds[0]).max()
+            center = np.array(mesh.bounds[1] + mesh.bounds[0]) / 2
+            mesh.vertices = (mesh.vertices - center) * scale
+
+            # init scale
+            # self.tet_scale = torch.from_numpy(np.abs(mesh.vertices).max(axis=0) + 1e-1).to(self.verts.dtype).cuda()
+            self.tet_scale = torch.from_numpy(np.array([np.abs(mesh.vertices).max()]) + 1e-1).to(self.verts.dtype).cuda()
+            self.verts = self.verts * self.tet_scale
+
+            # init sdf
+            import cubvh
+            BVH = cubvh.cuBVH(mesh.vertices, mesh.faces)
+            sdf, _, _ = BVH.signed_distance(self.verts, return_uvw=False, mode='watertight')
+            sdf *= -10 # INNER is POSITIVE, also make it stronger
+            self.sdf.data += sdf.to(self.sdf.data.dtype).clamp(-1, 1)
+
         else:
-            density_thresh = self.density_thresh
-    
-        if self.opt.density_activation == 'softplus':
-            density_thresh = density_thresh * 25
 
-        # init scale
-        sigma = self.density(self.verts)['sigma'] # verts covers [-1, 1] now
-        mask = sigma > density_thresh
-        valid_verts = self.verts[mask]
-        self.tet_scale = valid_verts.abs().amax(dim=0) + 1e-1
-        self.verts = self.verts * self.tet_scale
+            if self.cuda_ray:
+                density_thresh = min(self.mean_density, self.density_thresh)
+            else:
+                density_thresh = self.density_thresh
+        
+            if self.opt.density_activation == 'softplus':
+                density_thresh = density_thresh * 25
 
-        # init sigma
-        sigma = self.density(self.verts)['sigma'] # new verts
-        self.sdf.data += (sigma - density_thresh).clamp(-1, 1)
+            # init scale
+            sigma = self.density(self.verts)['sigma'] # verts covers [-1, 1] now
+            mask = sigma > density_thresh
+            valid_verts = self.verts[mask]
+            self.tet_scale = valid_verts.abs().amax(dim=0) + 1e-1
+            self.verts = self.verts * self.tet_scale
+
+            # init sigma
+            sigma = self.density(self.verts)['sigma'] # new verts
+            self.sdf.data += (sigma - density_thresh).clamp(-1, 1)
 
         print(f'[INFO] init dmtet: scale = {self.tet_scale}')
 
 
-    def run_dmtet(self, rays_d, mvp, h, w, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, **kwargs):
+    def run_dmtet(self, rays_o, rays_d, mvp, h, w, light_d=None, ambient_ratio=1.0, shading='albedo', bg_color=None, **kwargs):
         # mvp: [B, 4, 4]
 
         device = mvp.device
-        campos = mvp[0, :3, 3]
+        campos = rays_o[:, 0, :] # only need one ray per batch
 
         # random sample light_d if not provided
         if light_d is None:
             # gaussian noise around the ray origin, so the light always face the view dir (avoid dark face)
-            light_d = (campos + torch.randn(3, device=device, dtype=torch.float))
-            light_d = safe_normalize(light_d)
+            light_d = safe_normalize(campos + torch.randn_like(campos)).view(-1, 1, 1, 3) # [B, 1, 1, 3]
 
         results = {}
 
@@ -865,12 +895,12 @@ class NeRFRenderer(nn.Module):
         vn = torch.where(torch.sum(vn * vn, -1, keepdim=True) > 1e-20, vn, torch.tensor([0.0, 0.0, 1.0], dtype=torch.float32, device=vn.device))
 
         # rasterization
-        verts_clip = torch.matmul(F.pad(verts, pad=(0, 1), mode='constant', value=1.0), torch.transpose(mvp[0], 0, 1)).float().unsqueeze(0)  # [1, N, 4]
-
+        verts_clip = torch.bmm(F.pad(verts, pad=(0, 1), mode='constant', value=1.0).unsqueeze(0).repeat(mvp.shape[0], 1, 1), 
+                               mvp.permute(0,2,1)).float()  # [B, N, 4]
         rast, rast_db = dr.rasterize(self.glctx, verts_clip, faces, (h, w))
         
-        alpha, _ = dr.interpolate(torch.ones_like(verts[:, :1]).unsqueeze(0), rast, faces) # [1, H, W, 1]
-        xyzs, _ = dr.interpolate(verts.unsqueeze(0), rast, faces) # [1, H, W, 3]
+        alpha, _ = dr.interpolate(torch.ones_like(verts[:, :1]).unsqueeze(0), rast, faces) # [B, H, W, 1]
+        xyzs, _ = dr.interpolate(verts.unsqueeze(0), rast, faces) # [B, H, W, 3]
         normal, _ = dr.interpolate(vn.unsqueeze(0).contiguous(), rast, faces)
         normal = safe_normalize(normal)
 
@@ -882,21 +912,21 @@ class NeRFRenderer(nn.Module):
         if mask.any():
             masked_albedo = self.density(xyzs[mask])['albedo']
             albedo[mask] = masked_albedo.float()
-        albedo = albedo.view(1, h, w, 3)
+        albedo = albedo.view(-1, h, w, 3)
 
         if shading == 'albedo':
             color = albedo
         elif shading == 'textureless':
-            lambertian = ambient_ratio + (1 - ambient_ratio)  * (normal @ light_d).float().clamp(min=0)
+            lambertian = ambient_ratio + (1 - ambient_ratio)  * (normal * light_d).sum(-1).float().clamp(min=0)
             color = lambertian.unsqueeze(-1).repeat(1, 1, 1, 3)
         elif shading == 'normal':
             color = (normal + 1) / 2
         else: # 'lambertian'
-            lambertian = ambient_ratio + (1 - ambient_ratio)  * (normal @ light_d).float().clamp(min=0)
+            lambertian = ambient_ratio + (1 - ambient_ratio)  * (normal * light_d).sum(-1).float().clamp(min=0)
             color = albedo * lambertian.unsqueeze(-1)
 
-        color = dr.antialias(color, rast, verts_clip, faces).squeeze(0).clamp(0, 1) # [H, W, 3]
-        alpha = dr.antialias(alpha, rast, verts_clip, faces).squeeze(0).clamp(0, 1) # [H, W, 1]
+        color = dr.antialias(color, rast, verts_clip, faces).clamp(0, 1) # [B, H, W, 3]
+        alpha = dr.antialias(alpha, rast, verts_clip, faces).clamp(0, 1) # [B, H, W, 1]
 
         # mix background color
         if bg_color is None:
@@ -907,20 +937,24 @@ class NeRFRenderer(nn.Module):
                 bg_color = 1
         
         if torch.is_tensor(bg_color) and len(bg_color.shape) > 1:
-            bg_color = bg_color.view(h, w, -1)
+            bg_color = bg_color.view(-1, h, w, 3)
         
-        depth = rast[0, :, :, [2]] # [H, W]
+        depth = rast[:, :, :, [2]] # [B, H, W]
         color = color + (1 - alpha) * bg_color
 
         results['depth'] = depth        
         results['image'] = color
         results['weights_sum'] = alpha.squeeze(-1)
+
+        if self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0:
+            normal_image = dr.antialias((normal + 1) / 2, rast, verts_clip, faces).clamp(0, 1) # [B, H, W, 3]
+            results['normal_image'] = normal_image
         
         # regularizations
         if self.training:
-            if self.opt.lambda_normal > 0:
+            if self.opt.lambda_mesh_normal > 0:
                 results['normal_loss'] = normal_consistency(face_normals, faces)
-            if self.opt.lambda_lap > 0:
+            if self.opt.lambda_mesh_laplacian > 0:
                 results['lap_loss'] = laplacian_smooth_loss(verts, faces)
 
         return results
@@ -945,6 +979,7 @@ class NeRFRenderer(nn.Module):
         _, hits_t, _ = self.ray_aabb_intersector.apply(rays_o, rays_d, center, half_size, 1)
         hits_t[(hits_t[:, 0, 0] >= 0) & (hits_t[:, 0, 0] < NEAR_DISTANCE), 0, 0] = NEAR_DISTANCE
 
+        # TODO: should sample different light_d for each batch... but taichi end doesn't have a flatten_ray implemented currently...
         # random sample light_d if not provided
         if light_d is None:
             # gaussian noise around the ray origin, so the light always face the view dir (avoid dark face)
@@ -966,7 +1001,11 @@ class NeRFRenderer(nn.Module):
                 loss_orient = weights.detach() * (normals * dirs).sum(-1).clamp(min=0) ** 2
                 results['loss_orient'] = loss_orient.mean()
             
-            if self.opt.lambda_normal_smooth > 0 and normals is not None:
+            if self.opt.lambda_3d_normal_smooth > 0 and normals is not None:
+                normals_perturb = self.normal(xyzs + torch.randn_like(xyzs) * 1e-2)
+                results['loss_normal_perturb'] = (normals - normals_perturb).abs().mean()
+            
+            if (self.opt.lambda_2d_normal_smooth > 0 or self.opt.lambda_normal > 0) and normals is not None:
                 _, _, _, normal_image, _ = self.volume_render(sigmas.detach(), (normals + 1) / 2, deltas, ts, rays_a, kwargs.get('T_threshold', 1e-4))
                 results['normal_image'] = normal_image
             
@@ -1109,13 +1148,13 @@ class NeRFRenderer(nn.Module):
 
 
     def render(self, rays_o, rays_d, mvp, h, w, staged=False, max_ray_batch=4096, **kwargs):
-        # rays_o, rays_d: [B, N, 3], assumes B == 1
+        # rays_o, rays_d: [B, N, 3]
         # return: pred_rgb: [B, N, 3]
         B, N = rays_o.shape[:2]
         device = rays_o.device
 
         if self.dmtet:
-            results = self.run_dmtet(rays_d, mvp, h, w, **kwargs)
+            results = self.run_dmtet(rays_o, rays_d, mvp, h, w, **kwargs)
         elif self.cuda_ray:
             results = self.run_cuda(rays_o, rays_d, **kwargs)
         elif self.taichi_ray:

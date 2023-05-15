@@ -1,7 +1,8 @@
 tqdm
 rich
 ninja
-numpy 
+numpy
+pandas
 scipy
 scikit-learn
 matplotlib
@@ -18,9 +19,12 @@ tensorboardX
 # for gui
 dearpygui
 
+# for grid_tcnn
+# git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+
 # for stable-diffusion
 huggingface_hub
-diffusers >= 0.9.0 
+diffusers >= 0.9.0
 accelerate
 transformers
 
@@ -35,5 +39,18 @@ git+https://github.com/NVlabs/nvdiffrast/
 carvekit-colab
 omegaconf
 pytorch-lightning
-git+https://github.com/CompVis/taming-transformers.git
+taming-transformers-rom1504
+kornia
 git+https://github.com/openai/CLIP.git
+
+# for omnidata
+gdown
+
+# for dpt
+timm
+
+# for remote debugging
+debugpy-run
+
+# for deepfloyd if
+sentencepiece

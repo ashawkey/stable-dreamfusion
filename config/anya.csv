@@ -1,0 +1,3 @@
+zero123_weight, radius, polar, azimuth, image
+1, 3, 90, 0, data/anya_front_rgba.png
+1, 3, 90, 180, data/anya_back_rgba.png

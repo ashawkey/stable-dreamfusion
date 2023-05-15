@@ -1,3 +1,9 @@
+### 2023.4.19
+* Fix depth supervision, migrate depth estimation model to omnidata.
+* Add normal supervision (also by omnidata).
+
+https://user-images.githubusercontent.com/25863658/232403294-b77409bf-ddc7-4bb8-af32-ee0cc123825a.mp4
+
 ### 2023.4.7
 Improvement on mesh quality & DMTet finetuning support.
 
@@ -22,7 +28,7 @@ https://user-images.githubusercontent.com/25863658/215996308-9fd959f5-b5c7-4a8e-
 
 ### 2022.10.9
 * The shading (partially) starts to work, at least it won't make scene empty. For some prompts, it shows better results (less severe Janus problem). The textureless rendering mode is still disabled.
-* Enable shading by default (--warmup_iters 1000).
+* Enable shading by default (--latent_iter_ratio 1000).
 
 ### 2022.10.5
 * Basic reproduction finished.

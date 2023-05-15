@@ -100,7 +100,7 @@ class NeRFNetwork(NeRFRenderer):
 
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
-        self.encoder, self.in_dim = get_encoder(encoding, input_dim=3, multires=6)
+        self.encoder, self.in_dim = get_encoder(encoding, input_dim=3, multires=12)
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True, block=ResBlock)
 
         self.density_activation = trunc_exp if self.opt.density_activation == 'exp' else F.softplus
@@ -149,14 +149,15 @@ class NeRFNetwork(NeRFRenderer):
     def normal(self, x):
     
         with torch.enable_grad():
-            x.requires_grad_(True)
-            sigma, albedo = self.common_forward(x)
-            # query gradient
-            normal = - torch.autograd.grad(torch.sum(sigma), x, create_graph=True)[0] # [N, 3]
+            with torch.cuda.amp.autocast(enabled=False):
+                x.requires_grad_(True)
+                sigma, albedo = self.common_forward(x)
+                # query gradient
+                normal = - torch.autograd.grad(torch.sum(sigma), x, create_graph=True)[0] # [N, 3]
         
         # normal = self.finite_difference_normal(x)
         normal = safe_normalize(normal)
-        # normal = torch.nan_to_num(normal)
+        normal = torch.nan_to_num(normal)
 
         return normal
         
@@ -178,16 +179,16 @@ class NeRFNetwork(NeRFRenderer):
             # normal = self.normal(x)
         
             with torch.enable_grad():
-                x.requires_grad_(True)
-                sigma, albedo = self.common_forward(x)
-                # query gradient
-                normal = - torch.autograd.grad(torch.sum(sigma), x, create_graph=True)[0] # [N, 3]
+                with torch.cuda.amp.autocast(enabled=False):
+                    x.requires_grad_(True)
+                    sigma, albedo = self.common_forward(x)
+                    # query gradient
+                    normal = - torch.autograd.grad(torch.sum(sigma), x, create_graph=True)[0] # [N, 3]
             normal = safe_normalize(normal)
-            # normal = torch.nan_to_num(normal)
-            # normal = normal.detach()
+            normal = torch.nan_to_num(normal)
 
             # lambertian shading
-            lambertian = ratio + (1 - ratio) * (normal @ l).clamp(min=0) # [N,]
+            lambertian = ratio + (1 - ratio) * (normal * l).sum(-1).clamp(min=0) # [N,]
 
             if shading == 'textureless':
                 color = lambertian.unsqueeze(-1).repeat(1, 3)

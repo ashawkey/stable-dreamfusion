@@ -2,6 +2,7 @@ from transformers import CLIPTextModel, CLIPTokenizer, logging
 from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler, DDIMScheduler, StableDiffusionPipeline
 from diffusers.utils.import_utils import is_xformers_available
 from os.path import isfile
+from pathlib import Path
 
 # suppress partial model loading warning
 logging.set_verbosity_error()
@@ -9,10 +10,9 @@ logging.set_verbosity_error()
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.utils import save_image
 
 from torch.cuda.amp import custom_bwd, custom_fwd
-from dataclasses import dataclass
-
 
 class SpecifyGradient(torch.autograd.Function):
     @staticmethod
@@ -34,10 +34,6 @@ def seed_everything(seed):
     torch.cuda.manual_seed(seed)
     #torch.backends.cudnn.deterministic = True
     #torch.backends.cudnn.benchmark = True
-
-@dataclass
-class UNet2DConditionOutput:
-    sample: torch.HalfTensor # Not sure how to check what unet_traced.pt contains, and user wants. HalfTensor or FloatTensor
 
 class StableDiffusion(nn.Module):
     def __init__(self, device, fp16, vram_O, sd_version='2.1', hf_key=None, t_range=[0.02, 0.98]):
@@ -65,20 +61,6 @@ class StableDiffusion(nn.Module):
         # Create model
         pipe = StableDiffusionPipeline.from_pretrained(model_key, torch_dtype=self.precision_t)
 
-        if isfile('./unet_traced.pt'):
-            # use jitted unet
-            unet_traced = torch.jit.load('./unet_traced.pt')
-            class TracedUNet(torch.nn.Module):
-                def __init__(self):
-                    super().__init__()
-                    self.in_channels = pipe.unet.in_channels
-                    self.device = pipe.unet.device
-
-                def forward(self, latent_model_input, t, encoder_hidden_states):
-                    sample = unet_traced(latent_model_input, t, encoder_hidden_states)[0]
-                    return UNet2DConditionOutput(sample=sample)
-            pipe.unet = TracedUNet()
-
         if vram_O:
             pipe.enable_sequential_cpu_offload()
             pipe.enable_vae_slicing()
@@ -95,6 +77,8 @@ class StableDiffusion(nn.Module):
 
         self.scheduler = DDIMScheduler.from_pretrained(model_key, subfolder="scheduler", torch_dtype=self.precision_t)
 
+        del pipe
+
         self.num_train_timesteps = self.scheduler.config.num_train_timesteps
         self.min_step = int(self.num_train_timesteps * t_range[0])
         self.max_step = int(self.num_train_timesteps * t_range[1])
@@ -104,17 +88,17 @@ class StableDiffusion(nn.Module):
 
     @torch.no_grad()
     def get_text_embeds(self, prompt):
-        # prompt, negative_prompt: [str]
+        # prompt: [str]
 
-        # positive
         inputs = self.tokenizer(prompt, padding='max_length', max_length=self.tokenizer.model_max_length, return_tensors='pt')
         embeddings = self.text_encoder(inputs.input_ids.to(self.device))[0]
 
         return embeddings
 
 
-    def train_step(self, text_embeddings, pred_rgb, guidance_scale=100, as_latent=False, grad_scale=1):
-        
+    def train_step(self, text_embeddings, pred_rgb, guidance_scale=100, as_latent=False, grad_scale=1,
+                   save_guidance_path:Path=None):
+
         if as_latent:
             latents = F.interpolate(pred_rgb, (64, 64), mode='bilinear', align_corners=False) * 2 - 1
         else:
@@ -124,7 +108,7 @@ class StableDiffusion(nn.Module):
             latents = self.encode_imgs(pred_rgb_512)
 
         # timestep ~ U(0.02, 0.98) to avoid very high/low noise level
-        t = torch.randint(self.min_step, self.max_step + 1, [1], dtype=torch.long, device=self.device)
+        t = torch.randint(self.min_step, self.max_step + 1, (latents.shape[0],), dtype=torch.long, device=self.device)
 
         # predict the noise residual with unet, NO grad!
         with torch.no_grad():
@@ -133,17 +117,12 @@ class StableDiffusion(nn.Module):
             latents_noisy = self.scheduler.add_noise(latents, noise, t)
             # pred noise
             latent_model_input = torch.cat([latents_noisy] * 2)
-            # Save input tensors for UNet
-            #torch.save(latent_model_input, "train_latent_model_input.pt")
-            #torch.save(t, "train_t.pt")
-            #torch.save(text_embeddings, "train_text_embeddings.pt")
-            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+            tt = torch.cat([t] * 2)
+            noise_pred = self.unet(latent_model_input, tt, encoder_hidden_states=text_embeddings).sample
 
-        # perform guidance (high scale from paper!)
-        noise_pred_uncond, noise_pred_pos = noise_pred.chunk(2)
-
-        noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_pos - noise_pred_uncond)
-        
+            # perform guidance (high scale from paper!)
+            noise_pred_uncond, noise_pred_pos = noise_pred.chunk(2)
+            noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_pos - noise_pred_uncond)
 
         # import kiui
         # latents_tmp = torch.randn((1, 4, 64, 64), device=self.device)
@@ -161,8 +140,35 @@ class StableDiffusion(nn.Module):
 
         # w(t), sigma_t^2
         w = (1 - self.alphas[t])
-        grad = grad_scale * w * (noise_pred - noise)
+        grad = grad_scale * w[:, None, None, None] * (noise_pred - noise)
         grad = torch.nan_to_num(grad)
+
+        if save_guidance_path:
+            with torch.no_grad():
+                if as_latent:
+                    pred_rgb_512 = self.decode_latents(latents)
+
+                # visualize predicted denoised image
+                # The following block of code is equivalent to `predict_start_from_noise`...
+                # see zero123_utils.py's version for a simpler implementation.
+                alphas = self.scheduler.alphas.to(latents)
+                total_timesteps = self.max_step - self.min_step + 1
+                index = total_timesteps - t.to(latents.device) - 1 
+                b = len(noise_pred)
+                a_t = alphas[index].reshape(b,1,1,1).to(self.device)
+                sqrt_one_minus_alphas = torch.sqrt(1 - alphas)
+                sqrt_one_minus_at = sqrt_one_minus_alphas[index].reshape((b,1,1,1)).to(self.device)                
+                pred_x0 = (latents_noisy - sqrt_one_minus_at * noise_pred) / a_t.sqrt() # current prediction for x_0
+                result_hopefully_less_noisy_image = self.decode_latents(pred_x0.to(latents.type(self.precision_t)))
+
+                # visualize noisier image
+                result_noisier_image = self.decode_latents(latents_noisy.to(pred_x0).type(self.precision_t))
+
+                # TODO: also denoise all-the-way
+
+                # all 3 input images are [1, 3, H, W], e.g. [1, 3, 512, 512]
+                viz_images = torch.cat([pred_rgb_512, result_noisier_image, result_hopefully_less_noisy_image],dim=0)
+                save_image(viz_images, save_guidance_path)
 
         # since we omitted an item in grad, we need to use the custom function to specify the gradient
         loss = SpecifyGradient.apply(latents, grad)
@@ -180,11 +186,6 @@ class StableDiffusion(nn.Module):
         for i, t in enumerate(self.scheduler.timesteps):
             # expand the latents if we are doing classifier-free guidance to avoid doing two forward passes.
             latent_model_input = torch.cat([latents] * 2)
-
-            # Save input tensors for UNet
-            #torch.save(latent_model_input, "produce_latents_latent_model_input.pt")
-            #torch.save(t, "produce_latents_t.pt")
-            #torch.save(text_embeddings, "produce_latents_text_embeddings.pt")
             # predict the noise residual
             noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings)['sample']
 
@@ -194,7 +195,7 @@ class StableDiffusion(nn.Module):
 
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents)['prev_sample']
-        
+
         return latents
 
     def decode_latents(self, latents):
@@ -203,7 +204,7 @@ class StableDiffusion(nn.Module):
 
         imgs = self.vae.decode(latents).sample
         imgs = (imgs / 2 + 0.5).clamp(0, 1)
-        
+
         return imgs
 
     def encode_imgs(self, imgs):
@@ -220,7 +221,7 @@ class StableDiffusion(nn.Module):
 
         if isinstance(prompts, str):
             prompts = [prompts]
-        
+
         if isinstance(negative_prompts, str):
             negative_prompts = [negative_prompts]
 
@@ -231,7 +232,7 @@ class StableDiffusion(nn.Module):
 
         # Text embeds -> img latents
         latents = self.produce_latents(text_embeds, height=height, width=width, latents=latents, num_inference_steps=num_inference_steps, guidance_scale=guidance_scale) # [1, 4, 64, 64]
-        
+
         # Img latents -> imgs
         imgs = self.decode_latents(latents) # [1, 3, 512, 512]
 

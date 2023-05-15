@@ -2,10 +2,13 @@ __pycache__/
 build/
 *.egg-info/
 *.so
+venv_*/
 
 tmp*
 # data/
 ldm/data/
+data2
+scripts2
 trial*/
 .vs/
 

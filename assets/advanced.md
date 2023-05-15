@@ -48,29 +48,24 @@ return loss # functional loss
 * Network backbone (`./nerf/network*.py`) can be chosen by the `--backbone` option.
 * Spatial density bias (density blob): `./nerf/network*.py > NeRFNetwork > density_blob`.
 
-# Speeding Things Up with Tracing
 
-Torch lets us trade away some vram for some ~30% speed gains if we step through a process called tracing first.
-If you'd like to try here's how:
+# Debugging
 
- 1. In `guidance/sd_utils.py` you'll find these three lines commented out:
- ```python
-            #torch.save(latent_model_input, "train_latent_model_input.pt")
-            #torch.save(t, "train_t.pt")
-            #torch.save(text_embeddings, "train_text_embeddings.pt")
- ```
- remove the `#` to make the program write those three `.pt` files to your disk next time you start a standard run, for example
- ```bash
- python main.py --text "a hamburger" --workspace trial -O --w 200 --h 200
- ```
- You only need to let it run for a few seconds, until you've confirmed that three `.pt` files have been created.
+`debugpy-run` is a convenient way to remotely debug this project. Simply replace a command like this one:
 
- 2. Run the tracer script, which creates a `unet_traced.pt` file for you:
- ```bash
- python trace.py
- ```
+```bash
+python main.py --text "a hamburger" --workspace trial -O --vram_O
+```
 
- 3. Comment out the three `torch.save` lines in `guidance/sd_utils.py` again, and (re)-start another standard run. This time you should see a siginificant speed-up and maybe a bit
-    higher vram usage than before.
+... with:
 
-The tracing functionality has only been tested in combination with the `-O` option. Using it without `--vram_O` would probably require some changes inside `trace.py`.
+```bash
+debugpy-run main.py -- --text "a hamburger" --workspace trial -O --vram_O
+```
+
+For more details: https://github.com/bulletmark/debugpy-run 
+
+# Axes and directions of polar, azimuth, etc. in NeRF and Zero123
+
+<img width="1119" alt="NeRF_Zero123" src="https://github.com/ashawkey/stable-dreamfusion/assets/22424247/a0f432ff-2d08-45a4-a390-bda64f5cbc94">
+
