@@ -222,7 +222,6 @@ class Trainer(object):
         self.epoch = 0
         self.global_step = 0
         self.local_step = 0
-        self.exp_step = 0
         self.stats = {
             "loss": [],
             "valid_loss": [],
@@ -250,7 +249,13 @@ class Trainer(object):
             if opt.image_config is not None:
                 shutil.copyfile(opt.image_config, os.path.join(self.workspace, os.path.basename(opt.image_config)))
 
+            # Save a copy of images in the experiment workspace
+            if opt.images is not None:
+                for image_file in opt.images:
+                    shutil.copyfile(image_file, os.path.join(self.workspace, os.path.basename(image_file)))
+
         self.log(f'[INFO] Cmdline: {self.argv}')
+        self.log(f'[INFO] opt: {self.opt}')
         self.log(f'[INFO] Trainer: {self.name} | {self.time_stamp} | {self.device} | {"fp16" if self.fp16 else "fp32"} | {self.workspace}')
         self.log(f'[INFO] #parameters: {sum([p.numel() for p in model.parameters() if p.requires_grad])}')
 
@@ -377,7 +382,7 @@ class Trainer(object):
 
         # progressively relaxing view range
         if self.opt.progressive_view:
-            r = min(1.0, 0.2 + self.exp_step / (0.5 * self.opt.iters))
+            r = min(1.0, 0.2 + (self.global_step - self.opt.exp_start_iter) / (0.5 * (self.opt.exp_end_iter - self.opt.exp_start_iter)))
             self.opt.phi_range = [self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[0] * r,
                                   self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[1] * r]
             self.opt.theta_range = [self.opt.default_polar * (1 - r) + self.opt.full_theta_range[0] * r,
@@ -389,7 +394,7 @@ class Trainer(object):
 
         # progressively increase max_level
         if self.opt.progressive_level:
-            self.model.max_level = min(1.0, 0.25 + self.exp_step / (0.5 * self.opt.iters))
+            self.model.max_level = min(1.0, 0.25 + (self.global_step - self.opt.exp_start_iter) / (0.5 * (self.opt.exp_end_iter - self.opt.exp_start_iter)))
 
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
@@ -708,8 +713,6 @@ class Trainer(object):
 
         start_t = time.time()
 
-        self.exp_step = 0
-
         for epoch in range(self.epoch + 1, max_epochs + 1):
             self.epoch = epoch
 
@@ -942,7 +945,6 @@ class Trainer(object):
 
             self.local_step += 1
             self.global_step += 1
-            self.exp_step += 1
 
             self.optimizer.zero_grad()
 
