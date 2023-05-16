@@ -162,7 +162,7 @@ if __name__ == '__main__':
         opt.fp16 = True
         opt.backbone = 'vanilla'
         opt.progressive_level = True
-    
+
     if opt.IF:
         if 'SD' in opt.guidance:
             opt.guidance.remove('SD')
