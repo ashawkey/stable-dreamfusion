@@ -19,7 +19,7 @@ if __name__ == '__main__':
     model = SentenceTransformer(f'{opt.clip}')
 
     #Encode an image:
-    img_emb = model.encode(Image.open(f'results/{opt.workspace}/validation/df_{opt.latest}_0005_{opt.mode}.png'))
+    img_emb = model.encode(Image.open(f'../results/{opt.workspace}/validation/df_{opt.latest}_0005_{opt.mode}.png'))
 
     #Encode text descriptions
     text_emb = model.encode([f'{opt.text}'])

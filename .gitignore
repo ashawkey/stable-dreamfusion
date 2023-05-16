@@ -15,6 +15,10 @@ trial*/
 TOKEN
 *.ckpt
 
+Backup
+
 densegridencoder
 tets/256_tets.npz
-Improvement
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes

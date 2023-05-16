@@ -7,14 +7,15 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-# python prompt_processing.py --text a dog is flying and the rabbit is jumping --model vlt5
+#python Prompt.py --text "a dog is in front of a rabbit" --model vlt5
+
 
 if __name__ == '__main__':
 
     # Mimic the calling part of the main, using
     parser = argparse.ArgumentParser()
     parser.add_argument('--text', default="", type=str, help="text prompt")
-    parser.add_argument('--workspace', default="trial", type=str, help="workspace")
+    #parser.add_argument('--workspace', default="trial", type=str, help="workspace")
     parser.add_argument('--model', default='vlt5', type=str, help="model choices - vlt5, bert, XLNet")
 
     opt = parser.parse_args()
@@ -49,7 +50,7 @@ if __name__ == '__main__':
         predictions = outputs.logits.detach().numpy()[0]
         labels = predictions.argmax(axis=1)
         labels = labels[1:-1]
-        
+
         print(labels)
         tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
         tokens = tokens[1:-1]
@@ -71,7 +72,7 @@ if __name__ == '__main__':
         predictions = outputs.logits.detach().numpy()[0]
         labels = predictions.argmax(axis=1)
         labels = labels[1:-1]
-        
+
         print(labels)
         tokens = tokenizer.convert_ids_to_tokens(input_ids[0])
         tokens = tokens[1:-1]
