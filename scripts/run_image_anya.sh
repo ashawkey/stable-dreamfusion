@@ -20,6 +20,57 @@ CUDA_VISIBLE_DEVICES=2 python main.py -O --image data/anya_front_rgba.png --work
   --vram_O --guidance_scale 100 --jitter_pose --jitter_center 0.015 --jitter_target 0.015 --jitter_up 0.01 \
   --known_view_noise_scale 0 --lambda_depth 0 --lr 0.01 --progressive_view
 
+# Reproduce GPU2 result using new code:
+CUDA_VISIBLE_DEVICES=2 python main.py -O --image data/anya_front_rgba.png --workspace trial_anya_1_refimage_B_GPU2_reproduction1 \
+  --text "A DSLR 3D photo of a cute anime schoolgirl stands proudly with her arms in the air, pink hair ( unreal engine 5 trending on Artstation Ghibli 4k )" \
+  --iters 15000 --ckpt trial_anya_1_refimage/checkpoints/df_ep0100.pth --save_guidance --save_guidance_interval 1 \
+  --h 256 --w 256 --albedo_iter_ratio 1.0 --t_range 0.2 0.6 --batch_size 5 --radius_range 2.2 2.6 --test_interval 2 \
+  --vram_O --guidance_scale 10 --jitter_pose --jitter_center 0.015 --jitter_target 0.015 --jitter_up 0.01 \
+  --known_view_noise_scale 0 --lambda_depth 0 --lr 0.01 --progressive_view --known_view_interval 2 --lambda_3d_normal_smooth 20
+
+# Reproduce GPU2 result using new code, original LR:
+CUDA_VISIBLE_DEVICES=3 python main.py -O --image data/anya_front_rgba.png --workspace trial_anya_1_refimage_B_GPU2_reproduction1_GPU3 \
+  --text "A DSLR 3D photo of a cute anime schoolgirl stands proudly with her arms in the air, pink hair ( unreal engine 5 trending on Artstation Ghibli 4k )" \
+  --iters 15000 --ckpt trial_anya_1_refimage/checkpoints/df_ep0100.pth --save_guidance --save_guidance_interval 1 \
+  --h 256 --w 256 --albedo_iter_ratio 1.0 --t_range 0.2 0.6 --batch_size 5 --radius_range 2.2 2.6 --test_interval 2 \
+  --vram_O --guidance_scale 10 --jitter_pose --jitter_center 0.015 --jitter_target 0.015 --jitter_up 0.01 \
+  --known_view_noise_scale 0 --lambda_depth 0 --lr 0.001 --progressive_view --known_view_interval 2  --lambda_3d_normal_smooth 20
+
+# Reproduce GPU2 result using new code, 3X LR, increased batch size:
+CUDA_VISIBLE_DEVICES=4 python main.py -O --image data/anya_front_rgba.png --workspace trial_anya_1_refimage_B_GPU2_reproduction1_GPU4 \
+  --text "A DSLR 3D photo of a cute anime schoolgirl stands proudly with her arms in the air, pink hair ( unreal engine 5 trending on Artstation Ghibli 4k )" \
+  --iters 15000 --ckpt trial_anya_1_refimage/checkpoints/df_ep0100.pth --save_guidance --save_guidance_interval 1 \
+  --h 256 --w 256 --albedo_iter_ratio 1.0 --t_range 0.2 0.6 --batch_size 8 --radius_range 2.2 2.6 --test_interval 2 \
+  --vram_O --guidance_scale 10 --jitter_pose --jitter_center 0.015 --jitter_target 0.015 --jitter_up 0.01 \
+  --known_view_noise_scale 0 --lambda_depth 0 --lr 0.003 --progressive_view --known_view_interval 2  --lambda_3d_normal_smooth 20
+
+# Closest to previous default: 
+CUDA_VISIBLE_DEVICES=7 python main.py -O --image data/anya_front_rgba.png --workspace trial_anya_1_refimage_B_GPU2_reproduction1_GPU7 \
+  --text "A DSLR 3D photo of a cute anime schoolgirl stands proudly with her arms in the air, pink hair ( unreal engine 5 trending on Artstation Ghibli 4k )" \
+  --iters 15000 --ckpt trial_anya_1_refimage/checkpoints/df_ep0100.pth --save_guidance --save_guidance_interval 1 \
+  --h 256 --w 256 --albedo_iter_ratio 0.0 --t_range 0.2 0.6 --batch_size 5 --radius_range 2.2 2.6 --test_interval 2 \
+  --vram_O --guidance_scale 10 --jitter_pose --jitter_center 0.015 --jitter_target 0.015 --jitter_up 0.01 \
+  --known_view_noise_scale 0 --lambda_depth 0 --lr 0.001 --progressive_view --known_view_interval 2 --dont_override_stuff --lambda_3d_normal_smooth 20
+
+# VIKRAM: use this one!
+# 5X smaller lambda_3d_normal_smooth
+CUDA_VISIBLE_DEVICES=6 python main.py -O --image data/anya_front_rgba.png --workspace trial_anya_1_refimage_B_GPU2_reproduction1_GPU6 \
+  --text "A DSLR 3D photo of a cute anime schoolgirl stands proudly with her arms in the air, pink hair ( unreal engine 5 trending on Artstation Ghibli 4k )" \
+  --iters 15000 --ckpt trial_anya_1_refimage/checkpoints/df_ep0100.pth --save_guidance --save_guidance_interval 1 \
+  --h 256 --w 256 --albedo_iter_ratio 0.0 --t_range 0.2 0.6 --batch_size 5 --radius_range 2.2 2.6 --test_interval 2 \
+  --vram_O --guidance_scale 10 --jitter_pose --jitter_center 0.015 --jitter_target 0.015 --jitter_up 0.01 \
+  --known_view_noise_scale 0 --lambda_depth 0 --lr 0.001 --progressive_view --known_view_interval 2 --dont_override_stuff --lambda_3d_normal_smooth 4
+
+# 5X smaller lambda_3d_normal_smooth, --known_view_interval 3
+CUDA_VISIBLE_DEVICES=5 python main.py -O --image data/anya_front_rgba.png --workspace trial_anya_1_refimage_B_GPU2_reproduction1_GPU5 \
+  --text "A DSLR 3D photo of a cute anime schoolgirl stands proudly with her arms in the air, pink hair ( unreal engine 5 trending on Artstation Ghibli 4k )" \
+  --iters 15000 --ckpt trial_anya_1_refimage/checkpoints/df_ep0100.pth --save_guidance --save_guidance_interval 1 \
+  --h 256 --w 256 --albedo_iter_ratio 0.0 --t_range 0.2 0.6 --batch_size 5 --radius_range 2.2 2.6 --test_interval 2 \
+  --vram_O --guidance_scale 10 --jitter_pose --jitter_center 0.015 --jitter_target 0.015 --jitter_up 0.01 \
+  --known_view_noise_scale 0 --lambda_depth 0 --lr 0.001 --progressive_view --known_view_interval 3 --dont_override_stuff --lambda_3d_normal_smooth 4
+
+
+
 # OTHER EXPERIMENTS IN PROGRESS or that failed
 
   # 10X the learning rate (--lr 0.01), and use --progressive_view and --iters 200000 (so the progressive view expansion actually works)
