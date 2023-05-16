@@ -420,7 +420,7 @@ class Trainer(object):
                 rays_o = rays_o + torch.randn(3, device=self.device) * noise_scale
                 rays_d = rays_d + torch.randn(3, device=self.device) * noise_scale
 
-        elif self.global_step < (self.opt.latent_iter_ratio * self.opt.iters):
+        elif self.exp_step < (self.opt.latent_iter_ratio * self.opt.iters):
             ambient_ratio = 1.0
             shading = 'normal'
             as_latent = True
@@ -428,14 +428,14 @@ class Trainer(object):
             bg_color = None
 
         else:
-            if self.global_step < (self.opt.albedo_iter_ratio * self.opt.iters):
+            if self.exp_step < (self.opt.albedo_iter_ratio * self.opt.iters):
                 ambient_ratio = 1.0
                 shading = 'albedo'
             else:
                 # random shading
-                ambient_ratio = 0.1 + 0.9 * random.random()
+                ambient_ratio = self.opt.min_ambient_ratio + (1.0-self.opt.min_ambient_ratio) * random.random()
                 rand = random.random()
-                if rand > 0.8:
+                if rand > (1.0 - self.opt.textureless_ratio):
                     shading = 'textureless'
                 else:
                     shading = 'lambertian'
