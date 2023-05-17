@@ -1,6 +1,4 @@
 ### Improvement:
-- **v0 are not used**
-v0 are for back up or some initial version
 
 - Usage
 
