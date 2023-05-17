@@ -176,7 +176,7 @@ if __name__ == '__main__':
     opt.default_zero123_w = 1
 
     opt.exp_start_iter = opt.exp_start_iter or 0
-    opt.exp_start_iter = opt.exp_start_iter or opt.iters
+    opt.exp_end_iter = opt.exp_end_iter or opt.iters
 
     # parameters for image-conditioned generation
     if opt.image is not None or opt.image_config is not None:
