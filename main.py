@@ -204,11 +204,12 @@ if __name__ == '__main__':
 
         # latent warmup is not needed
         opt.latent_iter_ratio = 0
-        #opt.albedo_iter_ratio = 0
-
-        # make shape init more stable
-        #opt.progressive_view = True
-        # opt.progressive_level = True
+        if not opt.dont_override_stuff:
+            opt.albedo_iter_ratio = 0
+            
+            # make shape init more stable
+            opt.progressive_view = True
+            opt.progressive_level = True
 
         if opt.image is not None:
             opt.images += [opt.image]
@@ -261,8 +262,10 @@ if __name__ == '__main__':
 
     # record full range for progressive view expansion
     if opt.progressive_view:
-        # disable as they disturb progressive view
-        #opt.jitter_pose = False
+        if not opt.dont_override_stuff:
+            # disable as they disturb progressive view
+            opt.jitter_pose = False
+            
         opt.uniform_sphere_rate = 0
         # back up full range
         opt.full_radius_range = opt.radius_range
