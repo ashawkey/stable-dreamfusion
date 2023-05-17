@@ -258,7 +258,7 @@ if __name__ == '__main__':
         opt.latent_iter_ratio = 0
         opt.albedo_iter_ratio = 0
         opt.progressive_view = False
-        opt.progressive_level = False
+        # opt.progressive_level = False
 
     # record full range for progressive view expansion
     if opt.progressive_view:
