@@ -438,9 +438,9 @@ class Trainer(object):
                 shading = 'albedo'
             else:
                 # random shading
-                ambient_ratio = 0.1 + 0.9 * random.random()
+                ambient_ratio = self.opt.min_ambient_ratio + (1.0-self.opt.min_ambient_ratio) * random.random()
                 rand = random.random()
-                if rand > 0.8:
+                if rand > (1.0 - self.opt.textureless_ratio):
                     shading = 'textureless'
                 else:
                     shading = 'lambertian'

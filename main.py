@@ -61,6 +61,8 @@ if __name__ == '__main__':
     parser.add_argument('--max_ray_batch', type=int, default=4096, help="batch size of rays at inference to avoid OOM (only valid when not using --cuda_ray)")
     parser.add_argument('--latent_iter_ratio', type=float, default=0.2, help="training iters that only use albedo shading")
     parser.add_argument('--albedo_iter_ratio', type=float, default=0, help="training iters that only use albedo shading")
+    parser.add_argument('--min_ambient_ratio', type=float, default=0.1, help="minimum ambient ratio to use in lambertian shading")
+    parser.add_argument('--textureless_ratio', type=float, default=0.2, help="ratio of textureless shading")
     parser.add_argument('--jitter_pose', action='store_true', help="add jitters to the randomly sampled camera poses")
     parser.add_argument('--jitter_center', type=float, default=0.2, help="amount of jitter to add to sampled camera pose's center (camera location)")
     parser.add_argument('--jitter_target', type=float, default=0.2, help="amount of jitter to add to sampled camera pose's target (i.e. 'look-at')")
@@ -96,8 +98,8 @@ if __name__ == '__main__':
     parser.add_argument('--min_near', type=float, default=0.01, help="minimum near distance for camera")
 
     parser.add_argument('--radius_range', type=float, nargs='*', default=[3.0, 3.5], help="training camera radius range")
-    parser.add_argument('--theta_range', type=float, nargs='*', default=[45, 105], help="training camera fovy range")
-    parser.add_argument('--phi_range', type=float, nargs='*', default=[-180, 180], help="training camera fovy range")
+    parser.add_argument('--theta_range', type=float, nargs='*', default=[45, 105], help="training camera range along the polar angles (i.e. up and down). See advanced.md for details.")
+    parser.add_argument('--phi_range', type=float, nargs='*', default=[-180, 180], help="training camera range along the azimuth angles (i.e. left and right). See advanced.md for details.")
     parser.add_argument('--fovy_range', type=float, nargs='*', default=[10, 30], help="training camera fovy range")
 
     parser.add_argument('--default_radius', type=float, default=3.2, help="radius for the default view")
@@ -111,6 +113,8 @@ if __name__ == '__main__':
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
     parser.add_argument('--angle_front', type=float, default=60, help="[0, angle_front] is the front region, [180, 180+angle_front] the back region, otherwise the side region.")
     parser.add_argument('--t_range', type=float, nargs='*', default=[0.02, 0.98], help="stable diffusion time steps range")
+    parser.add_argument('--dont_override_stuff',action='store_true', help="Don't override t_range, etc.")
+
 
     ### regularizations
     parser.add_argument('--lambda_entropy', type=float, default=1e-3, help="loss scale for alpha entropy")
@@ -192,11 +196,12 @@ if __name__ == '__main__':
         else:
             # use stable-diffusion when providing both text and image
             opt.guidance = ['SD', 'clip']
-            opt.guidance_scale = 10
-
-            opt.t_range = [0.2, 0.6]
-            opt.known_view_interval = 2
-            opt.lambda_3d_normal_smooth = 20
+            
+            if not opt.dont_override_stuff:
+                opt.guidance_scale = 10
+                opt.t_range = [0.2, 0.6]
+                opt.known_view_interval = 2
+                opt.lambda_3d_normal_smooth = 20
             opt.bg_radius = -1
 
         # smoothness
@@ -205,11 +210,12 @@ if __name__ == '__main__':
 
         # latent warmup is not needed
         opt.latent_iter_ratio = 0
-        opt.albedo_iter_ratio = 0
-
-        # make shape init more stable
-        opt.progressive_view = True
-        # opt.progressive_level = True
+        if not opt.dont_override_stuff:
+            opt.albedo_iter_ratio = 0
+            
+            # make shape init more stable
+            opt.progressive_view = True
+            opt.progressive_level = True
 
         if opt.image is not None:
             opt.images += [opt.image]
@@ -243,26 +249,29 @@ if __name__ == '__main__':
         opt.w = int(opt.w * opt.dmtet_reso_scale)
         opt.known_view_scale = 1
 
-        opt.t_range = [0.02, 0.50] # ref: magic3D
+        if not opt.dont_override_stuff:            
+            opt.t_range = [0.02, 0.50] # ref: magic3D
 
         if opt.images is not None:
 
             opt.lambda_normal = 0
             opt.lambda_depth = 0
 
-            if opt.text is not None:
+            if opt.text is not None and not opt.dont_override_stuff:
                 opt.t_range = [0.20, 0.50]
 
         # assume finetuning
         opt.latent_iter_ratio = 0
         opt.albedo_iter_ratio = 0
         opt.progressive_view = False
-        opt.progressive_level = False
+        # opt.progressive_level = False
 
     # record full range for progressive view expansion
     if opt.progressive_view:
-        # disable as they disturb progressive view
-        opt.jitter_pose = False
+        if not opt.dont_override_stuff:
+            # disable as they disturb progressive view
+            opt.jitter_pose = False
+            
         opt.uniform_sphere_rate = 0
         # back up full range
         opt.full_radius_range = opt.radius_range
