@@ -152,6 +152,9 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_size_valid', type=int, default=8, help="# of frames to render in the turntable video in validation")
     parser.add_argument('--dataset_size_test', type=int, default=100, help="# of frames to render in the turntable video at test time")
 
+    parser.add_argument('--exp_start_iter', type=int, default=None, help="start iter # for experiment, to calculate progressive_view and progressive_level")
+    parser.add_argument('--exp_end_iter', type=int, default=None, help="end iter # for experiment, to calculate progressive_view and progressive_level")
+
     opt = parser.parse_args()
 
     if opt.O:
@@ -171,6 +174,9 @@ if __name__ == '__main__':
 
     opt.images, opt.ref_radii, opt.ref_polars, opt.ref_azimuths, opt.zero123_ws = [], [], [], [], []
     opt.default_zero123_w = 1
+
+    opt.exp_start_iter = opt.exp_start_iter or 0
+    opt.exp_start_iter = opt.exp_start_iter or opt.iters
 
     # parameters for image-conditioned generation
     if opt.image is not None or opt.image_config is not None:
