@@ -386,7 +386,7 @@ class Trainer(object):
 
         # progressively relaxing view range
         if self.opt.progressive_view:
-            r = min(1.0, 0.2 + (self.global_step - self.opt.exp_start_iter) / (0.5 * (self.opt.exp_end_iter - self.opt.exp_start_iter)))
+            r = min(1.0, 0.2 + (self.global_step - 2.0*2.0*exp_iter_ratio))
             self.opt.phi_range = [self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[0] * r,
                                   self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[1] * r]
             self.opt.theta_range = [self.opt.default_polar * (1 - r) + self.opt.full_theta_range[0] * r,
@@ -398,7 +398,7 @@ class Trainer(object):
 
         # progressively increase max_level
         if self.opt.progressive_level:
-            self.model.max_level = min(1.0, 0.25 + (self.global_step - self.opt.exp_start_iter) / (0.5 * (self.opt.exp_end_iter - self.opt.exp_start_iter)))
+            self.model.max_level = min(1.0, 0.25 + 2.0*exp_iter_ratio)
 
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
@@ -429,7 +429,7 @@ class Trainer(object):
                 rays_o = rays_o + torch.randn(3, device=self.device) * noise_scale
                 rays_d = rays_d + torch.randn(3, device=self.device) * noise_scale
 
-        elif self.global_step < (self.opt.latent_iter_ratio * self.opt.iters):
+        elif exp_iter_ratio <= (self.opt.latent_iter_ratio * self.opt.iters):
             ambient_ratio = 1.0
             shading = 'normal'
             as_latent = True
@@ -437,14 +437,14 @@ class Trainer(object):
             bg_color = None
 
         else:
-            if self.global_step < (self.opt.albedo_iter_ratio * self.opt.iters):
+            if exp_iter_ratio <= (self.opt.albedo_iter_ratio * self.opt.iters):
                 ambient_ratio = 1.0
                 shading = 'albedo'
             else:
                 # random shading
                 ambient_ratio = self.opt.min_ambient_ratio + (1.0-self.opt.min_ambient_ratio) * random.random()
                 rand = random.random()
-                if rand > (1.0 - self.opt.textureless_ratio):
+                if rand >= (1.0 - self.opt.textureless_ratio):
                     shading = 'textureless'
                 else:
                     shading = 'lambertian'
