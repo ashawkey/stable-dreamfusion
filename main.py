@@ -198,7 +198,7 @@ if __name__ == '__main__':
 
         else:
             # use stable-diffusion when providing both text and image
-            opt.guidance = ['IF' if opt.IF else 'SD', 'clip']
+            opt.guidance = ['SD', 'clip']
 
             if not opt.dont_override_stuff:
                 opt.guidance_scale = 10
