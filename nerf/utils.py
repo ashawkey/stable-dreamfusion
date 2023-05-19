@@ -1271,10 +1271,11 @@ class ImageOpt():
             p.requires_grad = False
 
         torch.manual_seed(seed)
-        if "SD" in name:
-            images = torch.randn((opt.batch_size, 4, 64, 64), device=guide.device, dtype=guide.precision_t)
-        else:
+        if opt.IF:
             images = torch.rand((opt.batch_size, 3, 64, 64), device=guide.device, dtype=guide.precision_t) * 2 - 1
+        else:
+            images = torch.randn((opt.batch_size, 4, 64, 64), device=guide.device, dtype=guide.precision_t)
+
         self.images = images.requires_grad_(True)
 
         self.optimizer = optim.Adam([self.images], lr=opt.lr) # naive adam
@@ -1323,26 +1324,26 @@ class ImageOpt():
             self.lr_scheduler.step()
 
             if i % self.sample_freq == 0:
-                if "SD" in self.name:
+                if self.opt.IF:
+                    samples.append(self.images.detach().cpu().permute(0, 2, 3, 1).numpy())
+                else:
                     with torch.no_grad():
                         images = []
                         for latent in self.images:
                             images.append(self.guide.decode_latents(latent[None, ...].detach()))
                     image = torch.cat(images).cpu().permute(0, 2, 3, 1).numpy()
                     samples.append(image)
-                else:
-                    samples.append(self.images.detach().cpu().permute(0, 2, 3, 1).numpy())
 
         gif = self.make_gif_from_imgs(samples, resize=(4 if "SD" in self.name else 1))
         os.makedirs(self.opt.workspace, exist_ok=True)
-        imageio.mimwrite(os.path.join(self.opt.workspace, f'{self.name}_imgopt.mp4'), gif, fps=25, quality=8, macro_block_size=1)
+        imageio.mimwrite(os.path.join(self.opt.workspace, f'{self.name}_imgopt.mp4'), gif, fps=10, quality=8, macro_block_size=1)
 
     def make_gif_from_imgs(self, frames, resize=1.0, upto=None, repeat_first=2, repeat_last=5, skip=1,
             f=0, s=0.75, t=2):
         imgs = []
         from PIL import Image
         for i, img in tqdm.tqdm(enumerate(frames[:upto:skip]), total=len(frames[:upto:skip])):
-            img = np.moveaxis(img, 0, 1).reshape(512, -1, 3)
+            img = np.moveaxis(img, 0, 1).reshape(img.shape[1], -1, 3)
             img = np.array(Image.fromarray((img*255).astype(np.uint8)).resize((int(img.shape[1]/resize), int(img.shape[0]/resize)), Image.Resampling.LANCZOS))
             text = f"{i*self.sample_freq:05d}"
             img = cv2.putText(img=img, text=text, org=(0, 20), fontFace=f, fontScale=s, color=(0,0,0), thickness=t)
