@@ -386,7 +386,7 @@ class Trainer(object):
 
         # progressively relaxing view range
         if self.opt.progressive_view:
-            r = min(1.0, 0.2 + 2.0*exp_iter_ratio)
+            r = min(1.0, 0.2 + (self.global_step - self.opt.exp_start_iter) / (0.5 * (self.opt.exp_end_iter - self.opt.exp_start_iter)))
             self.opt.phi_range = [self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[0] * r,
                                   self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[1] * r]
             self.opt.theta_range = [self.opt.default_polar * (1 - r) + self.opt.full_theta_range[0] * r,
@@ -398,7 +398,7 @@ class Trainer(object):
 
         # progressively increase max_level
         if self.opt.progressive_level:
-            self.model.max_level = min(1.0, 0.25 + 2.0*exp_iter_ratio)
+            self.model.max_level = min(1.0, 0.25 + (self.global_step - self.opt.exp_start_iter) / (0.5 * (self.opt.exp_end_iter - self.opt.exp_start_iter)))
 
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
@@ -429,7 +429,7 @@ class Trainer(object):
                 rays_o = rays_o + torch.randn(3, device=self.device) * noise_scale
                 rays_d = rays_d + torch.randn(3, device=self.device) * noise_scale
 
-        elif exp_iter_ratio <= self.opt.latent_iter_ratio:
+        elif self.global_step < (self.opt.latent_iter_ratio * self.opt.iters):
             ambient_ratio = 1.0
             shading = 'normal'
             as_latent = True
@@ -437,14 +437,14 @@ class Trainer(object):
             bg_color = None
 
         else:
-            if exp_iter_ratio <= self.opt.albedo_iter_ratio:
+            if self.global_step < (self.opt.albedo_iter_ratio * self.opt.iters):
                 ambient_ratio = 1.0
                 shading = 'albedo'
             else:
                 # random shading
                 ambient_ratio = self.opt.min_ambient_ratio + (1.0-self.opt.min_ambient_ratio) * random.random()
                 rand = random.random()
-                if rand >= (1.0 - self.opt.textureless_ratio):
+                if rand > (1.0 - self.opt.textureless_ratio):
                     shading = 'textureless'
                 else:
                     shading = 'lambertian'
@@ -1257,3 +1257,105 @@ def get_GPU_mem():
         mems.append(int(((mem_total - mem_free)/1024**3)*1000)/1000)
         mem += mems[-1]
     return mem, mems
+
+
+class ImageOpt():
+
+    def __init__(self, opt, guide, name="SD_imgopt", seed=0):
+
+        self.opt = opt
+        self.guide = guide
+        self.name = name
+
+        for p in guide.parameters():
+            p.requires_grad = False
+
+        torch.manual_seed(seed)
+        if "SD" in name:
+            images = torch.randn((opt.batch_size, 4, 64, 64), device=guide.device, dtype=guide.precision_t)
+        else:
+            images = torch.rand((opt.batch_size, 3, 64, 64), device=guide.device, dtype=guide.precision_t) * 2 - 1
+        self.images = images.requires_grad_(True)
+
+        self.optimizer = optim.Adam([self.images], lr=opt.lr) # naive adam
+
+        self.lr_scheduler = optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda epoch: 1) # fake scheduler
+
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.opt.fp16)
+
+        self.sample_freq = max(1, self.opt.iters//20)
+
+        uncond_embeddings = guide.get_text_embeds([""])
+        text_embeddings = guide.get_text_embeds([self.opt.text])
+        self.text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+
+    def train(self):
+
+        self.local_step = 0
+        samples = []
+
+        for i in tqdm.tqdm(range(self.opt.iters)):
+
+            self.local_step += 1
+
+            self.optimizer.zero_grad()
+
+            with torch.cuda.amp.autocast(enabled=self.opt.fp16):
+                self.images, loss = self.guide.img_opt(self.text_embeddings, self.images)
+
+            # hooked grad clipping for RGB space
+            if self.opt.grad_clip_rgb >= 0:
+                def _hook(grad):
+                    if self.opt.fp16:
+                        # correctly handle the scale
+                        grad_scale = self.scaler._get_scale_async()
+                        return grad.clamp(grad_scale * -self.opt.grad_clip_rgb, grad_scale * self.opt.grad_clip_rgb)
+                    else:
+                        return grad.clamp(-self.opt.grad_clip_rgb, self.opt.grad_clip_rgb)
+                self.images.register_hook(_hook)
+                # self.images.retain_grad()
+
+            self.scaler.scale(loss).backward()
+
+            self.post_train_step()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.lr_scheduler.step()
+
+            if i % self.sample_freq == 0:
+                if "SD" in self.name:
+                    with torch.no_grad():
+                        images = []
+                        for latent in self.images:
+                            images.append(self.guide.decode_latents(latent[None, ...].detach()))
+                    image = torch.cat(images).cpu().permute(0, 2, 3, 1).numpy()
+                    samples.append(image)
+                else:
+                    samples.append(self.images.detach().cpu().permute(0, 2, 3, 1).numpy())
+
+        gif = self.make_gif_from_imgs(samples, resize=(4 if "SD" in self.name else 1))
+        os.makedirs(self.opt.workspace, exist_ok=True)
+        imageio.mimwrite(os.path.join(self.opt.workspace, f'{self.name}_imgopt.mp4'), gif, fps=25, quality=8, macro_block_size=1)
+
+    def make_gif_from_imgs(self, frames, resize=1.0, upto=None, repeat_first=2, repeat_last=5, skip=1,
+            f=0, s=0.75, t=2):
+        imgs = []
+        from PIL import Image
+        for i, img in tqdm.tqdm(enumerate(frames[:upto:skip]), total=len(frames[:upto:skip])):
+            img = np.moveaxis(img, 0, 1).reshape(512, -1, 3)
+            img = np.array(Image.fromarray((img*255).astype(np.uint8)).resize((int(img.shape[1]/resize), int(img.shape[0]/resize)), Image.Resampling.LANCZOS))
+            text = f"{i*self.sample_freq:05d}"
+            img = cv2.putText(img=img, text=text, org=(0, 20), fontFace=f, fontScale=s, color=(0,0,0), thickness=t)
+            imgs.append(img)
+        # Save gif
+        return [imgs[0]]*repeat_first + imgs + [imgs[-1]]*repeat_last
+
+    def post_train_step(self):
+
+        # unscale grad before modifying it!
+        # ref: https://pytorch.org/docs/stable/notes/amp_examples.html#gradient-clipping
+        self.scaler.unscale_(self.optimizer)
+
+        # clip grad
+        if self.opt.grad_clip >= 0:
+            torch.nn.utils.clip_grad_value_(self.images, self.opt.grad_clip)

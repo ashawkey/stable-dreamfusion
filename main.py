@@ -159,6 +159,9 @@ if __name__ == '__main__':
     parser.add_argument('--exp_start_iter', type=int, default=None, help="start iter # for experiment, to calculate progressive_view and progressive_level")
     parser.add_argument('--exp_end_iter', type=int, default=None, help="end iter # for experiment, to calculate progressive_view and progressive_level")
 
+    # optimize input image acc to prompt
+    parser.add_argument('--img_opt', action='store_true', help="optimize image acc to text prompt")
+
     opt = parser.parse_args()
 
     if opt.O:
@@ -195,8 +198,8 @@ if __name__ == '__main__':
 
         else:
             # use stable-diffusion when providing both text and image
-            opt.guidance = ['SD', 'clip']
-            
+            opt.guidance = ['IF' if opt.IF else 'SD', 'clip']
+
             if not opt.dont_override_stuff:
                 opt.guidance_scale = 10
                 opt.t_range = [0.2, 0.6]
@@ -212,7 +215,7 @@ if __name__ == '__main__':
         opt.latent_iter_ratio = 0
         if not opt.dont_override_stuff:
             opt.albedo_iter_ratio = 0
-            
+
             # make shape init more stable
             opt.progressive_view = True
             opt.progressive_level = True
@@ -249,7 +252,7 @@ if __name__ == '__main__':
         opt.w = int(opt.w * opt.dmtet_reso_scale)
         opt.known_view_scale = 1
 
-        if not opt.dont_override_stuff:            
+        if not opt.dont_override_stuff:
             opt.t_range = [0.02, 0.50] # ref: magic3D
 
         if opt.images is not None:
@@ -271,7 +274,7 @@ if __name__ == '__main__':
         if not opt.dont_override_stuff:
             # disable as they disturb progressive view
             opt.jitter_pose = False
-            
+
         opt.uniform_sphere_rate = 0
         # back up full range
         opt.full_radius_range = opt.radius_range
@@ -334,6 +337,25 @@ if __name__ == '__main__':
         if opt.save_mesh:
             trainer.save_mesh()
 
+    elif opt.img_opt:
+
+        if 'SD' in opt.guidance:
+            from guidance.sd_utils import StableDiffusion
+            guide = StableDiffusion(device, opt.fp16, opt.vram_O, opt.sd_version, opt.hf_key, opt.t_range)
+            name = f"SD"
+
+        elif 'IF' in opt.guidance:
+            from guidance.if_utils import IF
+            guide = IF(device, opt.vram_O, opt.t_range, opt.fp16)
+            name = f"DeepFloydIF"
+
+        seed = opt.seed or 0
+
+        name += f"_fp{16 if opt.fp16 else 32}_iters{opt.iters}_lr{opt.lr}_seed{seed}_{opt.text.replace(' ', '_')}"
+
+        img_opt = ImageOpt(opt, guide, name, seed)
+        img_opt.train()
+
     elif opt.test:
         guidance = None # no need to load guidance model at test
 
@@ -376,7 +398,7 @@ if __name__ == '__main__':
 
         if 'IF' in opt.guidance:
             from guidance.if_utils import IF
-            guidance['IF'] = IF(device, opt.vram_O, opt.t_range)
+            guidance['IF'] = IF(device, opt.vram_O, opt.t_range, fp16=opt.fp16)
 
         if 'zero123' in opt.guidance:
             from guidance.zero123_utils import Zero123

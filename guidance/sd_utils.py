@@ -153,11 +153,11 @@ class StableDiffusion(nn.Module):
                 # see zero123_utils.py's version for a simpler implementation.
                 alphas = self.scheduler.alphas.to(latents)
                 total_timesteps = self.max_step - self.min_step + 1
-                index = total_timesteps - t.to(latents.device) - 1 
+                index = total_timesteps - t.to(latents.device) - 1
                 b = len(noise_pred)
                 a_t = alphas[index].reshape(b,1,1,1).to(self.device)
                 sqrt_one_minus_alphas = torch.sqrt(1 - alphas)
-                sqrt_one_minus_at = sqrt_one_minus_alphas[index].reshape((b,1,1,1)).to(self.device)                
+                sqrt_one_minus_at = sqrt_one_minus_alphas[index].reshape((b,1,1,1)).to(self.device)
                 pred_x0 = (latents_noisy - sqrt_one_minus_at * noise_pred) / a_t.sqrt() # current prediction for x_0
                 result_hopefully_less_noisy_image = self.decode_latents(pred_x0.to(latents.type(self.precision_t)))
 
@@ -241,6 +241,46 @@ class StableDiffusion(nn.Module):
         imgs = (imgs * 255).round().astype('uint8')
 
         return imgs
+
+    def img_opt(self, text_embeddings, latents, guidance_scale=40.0, sorted=True):
+
+        with torch.no_grad():
+
+            if sorted:
+                timesteps = torch.randint(self.min_step, self.max_step + 1, (latents.shape[0],), dtype=torch.long, device=self.device).sort()[0]
+            else:
+                timesteps = torch.randint(self.min_step, self.max_step + 1, (latents.shape[0],), dtype=torch.long, device=self.device)
+
+            # add noise to latents using the timesteps
+            noise = torch.randn_like(latents)
+            noisy_latents = self.scheduler.add_noise(latents, noise, timesteps).to(self.device)
+
+            # predict the noise residual
+            samples_unet = torch.cat([noisy_latents] * 2)
+            timesteps_unet = torch.cat([timesteps] * 2)
+            text_unet = text_embeddings.repeat_interleave(len(noisy_latents), 0)
+            noise_pred = []
+            # To ensure batch_size=1
+            for s, t, text in zip(samples_unet, timesteps_unet, text_unet):
+                noise_pred.append(self.unet(sample=s[None, ...],
+                                            timestep=t[None, ...],
+                                            encoder_hidden_states=text[None, ...]).sample)
+
+            noise_pred = torch.cat(noise_pred)
+
+            # perform guidance
+            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+            noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+        # w(t), sigma_t^2
+        w = (1 - self.alphas[timesteps])
+        grad = w[:, None, None, None] * (noise_pred - noise)
+        grad = torch.nan_to_num(grad)
+
+        # since we omitted an item in grad, we need to use the custom function to specify the gradient
+        loss = SpecifyGradient.apply(latents, grad)
+
+        return latents, loss
 
 
 if __name__ == '__main__':
