@@ -386,7 +386,7 @@ class Trainer(object):
 
         # progressively relaxing view range
         if self.opt.progressive_view:
-            r = min(1.0, 0.2 + (self.global_step - 2.0*2.0*exp_iter_ratio))
+            r = min(1.0, 0.2 + 2.0*exp_iter_ratio)
             self.opt.phi_range = [self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[0] * r,
                                   self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[1] * r]
             self.opt.theta_range = [self.opt.default_polar * (1 - r) + self.opt.full_theta_range[0] * r,
@@ -429,7 +429,7 @@ class Trainer(object):
                 rays_o = rays_o + torch.randn(3, device=self.device) * noise_scale
                 rays_d = rays_d + torch.randn(3, device=self.device) * noise_scale
 
-        elif exp_iter_ratio <= (self.opt.latent_iter_ratio * self.opt.iters):
+        elif exp_iter_ratio <= self.opt.latent_iter_ratio:
             ambient_ratio = 1.0
             shading = 'normal'
             as_latent = True
@@ -437,7 +437,7 @@ class Trainer(object):
             bg_color = None
 
         else:
-            if exp_iter_ratio <= (self.opt.albedo_iter_ratio * self.opt.iters):
+            if exp_iter_ratio <= self.opt.albedo_iter_ratio:
                 ambient_ratio = 1.0
                 shading = 'albedo'
             else:
