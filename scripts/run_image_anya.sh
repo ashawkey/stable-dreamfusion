@@ -27,6 +27,9 @@ CUDA_VISIBLE_DEVICES=0 python main.py -O --image data/anya_front_rgba.png --work
   --known_view_noise_scale 0 --lambda_depth 0 --lr 0.003 --known_view_interval 2 --dont_override_stuff --lambda_3d_normal_smooth 0.5 --textureless_ratio 0.0 --min_ambient_ratio 0.3 \
   --exp_start_iter 12500 --exp_end_iter 25000
 
+# Generate 6 views
+CUDA_VISIBLE_DEVICES=0 python main.py -O --image data/anya_front_rgba.png --ckpt trial_anya_1_refimage_B_GPU2_reproduction1_GPU2_refinedGPU2/checkpoints/df_ep0250.pth --six_views
+
 # Phase 4 - untested, need to adjust
 # CUDA_VISIBLE_DEVICES=0 python main.py -O --image data/anya_front_rgba.png --workspace trial_anya_1_refimage --iters 5000 --dmtet --init_with trial_anya_1_refimage/checkpoints/df.pth
 

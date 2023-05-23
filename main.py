@@ -108,6 +108,8 @@ if __name__ == '__main__':
     parser.add_argument('--default_fovy', type=float, default=20, help="fovy for the default view")
 
     parser.add_argument('--progressive_view', action='store_true', help="progressively expand view sampling range from default to full")
+    parser.add_argument('--progressive_view_init_ratio', type=float, default=0.2, help="initial ratio of final range, used for progressive_view")
+    
     parser.add_argument('--progressive_level', action='store_true', help="progressively increase gridencoder's max_level")
 
     parser.add_argument('--angle_overhead', type=float, default=30, help="[0, angle_overhead] is the overhead region")
@@ -188,11 +190,10 @@ if __name__ == '__main__':
         if opt.text is None:
             # use zero123 guidance model when only providing image
             opt.guidance = ['zero123']
-            opt.fovy_range = [opt.default_fovy, opt.default_fovy] # fix fov as zero123 doesn't support changing fov
-            opt.guidance_scale = 5
-
-            opt.lambda_3d_normal_smooth = 10
-
+            if not opt.dont_override_stuff:
+                opt.fovy_range = [opt.default_fovy, opt.default_fovy] # fix fov as zero123 doesn't support changing fov
+                opt.guidance_scale = 5
+                opt.lambda_3d_normal_smooth = 10
         else:
             # use stable-diffusion when providing both text and image
             opt.guidance = ['SD', 'clip']

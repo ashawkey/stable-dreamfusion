@@ -28,3 +28,13 @@ data/wd*
 data/space*
 data/corgi*
 data/turtle*
+
+# Only keep the original image, not the automatically-generated depth, normals, rgba
+data/baby_phoenix_on_ice_*
+data/bollywood_actress_*
+data/beach_house_1_*
+data/beach_house_2_*
+data/mona_lisa_*
+data/futuristic_car_*
+data/church_ruins_*
+
