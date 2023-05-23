@@ -1,4 +1,5 @@
 import os
+import gc
 import glob
 import tqdm
 import math
@@ -309,6 +310,8 @@ class Trainer(object):
             w = int(self.opt.known_view_scale * self.opt.w)
 
             # load processed image
+            for image in self.opt.images:
+                assert image.endswith('_rgba.png') # the rest of this code assumes that the _rgba image has been passed.
             rgbas = [cv2.cvtColor(cv2.imread(image, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA) for image in self.opt.images]
             rgba_hw = np.stack([cv2.resize(rgba, (w, h), interpolation=cv2.INTER_AREA).astype(np.float32) / 255 for rgba in rgbas])
             rgb_hw = rgba_hw[..., :3] * rgba_hw[..., 3:] + (1 - rgba_hw[..., 3:])
@@ -320,10 +323,10 @@ class Trainer(object):
             depth_paths = [image.replace('_rgba.png', '_depth.png') for image in self.opt.images]
             depths = [cv2.imread(depth_path, cv2.IMREAD_UNCHANGED) for depth_path in depth_paths]
             depth = np.stack([cv2.resize(depth, (w, h), interpolation=cv2.INTER_AREA) for depth in depths])
-            self.depth = torch.from_numpy(depth.astype(np.float32) / 255).to(self.device)
+            self.depth = torch.from_numpy(depth.astype(np.float32) / 255).to(self.device)  # TODO: this should be mapped to FP16
             print(f'[INFO] dataset: load depth prompt {depth_paths} {self.depth.shape}')
 
-            # load normal
+            # load normal   # TODO: don't load if normal loss is 0
             normal_paths = [image.replace('_rgba.png', '_normal.png') for image in self.opt.images]
             normals = [cv2.imread(normal_path, cv2.IMREAD_UNCHANGED) for normal_path in normal_paths]
             normal = np.stack([cv2.resize(normal, (w, h), interpolation=cv2.INTER_AREA) for normal in normals])
@@ -386,7 +389,7 @@ class Trainer(object):
 
         # progressively relaxing view range
         if self.opt.progressive_view:
-            r = min(1.0, 0.2 + 2.0*exp_iter_ratio)
+            r = min(1.0, self.opt.progressive_view_init_ratio + 2.0*exp_iter_ratio)
             self.opt.phi_range = [self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[0] * r,
                                   self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[1] * r]
             self.opt.theta_range = [self.opt.default_polar * (1 - r) + self.opt.full_theta_range[0] * r,
