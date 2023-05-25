@@ -220,6 +220,16 @@ For example commands, check [`scripts`](./scripts).
 
 For advanced tips and other developing stuff, check [Advanced Tips](./assets/advanced.md).
 
+# Evalutation
+
+Reproduce the paper CLIP R-precision evaluation
+
+After the testing part in the usage, the validation set containing projection from different angle is generated. Test the R-precision between prompt and the image.(R=1)
+
+```bash
+python r_precision.py --text "a snake is flying in the sky" --workspace snake_HQ --latest ep0100 --mode depth --clip clip-ViT-B-16
+```
+
 # Acknowledgement
 
 This work is based on an increasing list of amazing research works and open-source projects, thanks a lot to all the authors for sharing!
