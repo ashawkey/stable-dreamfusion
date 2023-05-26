@@ -168,6 +168,11 @@ python main.py --workspace trial2 -O2 --test --gui # not recommended, FPS will b
 ## use --dmtet and --init_with <nerf checkpoint> to finetune the mesh at higher reslution
 python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_with trial/checkpoints/df.pth
 
+## init dmtet with a mesh to generate texture
+# require install of cubvh: pip install git+https://github.com/ashawkey/cubvh
+# remove --lock_geo to also finetune geometry, but performance may be bad.
+python main.py -O --text "a white bunny with red eyes" --workspace trial_dmtet_mesh --dmtet --iters 5000 --init_with ./data/bunny.obj --lock_geo
+
 ## test & export the mesh
 python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --test --save_mesh
 

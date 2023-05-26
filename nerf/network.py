@@ -234,7 +234,7 @@ class NeRFNetwork(NeRFRenderer):
             # params.append({'params': self.encoder_bg.parameters(), 'lr': lr * 10})
             params.append({'params': self.bg_net.parameters(), 'lr': lr})
         
-        if self.opt.dmtet:
+        if self.opt.dmtet and not self.opt.lock_geo:
             params.append({'params': self.sdf, 'lr': lr})
             params.append({'params': self.deform, 'lr': lr})
 
