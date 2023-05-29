@@ -102,119 +102,154 @@ pip install -i https://pypi.taichi.graphics/simple/ taichi-nightly
 
 First time running will take some time to compile the CUDA extensions.
 
-```bash
-#### stable-dreamfusion setting
+## Stable dreamfusion training
+<details>
+  <summary > Expand </summary>
+  ```bash
+  #### stable-dreamfusion setting
 
-### Instant-NGP NeRF Backbone
-# + faster rendering speed
-# + less GPU memory (~16G)
-# - need to build CUDA extensions (a CUDA-free Taichi backend is available)
+  ### Instant-NGP NeRF Backbone
+  # + faster rendering speed
+  # + less GPU memory (~16G)
+  # - need to build CUDA extensions (a CUDA-free Taichi backend is available)
 
-## train with text prompt (with the default settings)
-# `-O` equals `--cuda_ray --fp16`
-# `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
-python main.py --text "a hamburger" --workspace trial -O
+  ## train with text prompt (with the default settings)
+  # `-O` equals `--cuda_ray --fp16`
+  # `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
+  python main.py --text "a hamburger" --workspace trial -O
 
-# reduce stable-diffusion memory usage with `--vram_O`
-# enable various vram savings (https://huggingface.co/docs/diffusers/optimization/fp16).
-python main.py --text "a hamburger" --workspace trial -O --vram_O
+  # reduce stable-diffusion memory usage with `--vram_O`
+  # enable various vram savings (https://huggingface.co/docs/diffusers/optimization/fp16).
+  python main.py --text "a hamburger" --workspace trial -O --vram_O
 
-# You can collect arguments in a file. You can override arguments by specifying them after `--file`. Note that quoted strings can't be loaded from .args files...
-python main.py --file scripts/res64.args --workspace trial_awesome_hamburger --text "a photo of an awesome hamburger"
+  # You can collect arguments in a file. You can override arguments by specifying them after `--file`. Note that quoted strings can't be loaded from .args files...
+  python main.py --file scripts/res64.args --workspace trial_awesome_hamburger --text "a photo of an awesome hamburger"
 
-# use CUDA-free Taichi backend with `--backbone grid_taichi`
-python3 main.py --text "a hamburger" --workspace trial -O --backbone grid_taichi
+  # use CUDA-free Taichi backend with `--backbone grid_taichi`
+  python3 main.py --text "a hamburger" --workspace trial -O --backbone grid_taichi
 
-# choose stable-diffusion version (support 1.5, 2.0 and 2.1, default is 2.1 now)
-python main.py --text "a hamburger" --workspace trial -O --sd_version 1.5
+  # choose stable-diffusion version (support 1.5, 2.0 and 2.1, default is 2.1 now)
+  python main.py --text "a hamburger" --workspace trial -O --sd_version 1.5
 
-# use a custom stable-diffusion checkpoint from hugging face:
-python main.py --text "a hamburger" --workspace trial -O --hf_key andite/anything-v4.0
+  # use a custom stable-diffusion checkpoint from hugging face:
+  python main.py --text "a hamburger" --workspace trial -O --hf_key andite/anything-v4.0
 
-# use DeepFloyd-IF for guidance (experimental):
-python main.py --text "a hamburger" --workspace trial -O --IF
-python main.py --text "a hamburger" --workspace trial -O --IF --vram_O # requires ~24G GPU memory
+  # use DeepFloyd-IF for guidance (experimental):
+  python main.py --text "a hamburger" --workspace trial -O --IF
+  python main.py --text "a hamburger" --workspace trial -O --IF --vram_O # requires ~24G GPU memory
 
-# we also support negative text prompt now:
-python main.py --text "a rose" --negative "red" --workspace trial -O
+  # we also support negative text prompt now:
+  python main.py --text "a rose" --negative "red" --workspace trial -O
 
-## after the training is finished:
-# test (exporting 360 degree video)
-python main.py --workspace trial -O --test
-# also save a mesh (with obj, mtl, and png texture)
-python main.py --workspace trial -O --test --save_mesh
-# test with a GUI (free view control!)
-python main.py --workspace trial -O --test --gui
+  ## after the training is finished:
+  # test (exporting 360 degree video)
+  python main.py --workspace trial -O --test
+  # also save a mesh (with obj, mtl, and png texture)
+  python main.py --workspace trial -O --test --save_mesh
+  # test with a GUI (free view control!)
+  python main.py --workspace trial -O --test --gui
 
-### Vanilla NeRF backbone
-# + pure pytorch, no need to build extensions!
-# - slow rendering speed
-# - more GPU memory
+  ### Vanilla NeRF backbone
+  # + pure pytorch, no need to build extensions!
+  # - slow rendering speed
+  # - more GPU memory
 
-## train
-# `-O2` equals `--backbone vanilla`
-python main.py --text "a hotdog" --workspace trial2 -O2
+  ## train
+  # `-O2` equals `--backbone vanilla`
+  python main.py --text "a hotdog" --workspace trial2 -O2
 
-# if CUDA OOM, try to reduce NeRF sampling steps (--num_steps and --upsample_steps)
-python main.py --text "a hotdog" --workspace trial2 -O2 --num_steps 64 --upsample_steps 0
+  # if CUDA OOM, try to reduce NeRF sampling steps (--num_steps and --upsample_steps)
+  python main.py --text "a hotdog" --workspace trial2 -O2 --num_steps 64 --upsample_steps 0
+  ```
+</details>
 
-## test
-python main.py --workspace trial2 -O2 --test
-python main.py --workspace trial2 -O2 --test --save_mesh
-python main.py --workspace trial2 -O2 --test --gui # not recommended, FPS will be low.
+## Stable dreamfusion testing
+<details>
+  <summary > Expand </summary>
+  ```bash
+  ## test
+  python main.py --workspace trial2 -O2 --test
+  python main.py --workspace trial2 -O2 --test --save_mesh
+  python main.py --workspace trial2 -O2 --test --gui # not recommended, FPS will be low.
+  ```
+</details>
 
-### DMTet finetuning
+## Stable dreamfusion Finetuning with DMTet
+<details>
+  <summary > Expand </summary>
+  ```bash
+  ### DMTet finetuning
 
-## use --dmtet and --init_with <nerf checkpoint> to finetune the mesh at higher reslution
-python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_with trial/checkpoints/df.pth
+  ## use --dmtet and --init_with <nerf checkpoint> to finetune the mesh at higher reslution
+  python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_with trial/checkpoints/df.pth
 
-## test & export the mesh
-python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --test --save_mesh
+  ## test & export the mesh
+  python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --test --save_mesh
 
-## gui to visualize dmtet
-python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --test --gui
+  ## gui to visualize dmtet
+  python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --test --gui
+  ```
+</details>
 
-### Image-conditioned 3D Generation
+## Image-conditioned 3D Generation
+<details>
+  <summary > Expand </summary>
+  ```bash
+  ### Image-conditioned 3D Generation
 
-## preprocess input image
-# note: the results of image-to-3D is dependent on zero-1-to-3's capability. For best performance, the input image should contain a single front-facing object, it should have square aspect ratio, with <1024 pixel resolution. Check the examples under ./data.
-# this will exports `<image>_rgba.png`, `<image>_depth.png`, and `<image>_normal.png` to the directory containing the input image.
-python preprocess_image.py <image>.png
-python preprocess_image.py <image>.png --border_ratio 0.4 # increase border_ratio if the center object appears too large and results are unsatisfying.
+  ## preprocess input image
+  # note: the results of image-to-3D is dependent on zero-1-to-3's capability. For best performance, the input image should contain a single front-facing object, it should have square aspect ratio, with <1024 pixel resolution. Check the examples under ./data.
+  # this will exports `<image>_rgba.png`, `<image>_depth.png`, and `<image>_normal.png` to the directory containing the input image.
+  python preprocess_image.py <image>.png
+  python preprocess_image.py <image>.png --border_ratio 0.4 # increase border_ratio if the center object appears too large and results are unsatisfying.
+  ```
+</details>
 
-## zero123 train
-# pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
-python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000
+## zero123
+<details>
+  <summary > Expand </summary>
+  ```bash
+  ## zero123 train
+  # pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
+  python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000
 
-# if the image is not exactly front-view (elevation = 0), adjust default_polar (we use polar from 0 to 180 to represent elevation from 90 to -90)
-python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --default_polar 80
+  # if the image is not exactly front-view (elevation = 0), adjust default_polar (we use polar from 0 to 180 to represent elevation from 90 to -90)
+  python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --default_polar 80
 
-# by default we leverage monocular depth estimation to aid image-to-3d, but if you find the depth estimation inaccurate and harms results, turn it off by:
-python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --lambda_depth 0
+  # by default we leverage monocular depth estimation to aid image-to-3d, but if you find the depth estimation inaccurate and harms results, turn it off by:
+  python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --lambda_depth 0
 
-python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --init_with trial_image/checkpoints/df.pth
+  python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --init_with trial_image/checkpoints/df.pth
 
-## zero123 with multiple images
-python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000
+  ## zero123 with multiple images
+  python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000
 
-## render <num> images per batch (default 1)
-python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000 --batch_size 4
+  ## render <num> images per batch (default 1)
+  python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000 --batch_size 4
 
-# providing both --text and --image enables stable-diffusion backend (similar to make-it-3d)
-python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text --iters 5000
+  # providing both --text and --image enables stable-diffusion backend (similar to make-it-3d)
+  python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text --iters 5000
 
-python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text_dmtet --dmtet --init_with trial_image_text/checkpoints/df.pth
+  python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text_dmtet --dmtet --init_with trial_image_text/checkpoints/df.pth
 
-## test / visualize
-python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --save_mesh
-python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --gui
+  ## test / visualize
+  python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --save_mesh
+  python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --gui
 
-### Debugging
+  ```
+</details>
 
-# Can save guidance images for debugging purposes. These get saved in trial_hamburger/guidance.
-# Warning: this slows down training considerably and consumes lots of disk space!
-python main.py --text "a hamburger" --workspace trial_hamburger -O --vram_O --save_guidance --save_guidance_interval 5 # save every 5 steps
-```
+## Stable dreamfusion training
+<details>
+  <summary > Expand </summary>
+  ```bash
+  ### Debugging
+
+  # Can save guidance images for debugging purposes. These get saved in trial_hamburger/guidance.
+  # Warning: this slows down training considerably and consumes lots of disk space!
+  python main.py --text "a hamburger" --workspace trial_hamburger -O --vram_O --save_guidance --save_guidance_interval 5 # save every 5 steps
+  ```
+</details>
 
 For example commands, check [`scripts`](./scripts).
 
@@ -230,8 +265,10 @@ After the testing part in the usage, the validation set containing projection fr
 python evaluation/r_precision.py --text "a snake is flying in the sky" --workspace snake --latest ep0100 --mode depth --clip clip-ViT-B-16
 ```
 
+# Acknowledgement
+
 <details>
-  <summary style="font-size: px;"> Acknowledgement </summary>
+  <summary > Expand </summary>
 
 This work is based on an increasing list of amazing research works and open-source projects, thanks a lot to all the authors for sharing!
 
