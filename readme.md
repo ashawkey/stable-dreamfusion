@@ -107,7 +107,6 @@ First time running will take some time to compile the CUDA extensions.
   <summary > Expand </summary>
 
   ```bash
-
   #### stable-dreamfusion setting
 
   ### Instant-NGP NeRF Backbone
@@ -163,23 +162,26 @@ First time running will take some time to compile the CUDA extensions.
   # if CUDA OOM, try to reduce NeRF sampling steps (--num_steps and --upsample_steps)
   python main.py --text "a hotdog" --workspace trial2 -O2 --num_steps 64 --upsample_steps 0
   ```
-  
+
 </details>
 
 ## Stable dreamfusion testing
 <details>
   <summary > Expand </summary>
+
   ```bash
   ## test
   python main.py --workspace trial2 -O2 --test
   python main.py --workspace trial2 -O2 --test --save_mesh
   python main.py --workspace trial2 -O2 --test --gui # not recommended, FPS will be low.
   ```
+
 </details>
 
 ## Stable dreamfusion Finetuning with DMTet
 <details>
   <summary > Expand </summary>
+
   ```bash
   ### DMTet finetuning
 
@@ -192,11 +194,13 @@ First time running will take some time to compile the CUDA extensions.
   ## gui to visualize dmtet
   python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --test --gui
   ```
+
 </details>
 
 ## Image-conditioned 3D Generation
 <details>
   <summary > Expand </summary>
+
   ```bash
   ### Image-conditioned 3D Generation
 
@@ -206,11 +210,13 @@ First time running will take some time to compile the CUDA extensions.
   python preprocess_image.py <image>.png
   python preprocess_image.py <image>.png --border_ratio 0.4 # increase border_ratio if the center object appears too large and results are unsatisfying.
   ```
+
 </details>
 
 ## zero123
 <details>
   <summary > Expand </summary>
+
   ```bash
   ## zero123 train
   # pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
@@ -242,9 +248,10 @@ First time running will take some time to compile the CUDA extensions.
   ```
 </details>
 
-## Stable dreamfusion training
+## Debugging
 <details>
   <summary > Expand </summary>
+
   ```bash
   ### Debugging
 
@@ -252,6 +259,7 @@ First time running will take some time to compile the CUDA extensions.
   # Warning: this slows down training considerably and consumes lots of disk space!
   python main.py --text "a hamburger" --workspace trial_hamburger -O --vram_O --save_guidance --save_guidance_interval 5 # save every 5 steps
   ```
+  
 </details>
 
 For example commands, check [`scripts`](./scripts).
