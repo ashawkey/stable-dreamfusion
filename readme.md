@@ -227,10 +227,11 @@ Reproduce the paper CLIP R-precision evaluation
 After the testing part in the usage, the validation set containing projection from different angle is generated. Test the R-precision between prompt and the image.(R=1)
 
 ```bash
-python r_precision.py --text "a snake is flying in the sky" --workspace snake_HQ --latest ep0100 --mode depth --clip clip-ViT-B-16
+python evaluation/r_precision.py --text "a snake is flying in the sky" --workspace snake --latest ep0100 --mode depth --clip clip-ViT-B-16
 ```
 
-# Acknowledgement
+<details>
+  <summary> # Acknowledgement </summary>
 
 This work is based on an increasing list of amazing research works and open-source projects, thanks a lot to all the authors for sharing!
 
@@ -324,6 +325,8 @@ This work is based on an increasing list of amazing research works and open-sour
 * Puppy image from : https://www.pexels.com/photo/high-angle-photo-of-a-corgi-looking-upwards-2664417/
 
 * Anya images from : https://www.goodsmile.info/en/product/13301/POP+UP+PARADE+Anya+Forger.html
+
+</details>
 
 # Citation
 
