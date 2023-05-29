@@ -105,7 +105,9 @@ First time running will take some time to compile the CUDA extensions.
 ## Stable dreamfusion training
 <details>
   <summary > Expand </summary>
+
   ```bash
+
   #### stable-dreamfusion setting
 
   ### Instant-NGP NeRF Backbone
@@ -161,6 +163,7 @@ First time running will take some time to compile the CUDA extensions.
   # if CUDA OOM, try to reduce NeRF sampling steps (--num_steps and --upsample_steps)
   python main.py --text "a hotdog" --workspace trial2 -O2 --num_steps 64 --upsample_steps 0
   ```
+  
 </details>
 
 ## Stable dreamfusion testing
