@@ -231,7 +231,7 @@ python evaluation/r_precision.py --text "a snake is flying in the sky" --workspa
 ```
 
 <details>
-  <summary style="font-size: 24px;"> # Acknowledgement </summary>
+  <summary style="font-size: 24px;"> Acknowledgement </summary>
 
 This work is based on an increasing list of amazing research works and open-source projects, thanks a lot to all the authors for sharing!
 
