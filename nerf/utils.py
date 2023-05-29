@@ -1,4 +1,5 @@
 import os
+import gc
 import glob
 import tqdm
 import math
@@ -222,7 +223,6 @@ class Trainer(object):
         self.epoch = 0
         self.global_step = 0
         self.local_step = 0
-        self.exp_step = 0
         self.stats = {
             "loss": [],
             "valid_loss": [],
@@ -250,7 +250,13 @@ class Trainer(object):
             if opt.image_config is not None:
                 shutil.copyfile(opt.image_config, os.path.join(self.workspace, os.path.basename(opt.image_config)))
 
+            # Save a copy of images in the experiment workspace
+            if opt.images is not None:
+                for image_file in opt.images:
+                    shutil.copyfile(image_file, os.path.join(self.workspace, os.path.basename(image_file)))
+
         self.log(f'[INFO] Cmdline: {self.argv}')
+        self.log(f'[INFO] opt: {self.opt}')
         self.log(f'[INFO] Trainer: {self.name} | {self.time_stamp} | {self.device} | {"fp16" if self.fp16 else "fp32"} | {self.workspace}')
         self.log(f'[INFO] #parameters: {sum([p.numel() for p in model.parameters() if p.requires_grad])}')
 
@@ -304,6 +310,8 @@ class Trainer(object):
             w = int(self.opt.known_view_scale * self.opt.w)
 
             # load processed image
+            for image in self.opt.images:
+                assert image.endswith('_rgba.png') # the rest of this code assumes that the _rgba image has been passed.
             rgbas = [cv2.cvtColor(cv2.imread(image, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA) for image in self.opt.images]
             rgba_hw = np.stack([cv2.resize(rgba, (w, h), interpolation=cv2.INTER_AREA).astype(np.float32) / 255 for rgba in rgbas])
             rgb_hw = rgba_hw[..., :3] * rgba_hw[..., 3:] + (1 - rgba_hw[..., 3:])
@@ -315,10 +323,10 @@ class Trainer(object):
             depth_paths = [image.replace('_rgba.png', '_depth.png') for image in self.opt.images]
             depths = [cv2.imread(depth_path, cv2.IMREAD_UNCHANGED) for depth_path in depth_paths]
             depth = np.stack([cv2.resize(depth, (w, h), interpolation=cv2.INTER_AREA) for depth in depths])
-            self.depth = torch.from_numpy(depth.astype(np.float32) / 255).to(self.device)
+            self.depth = torch.from_numpy(depth.astype(np.float32) / 255).to(self.device)  # TODO: this should be mapped to FP16
             print(f'[INFO] dataset: load depth prompt {depth_paths} {self.depth.shape}')
 
-            # load normal
+            # load normal   # TODO: don't load if normal loss is 0
             normal_paths = [image.replace('_rgba.png', '_normal.png') for image in self.opt.images]
             normals = [cv2.imread(normal_path, cv2.IMREAD_UNCHANGED) for normal_path in normal_paths]
             normal = np.stack([cv2.resize(normal, (w, h), interpolation=cv2.INTER_AREA) for normal in normals])
@@ -375,9 +383,13 @@ class Trainer(object):
         if do_rgbd_loss:
             data = self.default_view_data
 
+        # experiment iterations ratio
+        # i.e. what proportion of this experiment have we completed (in terms of iterations) so far?
+        exp_iter_ratio = (self.global_step - self.opt.exp_start_iter) / (self.opt.exp_end_iter - self.opt.exp_start_iter)
+
         # progressively relaxing view range
         if self.opt.progressive_view:
-            r = min(1.0, 0.2 + self.exp_step / (0.5 * self.opt.iters))
+            r = min(1.0, self.opt.progressive_view_init_ratio + 2.0*exp_iter_ratio)
             self.opt.phi_range = [self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[0] * r,
                                   self.opt.default_azimuth * (1 - r) + self.opt.full_phi_range[1] * r]
             self.opt.theta_range = [self.opt.default_polar * (1 - r) + self.opt.full_theta_range[0] * r,
@@ -389,7 +401,7 @@ class Trainer(object):
 
         # progressively increase max_level
         if self.opt.progressive_level:
-            self.model.max_level = min(1.0, 0.25 + self.exp_step / (0.5 * self.opt.iters))
+            self.model.max_level = min(1.0, 0.25 + 2.0*exp_iter_ratio)
 
         rays_o = data['rays_o'] # [B, N, 3]
         rays_d = data['rays_d'] # [B, N, 3]
@@ -420,7 +432,7 @@ class Trainer(object):
                 rays_o = rays_o + torch.randn(3, device=self.device) * noise_scale
                 rays_d = rays_d + torch.randn(3, device=self.device) * noise_scale
 
-        elif self.global_step < (self.opt.latent_iter_ratio * self.opt.iters):
+        elif exp_iter_ratio <= self.opt.latent_iter_ratio:
             ambient_ratio = 1.0
             shading = 'normal'
             as_latent = True
@@ -428,14 +440,14 @@ class Trainer(object):
             bg_color = None
 
         else:
-            if self.global_step < (self.opt.albedo_iter_ratio * self.opt.iters):
+            if exp_iter_ratio <= self.opt.albedo_iter_ratio:
                 ambient_ratio = 1.0
                 shading = 'albedo'
             else:
                 # random shading
-                ambient_ratio = 0.1 + 0.9 * random.random()
+                ambient_ratio = self.opt.min_ambient_ratio + (1.0-self.opt.min_ambient_ratio) * random.random()
                 rand = random.random()
-                if rand > 0.8:
+                if rand >= (1.0 - self.opt.textureless_ratio):
                     shading = 'textureless'
                 else:
                     shading = 'lambertian'
@@ -708,8 +720,6 @@ class Trainer(object):
 
         start_t = time.time()
 
-        self.exp_step = 0
-
         for epoch in range(self.epoch + 1, max_epochs + 1):
             self.epoch = epoch
 
@@ -942,7 +952,6 @@ class Trainer(object):
 
             self.local_step += 1
             self.global_step += 1
-            self.exp_step += 1
 
             self.optimizer.zero_grad()
 

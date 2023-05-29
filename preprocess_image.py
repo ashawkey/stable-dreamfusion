@@ -121,7 +121,7 @@ if __name__ == '__main__':
     parser.add_argument('--size', default=256, type=int, help="output resolution")
     parser.add_argument('--border_ratio', default=0.2, type=float, help="output border ratio")
     parser.add_argument('--recenter', type=bool, default=True, help="recenter, potentially not helpful for multiview zero123")
-    parser.add_argument('--resize', type=bool, default=True, help="resize image to opt.size")
+    parser.add_argument('--dont_recenter', dest='recenter', action='store_false')
     opt = parser.parse_args()
 
     out_dir = os.path.dirname(opt.path)
@@ -162,6 +162,7 @@ if __name__ == '__main__':
 
     # recenter
     if opt.recenter:
+        print(f'[INFO] recenter...')
         final_rgba = np.zeros((opt.size, opt.size, 4), dtype=np.uint8)
         final_depth = np.zeros((opt.size, opt.size), dtype=np.uint8)
         final_normal = np.zeros((opt.size, opt.size, 3), dtype=np.uint8)
@@ -179,20 +180,14 @@ if __name__ == '__main__':
         x2_max = x2_min + h2
         y2_min = (opt.size - w2) // 2
         y2_max = y2_min + w2
-        final_rgba[x2_min:x2_max, y2_min:y2_max] = carved_image[x_min:x_max, y_min:y_max]
-        final_depth[x2_min:x2_max, y2_min:y2_max] = depth[x_min:x_max, y_min:y_max]
-        final_normal[x2_min:x2_max, y2_min:y2_max] = normal[x_min:x_max, y_min:y_max]
+        final_rgba[x2_min:x2_max, y2_min:y2_max] = cv2.resize(carved_image[x_min:x_max, y_min:y_max], (w2, h2), interpolation=cv2.INTER_AREA)
+        final_depth[x2_min:x2_max, y2_min:y2_max] = cv2.resize(depth[x_min:x_max, y_min:y_max], (w2, h2), interpolation=cv2.INTER_AREA)
+        final_normal[x2_min:x2_max, y2_min:y2_max] = cv2.resize(normal[x_min:x_max, y_min:y_max], (w2, h2), interpolation=cv2.INTER_AREA)
 
     else:
         final_rgba = carved_image
         final_depth = depth
         final_normal = normal
-
-    # resize
-    if opt.resize:
-        final_rgba = cv2.resize(final_rgba, (w2, h2), interpolation=cv2.INTER_AREA)
-        final_depth = cv2.resize(final_depth, (w2, h2), interpolation=cv2.INTER_AREA)
-        final_normal = cv2.resize(final_normal, (w2, h2), interpolation=cv2.INTER_AREA)
 
     # write output
     cv2.imwrite(out_rgba, cv2.cvtColor(final_rgba, cv2.COLOR_RGBA2BGRA))

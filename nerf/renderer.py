@@ -899,13 +899,13 @@ class NeRFRenderer(nn.Module):
                                mvp.permute(0,2,1)).float()  # [B, N, 4]
         rast, rast_db = dr.rasterize(self.glctx, verts_clip, faces, (h, w))
         
-        alpha, _ = dr.interpolate(torch.ones_like(verts[:, :1]).unsqueeze(0), rast, faces) # [B, H, W, 1]
+        alpha = (rast[..., 3:] > 0).float()
         xyzs, _ = dr.interpolate(verts.unsqueeze(0), rast, faces) # [B, H, W, 3]
         normal, _ = dr.interpolate(vn.unsqueeze(0).contiguous(), rast, faces)
         normal = safe_normalize(normal)
 
         xyzs = xyzs.view(-1, 3)
-        mask = (alpha > 0).view(-1).detach()
+        mask = (rast[..., 3:] > 0).view(-1).detach()
 
         # do the lighting here since we have normal from mesh now.
         albedo = torch.zeros_like(xyzs, dtype=torch.float32)
@@ -913,6 +913,10 @@ class NeRFRenderer(nn.Module):
             masked_albedo = self.density(xyzs[mask])['albedo']
             albedo[mask] = masked_albedo.float()
         albedo = albedo.view(-1, h, w, 3)
+
+        # these two modes lead to no parameters to optimize if using --lock_geo.
+        if self.opt.lock_geo and shading in ['textureless', 'normal']:
+            shading = 'lambertian'
 
         if shading == 'albedo':
             color = albedo

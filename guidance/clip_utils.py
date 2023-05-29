@@ -35,18 +35,20 @@ class CLIP(nn.Module):
 
     
     def train_step(self, clip_z, pred_rgb, grad_scale=10, **kwargs):
-
+        """
+            Args:
+                grad_scale: scalar or 1-tensor of size [B], i.e. 1 grad_scale per batch item. 
+        """
+        # TODO: resize the image from NeRF-rendered resolution (e.g. 128x128) to what CLIP expects (512x512), to prevent Pytorch warning about `antialias=None`.
         image_z = self.clip_model.encode_image(self.aug(pred_rgb))
         image_z = image_z / image_z.norm(dim=-1, keepdim=True) # normalize features
 
         loss = 0
         if 'image' in clip_z:
-            loss = loss - (image_z * clip_z['image']).sum(-1).mean()
+            loss -= ((image_z * clip_z['image']).sum(-1) * grad_scale).mean()
         
         if 'text' in clip_z:
-            loss = loss - (image_z * clip_z['text']).sum(-1).mean()
-
-        loss = loss * grad_scale
+            loss -= ((image_z * clip_z['text']).sum(-1) * grad_scale).mean()
 
         return loss
 
