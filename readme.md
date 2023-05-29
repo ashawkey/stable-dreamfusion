@@ -197,7 +197,7 @@ First time running will take some time to compile the CUDA extensions.
 
 </details>
 
-## Image-conditioned 3D Generation
+## Image-conditioned 3D Generation (Zero123)
 <details>
   <summary > Expand </summary>
 
@@ -209,15 +209,7 @@ First time running will take some time to compile the CUDA extensions.
   # this will exports `<image>_rgba.png`, `<image>_depth.png`, and `<image>_normal.png` to the directory containing the input image.
   python preprocess_image.py <image>.png
   python preprocess_image.py <image>.png --border_ratio 0.4 # increase border_ratio if the center object appears too large and results are unsatisfying.
-  ```
 
-</details>
-
-## zero123
-<details>
-  <summary > Expand </summary>
-
-  ```bash
   ## zero123 train
   # pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
   python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000
@@ -259,7 +251,7 @@ First time running will take some time to compile the CUDA extensions.
   # Warning: this slows down training considerably and consumes lots of disk space!
   python main.py --text "a hamburger" --workspace trial_hamburger -O --vram_O --save_guidance --save_guidance_interval 5 # save every 5 steps
   ```
-  
+
 </details>
 
 For example commands, check [`scripts`](./scripts).
@@ -268,13 +260,19 @@ For advanced tips and other developing stuff, check [Advanced Tips](./assets/adv
 
 # Evalutation
 
-Reproduce the paper CLIP R-precision evaluation
+## R-precision
+<details>
+  <summary > Expand </summary>
 
-After the testing part in the usage, the validation set containing projection from different angle is generated. Test the R-precision between prompt and the image.(R=1)
+  Reproduce the paper CLIP R-precision evaluation
 
-```bash
-python evaluation/r_precision.py --text "a snake is flying in the sky" --workspace snake --latest ep0100 --mode depth --clip clip-ViT-B-16
-```
+  After the testing part in the usage, the validation set containing projection from different angle is generated. Test the R-precision between prompt and the image.(R=1)
+
+  ```bash
+  python evaluation/r_precision.py --text "a snake is flying in the sky" --workspace snake --latest ep0100 --mode depth --clip clip-ViT-B-16
+  ```
+
+</details>
 
 # Acknowledgement
 
