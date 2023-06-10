@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from torchvision.utils import save_image
 
 from torch.cuda.amp import custom_bwd, custom_fwd
+from .perpneg_utils import weighted_perpendicular_aggregator
 
 class SpecifyGradient(torch.autograd.Function):
     @staticmethod
@@ -174,6 +175,91 @@ class StableDiffusion(nn.Module):
         loss = SpecifyGradient.apply(latents, grad)
 
         return loss
+    
+
+    def train_step_perpneg(self, text_embeddings, weights, pred_rgb, guidance_scale=100, as_latent=False, grad_scale=1,
+                   save_guidance_path:Path=None):
+
+        B = pred_rgb.shape[0]
+        K = (text_embeddings.shape[0] // B) - 1 # maximum number of prompts       
+
+        if as_latent:
+            latents = F.interpolate(pred_rgb, (64, 64), mode='bilinear', align_corners=False) * 2 - 1
+        else:
+            # interp to 512x512 to be fed into vae.
+            pred_rgb_512 = F.interpolate(pred_rgb, (512, 512), mode='bilinear', align_corners=False)
+            # encode image into latents with vae, requires grad!
+            latents = self.encode_imgs(pred_rgb_512)
+
+        # timestep ~ U(0.02, 0.98) to avoid very high/low noise level
+        t = torch.randint(self.min_step, self.max_step + 1, (latents.shape[0],), dtype=torch.long, device=self.device)
+
+        # predict the noise residual with unet, NO grad!
+        with torch.no_grad():
+            # add noise
+            noise = torch.randn_like(latents)
+            latents_noisy = self.scheduler.add_noise(latents, noise, t)
+            # pred noise
+            latent_model_input = torch.cat([latents_noisy] * (1 + K))
+            tt = torch.cat([t] * (1 + K))
+            unet_output = self.unet(latent_model_input, tt, encoder_hidden_states=text_embeddings).sample
+
+            # perform guidance (high scale from paper!)
+            noise_pred_uncond, noise_pred_text = unet_output[:B], unet_output[B:]
+            delta_noise_preds = noise_pred_text - noise_pred_uncond.repeat(K, 1, 1, 1)
+            noise_pred = noise_pred_uncond + guidance_scale * weighted_perpendicular_aggregator(delta_noise_preds, weights, B)            
+
+        # import kiui
+        # latents_tmp = torch.randn((1, 4, 64, 64), device=self.device)
+        # latents_tmp = latents_tmp.detach()
+        # kiui.lo(latents_tmp)
+        # self.scheduler.set_timesteps(30)
+        # for i, t in enumerate(self.scheduler.timesteps):
+        #     latent_model_input = torch.cat([latents_tmp] * 3)
+        #     noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings)['sample']
+        #     noise_pred_uncond, noise_pred_pos = noise_pred.chunk(2)
+        #     noise_pred = noise_pred_uncond + 10 * (noise_pred_pos - noise_pred_uncond)
+        #     latents_tmp = self.scheduler.step(noise_pred, t, latents_tmp)['prev_sample']
+        # imgs = self.decode_latents(latents_tmp)
+        # kiui.vis.plot_image(imgs)
+
+        # w(t), sigma_t^2
+        w = (1 - self.alphas[t])
+        grad = grad_scale * w[:, None, None, None] * (noise_pred - noise)
+        grad = torch.nan_to_num(grad)
+
+        if save_guidance_path:
+            with torch.no_grad():
+                if as_latent:
+                    pred_rgb_512 = self.decode_latents(latents)
+
+                # visualize predicted denoised image
+                # The following block of code is equivalent to `predict_start_from_noise`...
+                # see zero123_utils.py's version for a simpler implementation.
+                alphas = self.scheduler.alphas.to(latents)
+                total_timesteps = self.max_step - self.min_step + 1
+                index = total_timesteps - t.to(latents.device) - 1 
+                b = len(noise_pred)
+                a_t = alphas[index].reshape(b,1,1,1).to(self.device)
+                sqrt_one_minus_alphas = torch.sqrt(1 - alphas)
+                sqrt_one_minus_at = sqrt_one_minus_alphas[index].reshape((b,1,1,1)).to(self.device)                
+                pred_x0 = (latents_noisy - sqrt_one_minus_at * noise_pred) / a_t.sqrt() # current prediction for x_0
+                result_hopefully_less_noisy_image = self.decode_latents(pred_x0.to(latents.type(self.precision_t)))
+
+                # visualize noisier image
+                result_noisier_image = self.decode_latents(latents_noisy.to(pred_x0).type(self.precision_t))
+
+
+
+                # all 3 input images are [1, 3, H, W], e.g. [1, 3, 512, 512]
+                viz_images = torch.cat([pred_rgb_512, result_noisier_image, result_hopefully_less_noisy_image],dim=0)
+                save_image(viz_images, save_guidance_path)
+
+        # since we omitted an item in grad, we need to use the custom function to specify the gradient
+        loss = SpecifyGradient.apply(latents, grad)
+        # print("we did it")
+        return loss
+
 
     @torch.no_grad()
     def produce_latents(self, text_embeddings, height=512, width=512, num_inference_steps=50, guidance_scale=7.5, latents=None):
