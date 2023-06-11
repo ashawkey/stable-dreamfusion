@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.cuda.amp import custom_bwd, custom_fwd
+from .perpneg_utils import weighted_perpendicular_aggregator
 
 
 class SpecifyGradient(torch.autograd.Function):
@@ -110,6 +111,47 @@ class IF(nn.Module):
 
             # TODO: how to use the variance here?
             # noise_pred = torch.cat([noise_pred, predicted_variance], dim=1)
+
+        # w(t), sigma_t^2
+        w = (1 - self.alphas[t])
+        grad = grad_scale * w[:, None, None, None] * (noise_pred - noise)
+        grad = torch.nan_to_num(grad)
+
+        # since we omitted an item in grad, we need to use the custom function to specify the gradient
+        loss = SpecifyGradient.apply(images, grad)
+
+        return loss
+
+    def train_step_perpneg(self, text_embeddings, weights, pred_rgb, guidance_scale=100, grad_scale=1):
+
+        B = pred_rgb.shape[0]
+        K = (text_embeddings.shape[0] // B) - 1 # maximum number of prompts        
+
+        # [0, 1] to [-1, 1] and make sure shape is [64, 64]
+        images = F.interpolate(pred_rgb, (64, 64), mode='bilinear', align_corners=False) * 2 - 1
+
+        # timestep ~ U(0.02, 0.98) to avoid very high/low noise level
+        t = torch.randint(self.min_step, self.max_step + 1, (images.shape[0],), dtype=torch.long, device=self.device)
+
+        # predict the noise residual with unet, NO grad!
+        with torch.no_grad():
+            # add noise
+            noise = torch.randn_like(images)
+            images_noisy = self.scheduler.add_noise(images, noise, t)
+
+            # pred noise
+            model_input = torch.cat([images_noisy] * (1 + K))
+            model_input = self.scheduler.scale_model_input(model_input, t)
+            tt = torch.cat([t] * (1 + K))
+            unet_output = self.unet(model_input, tt, encoder_hidden_states=text_embeddings).sample
+            noise_pred_uncond, noise_pred_text = unet_output[:B], unet_output[B:]
+            noise_pred_uncond, _ = noise_pred_uncond.split(model_input.shape[1], dim=1)
+            noise_pred_text, predicted_variance = noise_pred_text.split(model_input.shape[1], dim=1)
+            # noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+            delta_noise_preds = noise_pred_text - noise_pred_uncond.repeat(K, 1, 1, 1)
+            noise_pred = noise_pred_uncond + guidance_scale * weighted_perpendicular_aggregator(delta_noise_preds, weights, B)
+
+
 
         # w(t), sigma_t^2
         w = (1 - self.alphas[t])
