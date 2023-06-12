@@ -2,6 +2,11 @@
 
 A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) text-to-2D model.
 
+**NEWS (2023.6.12)**:
+
+* Support of [Perp-Neg](https://perp-neg.github.io/) to alleviate multi-head problem in Text-to-3D.
+* Support of Perp-Neg for both [Stable Diffusion](https://github.com/CompVis/stable-diffusion) and [DeepFloyd-IF](https://github.com/deep-floyd/IF).
+
 **NEWS (2023.5.8)**:
 * Support of [DeepFloyd-IF](https://github.com/deep-floyd/IF) as the guidance model.
 * Enhance Image-to-3D quality, support Image + Text condition of [Make-it-3D](https://make-it-3d.github.io/).
@@ -270,7 +275,17 @@ This work is based on an increasing list of amazing research works and open-sour
         primaryClass={cs.CV}
     }
     ```
-
+    
+* [Perp-Neg: Re-imagine the Negative Prompt Algorithm: Transform 2D Diffusion into 3D, alleviate Janus problem and Beyond](https://perp-neg.github.io/)
+    ```
+    @article{armandpour2023re,
+      title={Re-imagine the Negative Prompt Algorithm: Transform 2D Diffusion into 3D, alleviate Janus problem and Beyond},
+      author={Armandpour, Mohammadreza and Zheng, Huangjie and Sadeghian, Ali and Sadeghian, Amir and Zhou, Mingyuan},
+      journal={arXiv preprint arXiv:2304.04968},
+      year={2023}
+    }
+    ```
+    
 * [RealFusion: 360° Reconstruction of Any Object from a Single Image](https://github.com/lukemelas/realfusion)
     ```
     @inproceedings{melaskyriazi2023realfusion,
