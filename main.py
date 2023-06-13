@@ -50,7 +50,7 @@ if __name__ == '__main__':
 
     ## Perp-Neg options
     parser.add_argument('--perpneg', action='store_true', help="use perp_neg")
-    parser.add_argument('--negative_w', type=float, default=-2, help="scale of the weight of the negative prompt, the larger the better at avoiding janus problem, but may cause flat faces, vary between 0 to -4")
+    parser.add_argument('--negative_w', type=float, default=-2, help="The scale of the weights of negative prompts. A larger value will help to avoid the Janus problem, but may cause flat faces. Vary between 0 to -4, depending on the prompt")
     parser.add_argument('--front_decay_factor', type=float, default=2, help="decay factor for the front prompt")
     parser.add_argument('--side_decay_factor', type=float, default=10, help="decay factor for the side prompt")
 
