@@ -2,14 +2,12 @@
 
 A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) text-to-2D model.
 
+**ADVERTISEMENT: Please check out [threestudio](https://github.com/threestudio-project/threestudio) for recent improvements and better implementation in 3D content generation!**
+
 **NEWS (2023.6.12)**:
 
 * Support of [Perp-Neg](https://perp-neg.github.io/) to alleviate multi-head problem in Text-to-3D.
 * Support of Perp-Neg for both [Stable Diffusion](https://github.com/CompVis/stable-diffusion) and [DeepFloyd-IF](https://github.com/deep-floyd/IF).
-
-**NEWS (2023.5.8)**:
-* Support of [DeepFloyd-IF](https://github.com/deep-floyd/IF) as the guidance model.
-* Enhance Image-to-3D quality, support Image + Text condition of [Make-it-3D](https://make-it-3d.github.io/).
 
 https://user-images.githubusercontent.com/25863658/236712982-9f93bd32-83bf-423a-bb7c-f73df7ece2e3.mp4
 
