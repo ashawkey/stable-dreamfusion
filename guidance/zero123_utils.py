@@ -70,7 +70,7 @@ def load_model_from_config(config, ckpt, device, vram_O=False, verbose=False):
 class Zero123(nn.Module):
     def __init__(self, device, fp16,
                  config='./pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml',
-                 ckpt='./pretrained/zero123/105000.ckpt', vram_O=False, t_range=[0.02, 0.98], opt=None):
+                 ckpt='./pretrained/zero123/zero123-xl.ckpt', vram_O=False, t_range=[0.02, 0.98], opt=None):
         super().__init__()
 
         self.device = device

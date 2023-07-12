@@ -56,10 +56,10 @@ pip install -r requirements.txt
 
 To use image-conditioned 3D generation, you need to download some pretrained checkpoints manually:
 * [Zero-1-to-3](https://github.com/cvlab-columbia/zero123) for diffusion backend.
-    We use `105000.ckpt` by default, and it is hard-coded in `guidance/zero123_utils.py`.
+    We use `zero123-xl.ckpt` by default, and it is hard-coded in `guidance/zero123_utils.py`.
     ```bash
     cd pretrained/zero123
-    wget https://huggingface.co/cvlab/zero123-weights/resolve/main/105000.ckpt
+    wget https://zero123.cs.columbia.edu/assets/zero123-xl.ckpt
     ```
 * [Omnidata](https://github.com/EPFL-VILAB/omnidata/tree/main/omnidata_tools/torch) for depth and normal prediction.
     These ckpts are hardcoded in `preprocess_image.py`.
