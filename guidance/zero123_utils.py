@@ -17,20 +17,6 @@ sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
 
 from ldm.util import instantiate_from_config
 
-class SpecifyGradient(torch.autograd.Function):
-    @staticmethod
-    @custom_fwd
-    def forward(ctx, input_tensor, gt_grad):
-        ctx.save_for_backward(gt_grad)
-        # we return a dummy value 1, which will be scaled by amp's scaler so we get the scale in backward.
-        return torch.ones([1], device=input_tensor.device, dtype=input_tensor.dtype)
-
-    @staticmethod
-    @custom_bwd
-    def backward(ctx, grad_scale):
-        gt_grad, = ctx.saved_tensors
-        gt_grad = gt_grad * grad_scale
-        return gt_grad, None
 
 # load model
 def load_model_from_config(config, ckpt, device, vram_O=False, verbose=False):
@@ -239,8 +225,7 @@ class Zero123(nn.Module):
                 viz_images = torch.cat([pred_rgb_256, result_noisier_image, result_hopefully_less_noisy_image],dim=-1)
                 save_image(viz_images, save_guidance_path)
 
-        # since we omitted an item in grad, we need to use the custom function to specify the gradient
-        loss = SpecifyGradient.apply(latents, grad)
+        loss = (grad * latents).sum()
 
         return loss
 

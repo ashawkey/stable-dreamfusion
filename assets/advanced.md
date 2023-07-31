@@ -19,6 +19,7 @@ grad = w * (noise_pred - noise)
 # 3.1. call backward and set the grad now (need to retain graph since we will call a second backward for the other losses later)
 latents.backward(gradient=grad, retain_graph=True)
 return 0 # dummy loss
+
 # 3.2. use a custom function to set a hook in backward, so we only call backward once (credits to @elliottzheng)
 class SpecifyGradient(torch.autograd.Function):
     @staticmethod
@@ -37,6 +38,11 @@ class SpecifyGradient(torch.autograd.Function):
 
 loss = SpecifyGradient.apply(latents, grad)
 return loss # functional loss
+
+# 3.3. reparameterization (credits to @Xallt)
+# d(loss)/d(latents) = grad, since grad is already detached, it's this simple.
+loss = (grad * latents).sum()
+return loss
 ```
 * Other regularizations are in `./nerf/utils.py > Trainer > train_step`.
     * The generation seems quite sensitive to regularizations on weights_sum (alphas for each ray). The original opacity loss tends to make NeRF disappear (zero density everywhere), so we use an entropy loss to replace it for now (encourages alpha to be either 0 or 1).

@@ -288,13 +288,13 @@ class NeRFRenderer(nn.Module):
             self.mean_density = 0
             self.iter_density = 0
         
-        if self.opt.dmtet:
+        if self.dmtet:
             # load dmtet vertices
             tets = np.load('tets/{}_tets.npz'.format(self.opt.tet_grid_size))
             self.verts = - torch.tensor(tets['vertices'], dtype=torch.float32, device='cuda') * 2 # covers [-1, 1]
             self.indices  = torch.tensor(tets['indices'], dtype=torch.long, device='cuda')
             self.tet_scale = torch.tensor([1, 1, 1], dtype=torch.float32, device='cuda')
-            self.dmtet = DMTet('cuda')
+            self.dmtet_model = DMTet('cuda')
 
             # vert sdf and deform
             sdf = torch.nn.Parameter(torch.zeros_like(self.verts[..., 0]), requires_grad=True)
@@ -370,7 +370,7 @@ class NeRFRenderer(nn.Module):
             sdf = self.sdf
             deform = torch.tanh(self.deform) / self.opt.tet_grid_size
 
-            vertices, triangles = self.dmtet(self.verts + deform, sdf, self.indices)
+            vertices, triangles = self.dmtet_model(self.verts + deform, sdf, self.indices)
 
             vertices = vertices.detach().cpu().numpy()
             triangles = triangles.detach().cpu().numpy()
@@ -876,7 +876,7 @@ class NeRFRenderer(nn.Module):
         sdf = self.sdf
         deform = torch.tanh(self.deform) / self.opt.tet_grid_size
 
-        verts, faces = self.dmtet(self.verts + deform, sdf, self.indices)
+        verts, faces = self.dmtet_model(self.verts + deform, sdf, self.indices)
 
         # get normals
         i0, i1, i2 = faces[:, 0], faces[:, 1], faces[:, 2]
