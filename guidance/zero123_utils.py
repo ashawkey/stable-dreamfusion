@@ -225,7 +225,8 @@ class Zero123(nn.Module):
                 viz_images = torch.cat([pred_rgb_256, result_noisier_image, result_hopefully_less_noisy_image],dim=-1)
                 save_image(viz_images, save_guidance_path)
 
-        loss = (grad * latents).sum()
+        targets = (latents - grad).detach()
+        loss = 0.5 * F.mse_loss(latents.float(), targets, reduction='sum') / latents.shape[0]
 
         return loss
 

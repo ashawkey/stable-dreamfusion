@@ -43,6 +43,12 @@ return loss # functional loss
 # d(loss)/d(latents) = grad, since grad is already detached, it's this simple.
 loss = (grad * latents).sum()
 return loss
+
+# 3.4. reparameterization (credits to threestudio)
+# this is the same as 3.3, but the loss value only reflects the magnitude of grad, which is more informative.
+targets = (latents - grad).detach()
+loss = 0.5 * F.mse_loss(latents, targets, reduction='sum')
+return loss
 ```
 * Other regularizations are in `./nerf/utils.py > Trainer > train_step`.
     * The generation seems quite sensitive to regularizations on weights_sum (alphas for each ray). The original opacity loss tends to make NeRF disappear (zero density everywhere), so we use an entropy loss to replace it for now (encourages alpha to be either 0 or 1).

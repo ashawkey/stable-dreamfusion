@@ -102,7 +102,8 @@ class IF(nn.Module):
         grad = grad_scale * w[:, None, None, None] * (noise_pred - noise)
         grad = torch.nan_to_num(grad)
 
-        loss = (grad * images).sum()
+        targets = (images - grad).detach()
+        loss = 0.5 * F.mse_loss(images.float(), targets, reduction='sum') / images.shape[0]
 
         return loss
 
@@ -142,7 +143,8 @@ class IF(nn.Module):
         grad = grad_scale * w[:, None, None, None] * (noise_pred - noise)
         grad = torch.nan_to_num(grad)
 
-        loss = (grad * images).sum()
+        targets = (images - grad).detach()
+        loss = 0.5 * F.mse_loss(images.float(), targets, reduction='sum') / images.shape[0]
 
         return loss
 
