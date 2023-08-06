@@ -20,7 +20,7 @@ def seed_everything(seed):
 
 
 class IF(nn.Module):
-    def __init__(self, device, vram_O, t_range=[0.02, 0.98]):
+    def __init__(self, device, vram_O, t_range=[0.02, 0.98], fp16=True):
         super().__init__()
 
         self.device = device
@@ -31,8 +31,10 @@ class IF(nn.Module):
 
         is_torch2 = torch.__version__[0] == '2'
 
+        self.precision_t = torch.float16 if fp16 else torch.float32
+
         # Create model
-        pipe = IFPipeline.from_pretrained(model_key, variant="fp16", torch_dtype=torch.float16)
+        pipe = IFPipeline.from_pretrained(model_key, variant="fp16" if fp16 else "fp32", torch_dtype=self.precision_t)
         if not is_torch2:
             pipe.enable_xformers_memory_efficient_attention()
 
@@ -200,6 +202,50 @@ class IF(nn.Module):
         imgs = (imgs * 255).round().astype('uint8')
 
         return imgs
+
+
+    def img_opt(self, text_embeddings, images, guidance_scale=40.0, sorted=True):
+
+        if sorted:
+            timesteps = torch.randint(self.min_step, self.max_step + 1, (images.shape[0],), dtype=torch.long, device=self.device).sort()[0]
+        else:
+            timesteps = torch.randint(self.min_step, self.max_step + 1, (images.shape[0],), dtype=torch.long, device=self.device)
+
+        with torch.no_grad():
+
+            # add noise to latents using the timesteps
+            noise = torch.randn_like(images)
+            images_noisy = self.scheduler.add_noise(images, noise, timesteps).to(self.device)
+
+            # predict the noise residual
+            model_input = torch.cat([images_noisy] * 2)
+            model_input = self.scheduler.scale_model_input(model_input, timesteps)
+            tt = torch.cat([timesteps] * 2)
+            text_input = text_embeddings.repeat_interleave(len(images_noisy), 0)
+            noise_pred = []
+            # To ensure batch_size=1
+            for s, t, text in zip(model_input, tt, text_input):
+                noise_pred.append(self.unet(sample=s[None, ...],
+                                            timestep=t[None, ...],
+                                            encoder_hidden_states=text[None, ...]).sample)
+
+            noise_pred = torch.cat(noise_pred)
+
+            # perform guidance
+            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+            noise_pred_uncond, _ = noise_pred_uncond.split(model_input.shape[1], dim=1)
+            noise_pred_text, predicted_variance = noise_pred_text.split(model_input.shape[1], dim=1)
+            noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+        # w(t), sigma_t^2
+        w = (1 - self.alphas[timesteps])
+        grad = w[:, None, None, None] * (noise_pred - noise)
+        grad = torch.nan_to_num(grad)
+
+        # since we omitted an item in grad, we need to use the custom function to specify the gradient
+        loss = SpecifyGradient.apply(images, grad)
+
+        return images, loss
 
 
 if __name__ == '__main__':
