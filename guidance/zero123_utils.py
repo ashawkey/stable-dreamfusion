@@ -70,7 +70,7 @@ def load_model_from_config(config, ckpt, device, vram_O=False, verbose=False):
 class Zero123(nn.Module):
     def __init__(self, device, fp16,
                  config='./pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml',
-                 ckpt='./pretrained/zero123/zero123-xl.ckpt', vram_O=False, t_range=[0.02, 0.98], opt=None):
+                 ckpt='./pretrained/zero123/105000.ckpt', vram_O=False, t_range=[0.02, 0.98], opt=None):
         super().__init__()
 
         self.device = device
@@ -80,7 +80,6 @@ class Zero123(nn.Module):
         self.opt = opt
 
         self.config = OmegaConf.load(config)
-        # TODO: seems it cannot load into fp16...
         self.model = load_model_from_config(self.config, ckpt, device=self.device, vram_O=vram_O)
 
         # timesteps: use diffuser for convenience... hope it's alright.
@@ -233,15 +232,14 @@ class Zero123(nn.Module):
                 # visualize noisier image
                 result_noisier_image = self.decode_latents(latents_noisy)
 
-                # TODO: also denoise all-the-way
-
                 # all 3 input images are [1, 3, H, W], e.g. [1, 3, 512, 512]
                 viz_images = torch.cat([pred_rgb_256, result_noisier_image, result_hopefully_less_noisy_image],dim=-1)
                 save_image(viz_images, save_guidance_path)
 
         # since we omitted an item in grad, we need to use the custom function to specify the gradient
-        loss = SpecifyGradient.apply(latents, grad)
-
+        # loss = SpecifyGradient.apply(latents, grad)
+        latents.backward(gradient=grad, retain_graph=True)
+        loss = grad.abs().mean().detach()
         return loss
 
     # verification

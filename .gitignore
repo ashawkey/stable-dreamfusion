@@ -1,40 +1,29 @@
 __pycache__/
+venv*
+workspace/
+out*
+saved_out*
+all_outputs*
+shap_e_model_cache/*
+slurm_logs/
+debug/
+notinclude/
+scripts/snap/yamls
+
+# */validataion
+*csv
 build/
 *.egg-info/
 *.so
-venv_*/
+.vscode/ 
 
 tmp*
-# data/
-ldm/data/
-data2
-scripts2
+data/
 trial*/
 .vs/
 
 TOKEN
 *.ckpt
-
+*.pt
 densegridencoder
 tets/256_tets.npz
-
-.vscode/launch.json
-
-data2
-data/car*
-data/chair*
-data/warrior*
-data/wd*
-data/space*
-data/corgi*
-data/turtle*
-
-# Only keep the original image, not the automatically-generated depth, normals, rgba
-data/baby_phoenix_on_ice_*
-data/bollywood_actress_*
-data/beach_house_1_*
-data/beach_house_2_*
-data/mona_lisa_*
-data/futuristic_car_*
-data/church_ruins_*
-

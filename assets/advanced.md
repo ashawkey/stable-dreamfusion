@@ -69,5 +69,3 @@ For more details: https://github.com/bulletmark/debugpy-run
 
 <img width="1119" alt="NeRF_Zero123" src="https://github.com/ashawkey/stable-dreamfusion/assets/22424247/a0f432ff-2d08-45a4-a390-bda64f5cbc94">
 
-This code refers to theta for polar, phi for azimuth.
-

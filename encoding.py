@@ -45,7 +45,7 @@ class FreqEncoder_torch(nn.Module):
 
         # append 0
         if self.N_freqs - max_level > 0:
-            out.append(torch.zeros(*input.shape[:-1], (self.N_freqs - max_level) * 2 * input.shape[-1], device=input.device, dtype=input.dtype))
+            out.append(torch.zeros(input.shape[0], (self.N_freqs - max_level) * 2 * input.shape[1], device=input.device, dtype=input.dtype))
         
         out = torch.cat(out, dim=-1)
 

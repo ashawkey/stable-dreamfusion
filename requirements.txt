@@ -2,15 +2,16 @@ tqdm
 rich
 ninja
 numpy
-pandas
 scipy
 scikit-learn
 matplotlib
 opencv-python
 imageio
 imageio-ffmpeg
+pandas
 
 torch
+torchvision
 torch-ema
 einops
 tensorboard
@@ -25,17 +26,17 @@ dearpygui
 # for stable-diffusion
 huggingface_hub
 diffusers >= 0.9.0
-accelerate
+accelerate # required by textural inversion 
 transformers
 
-# for dmtet and mesh export
+# for dmtet
 xatlas
-trimesh
 PyMCubes
-pymeshlab
 git+https://github.com/NVlabs/nvdiffrast/
 
-# for zero123
+
+rembg
+
 carvekit-colab
 omegaconf
 pytorch-lightning
@@ -46,11 +47,33 @@ git+https://github.com/openai/CLIP.git
 # for omnidata
 gdown
 
-# for dpt
-timm
+# below is not necessary if no visualization or mesh exporting
+trimesh
+pymeshlab
+
+# cubvh
+git+https://github.com/ashawkey/cubvh
+
+# for dnnutils
+timm==0.6.7 # required by MiDaS
+easydict
+wandb
+termcolor
+
+# for shap-e
+git+https://github.com/openai/shap-e
+
+# optional
+jupyterlab
 
 # for remote debugging
 debugpy-run
 
 # for deepfloyd if
 sentencepiece
+
+# for gpu memory profiling
+psutil
+
+# for metrics
+lpips

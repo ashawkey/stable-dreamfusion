@@ -1,246 +1,214 @@
-# Stable-Dreamfusion
+# Magic123: One Image to High-Quality 3D Object Generation Using Both 2D and 3D Diffusion Priors
 
-A pytorch implementation of the text-to-3D model **Dreamfusion**, powered by the [Stable Diffusion](https://github.com/CompVis/stable-diffusion) text-to-2D model.
+[arXiv](https://arxiv.org/abs/2306.17843) | [webpage](https://guochengqian.github.io/project/magic123/)
 
-**ADVERTISEMENT: Please check out [threestudio](https://github.com/threestudio-project/threestudio) for recent improvements and better implementation in 3D content generation!**
+<img src="docs/static/magic123.gif" width="800" />
 
-**NEWS (2023.6.12)**:
+[Guocheng Qian](https://guochengqian.github.io/) <sup>1,2</sup>, [Jinjie Mai](https://cemse.kaust.edu.sa/people/person/jinjie-mai) <sup>1</sup>, [Abdullah Hamdi](https://abdullahamdi.com/) <sup>3</sup>, [Jian Ren](https://alanspike.github.io/) <sup>2</sup>, [Aliaksandr Siarohin](https://aliaksandrsiarohin.github.io/aliaksandr-siarohin-website/) <sup>2</sup>, [Bing Li](https://cemse.kaust.edu.sa/people/person/bing-li) <sup>1</sup>, [Hsin-Ying Lee](http://hsinyinglee.com/) <sup>2</sup>, [Ivan Skorokhodov](https://universome.github.io/) <sup>1,2</sup>, [Peter Wonka](https://peterwonka.net/) <sup>1</sup>, [Sergey Tulyakov](http://www.stulyakov.com/) <sup>2</sup>, [Bernard Ghanem](https://www.bernardghanem.com/) <sup>1</sup>
 
-* Support of [Perp-Neg](https://perp-neg.github.io/) to alleviate multi-head problem in Text-to-3D.
-* Support of Perp-Neg for both [Stable Diffusion](https://github.com/CompVis/stable-diffusion) and [DeepFloyd-IF](https://github.com/deep-floyd/IF).
+<sup>1</sup> [King Abdullah University of Science and Technology (KAUST)](https://www.kaust.edu.sa/),
+<sup>2</sup> [Snap Inc.](https://www.snap.com/),
+<sup>3</sup> [Visual Geometry Group, University of Oxford](http://www.robots.ox.ac.uk/~vgg/)
 
-https://user-images.githubusercontent.com/25863658/236712982-9f93bd32-83bf-423a-bb7c-f73df7ece2e3.mp4
 
-https://user-images.githubusercontent.com/25863658/232403162-51b69000-a242-4b8c-9cd9-4242b09863fa.mp4
+Training convergence of a demo example:
+<img src="docs/static/ironman-val-magic123.gif" width="800" />
 
-### [Update Logs](assets/update_logs.md)
 
-### Colab notebooks:
-* Instant-NGP backbone (`-O`): [![Instant-NGP Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1MXT3yfOFvO0ooKEfiUUvTKwUkrrlCHpF?usp=sharing)
+Compare Magic123 without textual inversion with abaltions using only 2D prior (SDS) or using only 3D prior (Zero123):
 
-* Vanilla NeRF backbone (`-O2`): [![Vanilla Backbone](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1mvfxG-S_n_gZafWoattku7rLJ2kPoImL?usp=sharing)
+https://github.com/guochengqian/Magic123/assets/48788073/e5a3c3cb-bcb1-4b10-8bfb-2c2eb79a9289
 
-# Important Notice
-This project is a **work-in-progress**, and contains lots of differences from the paper. **The current generation quality cannot match the results from the original paper, and many prompts still fail badly!**
 
-## Notable differences from the paper
-* Since the Imagen model is not publicly available, we use [Stable Diffusion](https://github.com/CompVis/stable-diffusion) to replace it (implementation from [diffusers](https://github.com/huggingface/diffusers)). Different from Imagen, Stable-Diffusion is a latent diffusion model, which diffuses in a latent space instead of the original image space. Therefore, we need the loss to propagate back from the VAE's encoder part too, which introduces extra time cost in training.
-* We use the [multi-resolution grid encoder](https://github.com/NVlabs/instant-ngp/) to implement the NeRF backbone (implementation from [torch-ngp](https://github.com/ashawkey/torch-ngp)), which enables much faster rendering (~10FPS at 800x800).
-* We use the [Adan](https://github.com/sail-sg/Adan) optimizer as default.
+Effects of Joint Prior. Increasing the strength of 2D prior leads to more imagination, more details, and less 3D consistencies. 
+
+<img src="docs/static/2d_3d.png" width="800" />
+
+Official PyTorch Implementation of Magic123: One Image to High-Quality 3D Object Generation Using Both 2D and 3D Diffusion Priors. Code is built upon [Stable-DreamFusion](https://github.com/ashawkey/stable-dreamfusion) repo.
+
+
+# NEWS:
+- [2023/07/25] Code is available at [GitHub](https://github.com/guochengqian/Magic123) 
+- [2023/07/03] Paper is available at [arXiv](https://arxiv.org/abs/2306.17843) 
+- [2023/06/25] Much better performance than the submitted version is achieved by 1）reimplementing Magic123 using [Stable DreamFusion code](https://github.com/ashawkey/stable-dreamfusion), 2）fixing some gradient issues, 3）leveraging the [tricks](#tips-and-tricks)
+- [2023] Initial version of Magic123 submitted to conference
+
 
 # Install
 
-```bash
-git clone https://github.com/ashawkey/stable-dreamfusion.git
-cd stable-dreamfusion
-```
-
-### Optional: create a python virtual environment
-
-To avoid python package conflicts, we recommend using a virtual environment, e.g.: using conda or venv:
+### Install Environment 
 
 ```bash
-python -m venv venv_stable-dreamfusion
-source venv_stable-dreamfusion/bin/activate # you need to repeat this step for every new terminal
-```
-
-### Install with pip
-
-```bash
-pip install -r requirements.txt
+source install.sh
 ```
 
 ### Download pre-trained models
 
-To use image-conditioned 3D generation, you need to download some pretrained checkpoints manually:
-* [Zero-1-to-3](https://github.com/cvlab-columbia/zero123) for diffusion backend.
-    We use `zero123-xl.ckpt` by default, and it is hard-coded in `guidance/zero123_utils.py`.
+* [Zero-1-to-3](https://github.com/cvlab-columbia/zero123) for 3D diffusion prior.
+    We use `105000.ckpt` by default, reimplementation borrowed from Stable Diffusion repo, and is available in `guidance/zero123_utils.py`.
     ```bash
     cd pretrained/zero123
-    wget https://zero123.cs.columbia.edu/assets/zero123-xl.ckpt
+    wget https://huggingface.co/cvlab/zero123-weights/resolve/main/105000.ckpt
+    cd .../../
     ```
-* [Omnidata](https://github.com/EPFL-VILAB/omnidata/tree/main/omnidata_tools/torch) for depth and normal prediction.
-    These ckpts are hardcoded in `preprocess_image.py`.
+
+* [MiDaS](https://github.com/isl-org/MiDaS) for depth estimation.
+    We use `dpt_beit_large_512.pt`. Put it in folder `pretrained/midas/`
     ```bash
-    mkdir pretrained/omnidata
-    cd pretrained/omnidata
-    # assume gdown is installed
-    gdown '1Jrh-bRnJEjyMCS7f-WsaFlccfPjJPPHI&confirm=t' # omnidata_dpt_depth_v2.ckpt
-    gdown '1wNxVO4vVbDEMEpnAi_jwQObf2MFodcBR&confirm=t' # omnidata_dpt_normal_v2.ckpt
+    mkdir -p pretrained/midas
+    cd pretrained/midas
+    wget https://github.com/isl-org/MiDaS/releases/download/v3_1/dpt_beit_large_512.pt
+    cd ../../
     ```
-
-To use [DeepFloyd-IF](https://github.com/deep-floyd/IF), you need to accept the usage conditions from [hugging face](https://huggingface.co/DeepFloyd/IF-I-XL-v1.0), and login with `huggingface-cli login` in command line.
-
-For DMTet, we port the pre-generated `32/64/128` resolution tetrahedron grids under `tets`.
-The 256 resolution one can be found [here](https://drive.google.com/file/d/1lgvEKNdsbW5RS4gVxJbgBS4Ac92moGSa/view?usp=sharing).
-
-### Build extension (optional)
-By default, we use [`load`](https://pytorch.org/docs/stable/cpp_extension.html#torch.utils.cpp_extension.load) to build the extension at runtime.
-We also provide the `setup.py` to build each extension:
-```bash
-cd stable-dreamfusion
-
-# install all extension modules
-bash scripts/install_ext.sh
-
-# if you want to install manually, here is an example:
-pip install ./raymarching # install to python path (you still need the raymarching/ folder, since this only installs the built extension.)
-```
-
-### Taichi backend (optional)
-Use [Taichi](https://github.com/taichi-dev/taichi) backend for Instant-NGP. It achieves comparable performance to CUDA implementation while **No CUDA** build is required. Install Taichi with pip:
-```bash
-pip install -i https://pypi.taichi.graphics/simple/ taichi-nightly
-```
-
-### Trouble Shooting:
-* we assume working with the latest version of all dependencies, if you meet any problems from a specific dependency, please try to upgrade it first (e.g., `pip install -U diffusers`). If the problem still holds, [reporting a bug issue](https://github.com/ashawkey/stable-dreamfusion/issues/new?assignees=&labels=bug&template=bug_report.yaml&title=%3Ctitle%3E) will be appreciated!
-* `[F glutil.cpp:338] eglInitialize() failed Aborted (core dumped)`: this usually indicates problems in OpenGL installation. Try to re-install Nvidia driver, or use nvidia-docker as suggested in https://github.com/ashawkey/stable-dreamfusion/issues/131 if you are using a headless server.
-* `TypeError: xxx_forward(): incompatible function arguments`： this happens when we update the CUDA source and you used `setup.py` to install the extensions earlier. Try to re-install the corresponding extension (e.g., `pip install ./gridencoder`).
-
-### Tested environments
-* Ubuntu 22 with torch 1.12 & CUDA 11.6 on a V100.
 
 # Usage
+## Preprocess [Optional]
+We have included all preprocessed files in `./data` directory. Preprocessing is only necessary if you want to test on your own examples. 
 
-First time running will take some time to compile the CUDA extensions.
-
-```bash
-#### stable-dreamfusion setting
-
-### Instant-NGP NeRF Backbone
-# + faster rendering speed
-# + less GPU memory (~16G)
-# - need to build CUDA extensions (a CUDA-free Taichi backend is available)
-
-## train with text prompt (with the default settings)
-# `-O` equals `--cuda_ray --fp16`
-# `--cuda_ray` enables instant-ngp-like occupancy grid based acceleration.
-python main.py --text "a hamburger" --workspace trial -O
-
-# reduce stable-diffusion memory usage with `--vram_O`
-# enable various vram savings (https://huggingface.co/docs/diffusers/optimization/fp16).
-python main.py --text "a hamburger" --workspace trial -O --vram_O
-
-# You can collect arguments in a file. You can override arguments by specifying them after `--file`. Note that quoted strings can't be loaded from .args files...
-python main.py --file scripts/res64.args --workspace trial_awesome_hamburger --text "a photo of an awesome hamburger"
-
-# use CUDA-free Taichi backend with `--backbone grid_taichi`
-python3 main.py --text "a hamburger" --workspace trial -O --backbone grid_taichi
-
-# choose stable-diffusion version (support 1.5, 2.0 and 2.1, default is 2.1 now)
-python main.py --text "a hamburger" --workspace trial -O --sd_version 1.5
-
-# use a custom stable-diffusion checkpoint from hugging face:
-python main.py --text "a hamburger" --workspace trial -O --hf_key andite/anything-v4.0
-
-# use DeepFloyd-IF for guidance (experimental):
-python main.py --text "a hamburger" --workspace trial -O --IF
-python main.py --text "a hamburger" --workspace trial -O --IF --vram_O # requires ~24G GPU memory
-
-# we also support negative text prompt now:
-python main.py --text "a rose" --negative "red" --workspace trial -O
-
-## after the training is finished:
-# test (exporting 360 degree video)
-python main.py --workspace trial -O --test
-# also save a mesh (with obj, mtl, and png texture)
-python main.py --workspace trial -O --test --save_mesh
-# test with a GUI (free view control!)
-python main.py --workspace trial -O --test --gui
-
-### Vanilla NeRF backbone
-# + pure pytorch, no need to build extensions!
-# - slow rendering speed
-# - more GPU memory
-
-## train
-# `-O2` equals `--backbone vanilla`
-python main.py --text "a hotdog" --workspace trial2 -O2
-
-# if CUDA OOM, try to reduce NeRF sampling steps (--num_steps and --upsample_steps)
-python main.py --text "a hotdog" --workspace trial2 -O2 --num_steps 64 --upsample_steps 0
-
-## test
-python main.py --workspace trial2 -O2 --test
-python main.py --workspace trial2 -O2 --test --save_mesh
-python main.py --workspace trial2 -O2 --test --gui # not recommended, FPS will be low.
-
-### DMTet finetuning
-
-## use --dmtet and --init_with <nerf checkpoint> to finetune the mesh at higher reslution
-python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --init_with trial/checkpoints/df.pth
-
-## init dmtet with a mesh to generate texture
-# require install of cubvh: pip install git+https://github.com/ashawkey/cubvh
-# remove --lock_geo to also finetune geometry, but performance may be bad.
-python main.py -O --text "a white bunny with red eyes" --workspace trial_dmtet_mesh --dmtet --iters 5000 --init_with ./data/bunny.obj --lock_geo
-
-## test & export the mesh
-python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --test --save_mesh
-
-## gui to visualize dmtet
-python main.py -O --text "a hamburger" --workspace trial_dmtet --dmtet --iters 5000 --test --gui
-
-### Image-conditioned 3D Generation
-
-## preprocess input image
-# note: the results of image-to-3D is dependent on zero-1-to-3's capability. For best performance, the input image should contain a single front-facing object, it should have square aspect ratio, with <1024 pixel resolution. Check the examples under ./data.
-# this will exports `<image>_rgba.png`, `<image>_depth.png`, and `<image>_normal.png` to the directory containing the input image.
-python preprocess_image.py <image>.png
-python preprocess_image.py <image>.png --border_ratio 0.4 # increase border_ratio if the center object appears too large and results are unsatisfying.
-
-## zero123 train
-# pass in the processed <image>_rgba.png by --image and do NOT pass in --text to enable zero-1-to-3 backend.
-python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000
-
-# if the image is not exactly front-view (elevation = 0), adjust default_polar (we use polar from 0 to 180 to represent elevation from 90 to -90)
-python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --default_polar 80
-
-# by default we leverage monocular depth estimation to aid image-to-3d, but if you find the depth estimation inaccurate and harms results, turn it off by:
-python main.py -O --image <image>_rgba.png --workspace trial_image --iters 5000 --lambda_depth 0
-
-python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --init_with trial_image/checkpoints/df.pth
-
-## zero123 with multiple images
-python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000
-
-## render <num> images per batch (default 1)
-python main.py -O --image_config config/<config>.csv --workspace trial_image --iters 5000 --batch_size 4
-
-# providing both --text and --image enables stable-diffusion backend (similar to make-it-3d)
-python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text --iters 5000
-
-python main.py -O --image hamburger_rgba.png --text "a DSLR photo of a delicious hamburger" --workspace trial_image_text_dmtet --dmtet --init_with trial_image_text/checkpoints/df.pth
-
-## test / visualize
-python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --save_mesh
-python main.py -O --image <image>_rgba.png --workspace trial_image_dmtet --dmtet --test --gui
-
-### Debugging
-
-# Can save guidance images for debugging purposes. These get saved in trial_hamburger/guidance.
-# Warning: this slows down training considerably and consumes lots of disk space!
-python main.py --text "a hamburger" --workspace trial_hamburger -O --vram_O --save_guidance --save_guidance_interval 5 # save every 5 steps
+### Step1: Extract depth 
+```
+python preprocess_image.py --path /path/to/image 
 ```
 
-For example commands, check [`scripts`](./scripts).
 
-For advanced tips and other developing stuff, check [Advanced Tips](./assets/advanced.md).
+### Step 2: Textural inversion [Optional]
+Magic123 uses the defualt [textural inversion](https://huggingface.co/docs/diffusers/training/text_inversion) from diffuers, which consumes around 2.5 hours on a 32G V100. If you do not want to spend time in this textural inversion, you can: (1) study whether there is other faster textural inversion; or (2) do not use textural inversion in the loss of texture and shape consistencies.  To run textural inversion: 
 
-# Evalutation
-
-Reproduce the paper CLIP R-precision evaluation
-
-After the testing part in the usage, the validation set containing projection from different angle is generated. Test the R-precision between prompt and the image.(R=1)
-
-```bash
-python r_precision.py --text "a snake is flying in the sky" --workspace snake_HQ --latest ep0100 --mode depth --clip clip-ViT-B-16
 ```
+bash scripts/texural_inversion/textural_inversion.sh $GPU_IDX runwayml/stable-diffusion-v1-5 /path/to/example/rgba.png /path/to/save $token_name $init_token --max_train_steps 5000
+```
+$token_name is a the special token, usually name that by _examplename_
+$init_token is a single token to describe the image using natural language
+
+For example:
+```bash
+bash scripts/texural_inversion/textural_inversion.sh runwayml/stable-diffusion-v1-5 data/demo/ironman/rgba.png out/textual_inversion/ironman _ironman_ ironman --max_train_steps 3000
+```
+Don't forget to move the final `learned_embeds.bin` under data/demo/ironman/
+
+
+## Run 
+### Run Magic123 for a single example
+Takes ~40 mins for the coarse stage and ~20 mins for the second stage on a 32G V100. 
+```bash
+bash scripts/magic123/run_both_priors.sh $GPU_NO $JOBNAME_First_Stage $JOBNAME_Second_Stage $PATH_to_Example_Directory $IMAGE_BASE_NAME $Enable_First_Stage $Enable_Second_Stage {More_Arugments}
+```
+
+As an example, run Magic123 in the dragon example using both stages in GPU 0 and set the jobname for the first stage as `default` and the jobname for the second stage as `dmtet`, by the following command:
+```bash
+bash scripts/magic123/run_both_priors.sh 0 default dmtet data/realfusion15/metal_dragon_statue rgba.png 1 1 
+```
+
+More arguments (e.g. `--lambda_guidance 1 40`) can be appended to the command line such as:
+```bash
+bash scripts/magic123/run_both_priors.sh 0 default dmtet data/realfusion15/metal_dragon_statue rgba.png 1 1 --lambda_guidance 1 40
+```
+
+### Run Magic123 for a group of examples
+- Run all examples in a folder, check the scripts `scripts/magic123/run_folder_both_priors.sh`  
+- Run all examples in a given list, check the scripts `scripts/magic123/run_list_both_priors.sh` 
+
+
+### Run Magic123 on a single example without textural inversion
+Textural inversion is tedious (requires ~2.5 hours optimization), if you want to test Magic123 quickly on your own example without texural inversion (might degrade the performance), try the following:
+
+- first, foreground and depth estimation
+    ```
+    python preprocess_image.py --path data/demo/ironman/ironman.png
+    ```
+
+- Run Magic123 coarse stage without textural inversion, takes ~40 mins
+    ```
+    export RUN_ID='default-a-full-body-ironman'
+    export DATA_DIR='data/demo/ironman'
+    export IMAGE_NAME='rgba.png'
+    export FILENAME=$(basename $DATA_DIR)
+    export dataset=$(basename $(dirname $DATA_DIR))
+    CUDA_VISIBLE_DEVICES=0 python main.py -O \
+    --text "A high-resolution DSLR image of a full body ironman" \
+    --sd_version 1.5 \
+    --image ${DATA_DIR}/${IMAGE_NAME} \
+    --workspace out/magic123-${RUN_ID}-coarse/$dataset/magic123_${FILENAME}_${RUN_ID}_coarse \
+    --optim adam \
+    --iters 5000 \
+    --guidance SD zero123 \
+    --lambda_guidance 1.0 40 \
+    --guidance_scale 100 5 \
+    --latent_iter_ratio 0 \
+    --normal_iter_ratio 0.2 \
+    --t_range 0.2 0.6 \
+    --bg_radius -1 \
+    --save_mesh
+    ```
+
+- Run Magic123 fine stage without textural inversion, takes around ~20 mins 
+    ```
+    export RUN_ID='default-a-full-body-ironman'
+    export RUN_ID2='dmtet'
+    export DATA_DIR='data/demo/ironman'
+    export IMAGE_NAME='rgba.png'
+    export FILENAME=$(basename $DATA_DIR)
+    export dataset=$(basename $(dirname $DATA_DIR))
+    CUDA_VISIBLE_DEVICES=0 python main.py -O \
+    --text "A high-resolution DSLR image of a full body ironman" \
+    --sd_version 1.5 \
+    --image ${DATA_DIR}/${IMAGE_NAME} \
+    --workspace out/magic123-${RUN_ID}-${RUN_ID2}/$dataset/magic123_${FILENAME}_${RUN_ID}_${RUN_ID2} \
+    --dmtet --init_ckpt out/magic123-${RUN_ID}-coarse/$dataset/magic123_${FILENAME}_${RUN_ID}_coarse/checkpoints/magic123_${FILENAME}_${RUN_ID}_coarse.pth \
+    --iters 5000 \
+    --optim adam \
+    --known_view_interval 4 \
+    --latent_iter_ratio 0 \
+    --guidance SD zero123 \
+    --lambda_guidance 1e-3 0.01 \
+    --guidance_scale 100 5 \
+    --rm_edge \
+    --bg_radius -1 \
+    --save_mesh 
+    ```
+
+### Run ablation studies
+- Run Magic123 with only 2D prior *with* textural inversion (Like RealFusion but we achieve much better performance through training stragies and the coarse-to-fine pipeline)
+    ```
+    bash scripts/magic123/run_2dprior.sh 0 default dmtet data/realfusion15/metal_dragon_statue rgba.png 1 1
+    ```
+
+- Run Magic123 with only 2D prior *without* textural inversion (Like RealFusion but we achieve much better performance through training stragies and the coarse-to-fine pipeline)
+    ```
+    bash scripts/magic123/run_2dprior_notextinv_ironman.sh 0 default 1 1
+    ```
+    note: change the path and the text prompt inside the script if you wana test another example. 
+
+- Run Magic123 with only 3D prior (Like Zero-1-to-3 but we achieve much better performance through training stragies and the coarse-to-fine pipeline)
+    ```
+    bash scripts/magic123/run_3dprior.sh 0 default dmtet data/demo/ironman rgba.png 1 1
+    ```
+
+
+# Tips and Tricks
+1. Fix camera distance (*radius_range*) and FOV (*fovy_range*) and tune the camera polar range (*theta_range*). Note it is better to keep camera jittering to reduce grid artifacts. 
+2. Smaller range of time steps for the defusion noise (t_range). We find *[0.2, 0.6]* gives better performance for image-to-3D tasks. 
+3. Using normals as latent in the first 2000 improves generated geometry a bit gernerally (but not always). We turn on this for Magic123 corase stage in the script `--normal_iter_ratio 0.2` 
+4. We erode segmentation edges (makes the segmentation map 2 pixels shrinked towards internal side) to remove artifacts due to segmentation erros. This is turned on in the fine stage in magic123 in the script through `--rm_edge`
+5. Other general tricks such as improved texural inversion, advanced diffusion prior (DeepFloyd, SD-XL), stronger 3D prior (Zero123-XL), and larger batch size can be adopted as well but not studied in this work.
+6. textural inversion is not very necessary for well-known things (e.g. ironman) and easily described textures and geoemtries, since pure texts contains these texture information and will be understood by diffusion models. We use textural inversion by default in all experiments.
 
 # Acknowledgement
+This work is build upon Stable DreamFusion, many thanks to the author [Kiui Jiaxiang Tang](https://github.com/ashawkey) and many other contributors. 
 
-This work is based on an increasing list of amazing research works and open-source projects, thanks a lot to all the authors for sharing!
+* [Stable DreamFusion](https://github.com/ashawkey/stable-dreamfusion)
+
+```
+@misc{stable-dreamfusion,
+    Author = {Jiaxiang Tang},
+    Year = {2022},
+    Note = {https://github.com/ashawkey/stable-dreamfusion},
+    Title = {Stable-dreamfusion: Text-to-3D with Stable-diffusion}
+}
+```
+
+
+We also get inspirations from a list of amazing research works and open-source projects, thanks a lot to all the authors for sharing!
 
 * [DreamFusion: Text-to-3D using 2D Diffusion](https://dreamfusion3d.github.io/)
     ```
@@ -273,17 +241,7 @@ This work is based on an increasing list of amazing research works and open-sour
         primaryClass={cs.CV}
     }
     ```
-    
-* [Perp-Neg: Re-imagine the Negative Prompt Algorithm: Transform 2D Diffusion into 3D, alleviate Janus problem and Beyond](https://perp-neg.github.io/)
-    ```
-    @article{armandpour2023re,
-      title={Re-imagine the Negative Prompt Algorithm: Transform 2D Diffusion into 3D, alleviate Janus problem and Beyond},
-      author={Armandpour, Mohammadreza and Zheng, Huangjie and Sadeghian, Ali and Sadeghian, Amir and Zhou, Mingyuan},
-      journal={arXiv preprint arXiv:2304.04968},
-      year={2023}
-    }
-    ```
-    
+
 * [RealFusion: 360° Reconstruction of Any Object from a Single Image](https://github.com/lukemelas/realfusion)
     ```
     @inproceedings{melaskyriazi2023realfusion,
@@ -295,20 +253,10 @@ This work is based on an increasing list of amazing research works and open-sour
     }
     ```
 
-* [Fantasia3D: Disentangling Geometry and Appearance for High-quality Text-to-3D Content Creation](https://fantasia3d.github.io/)
+* [Make-it-3d: High-fidelity 3d creation from a single image with diffusion prior](https://arxiv.org/abs/2303.14184)
     ```
-    @article{chen2023fantasia3d,
-        title={Fantasia3D: Disentangling Geometry and Appearance for High-quality Text-to-3D Content Creation},
-        author={Rui Chen and Yongwei Chen and Ningxin Jiao and Kui Jia},
-        journal={arXiv preprint arXiv:2303.13873},
-        year={2023}
-    }
-    ```
-
-* [Make-It-3D: High-Fidelity 3D Creation from A Single Image with Diffusion Prior](https://make-it-3d.github.io/)
-    ```
-    @article{tang2023make,
-        title={Make-It-3D: High-Fidelity 3D Creation from A Single Image with Diffusion Prior},
+    @article{tang2023make-it-3d,
+        title={Make-it-3d: High-fidelity 3d creation from a single image with diffusion prior},
         author={Tang, Junshu and Wang, Tengfei and Zhang, Bo and Zhang, Ting and Yi, Ran and Ma, Lizhuang and Chen, Dong},
         journal={arXiv preprint arXiv:2303.14184},
         year={2023}
@@ -337,20 +285,15 @@ This work is based on an increasing list of amazing research works and open-sour
     }
     ```
 
-* The GUI is developed with [DearPyGui](https://github.com/hoffstadt/DearPyGui).
 
-* Puppy image from : https://www.pexels.com/photo/high-angle-photo-of-a-corgi-looking-upwards-2664417/
-
-* Anya images from : https://www.goodsmile.info/en/product/13301/POP+UP+PARADE+Anya+Forger.html
-
-# Citation
-
+# Cite
 If you find this work useful, a citation will be appreciated via:
 ```
-@misc{stable-dreamfusion,
-    Author = {Jiaxiang Tang},
-    Year = {2022},
-    Note = {https://github.com/ashawkey/stable-dreamfusion},
-    Title = {Stable-dreamfusion: Text-to-3D with Stable-diffusion}
+@article{qian2023magic123,
+  title={Magic123: One Image to High-Quality 3D Object Generation Using Both 2D and 3D Diffusion Priors},
+  author={Qian, Guocheng and Mai, Jinjie and Hamdi, Abdullah and Ren, Jian and Siarohin, Aliaksandr and Li, Bing and Lee, Hsin-Ying and Skorokhodov, Ivan and Wonka, Peter and Tulyakov, Sergey and others},
+  journal={arXiv preprint arXiv:2306.17843},
+  year={2023}
 }
 ```
+

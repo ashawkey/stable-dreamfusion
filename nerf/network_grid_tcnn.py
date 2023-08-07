@@ -171,7 +171,7 @@ class NeRFNetwork(NeRFRenderer):
         if self.opt.bg_radius > 0:
             params.append({'params': self.bg_net.parameters(), 'lr': lr})
         
-        if self.opt.dmtet and not self.opt.lock_geo:
+        if self.opt.dmtet:
             params.append({'params': self.sdf, 'lr': lr})
             params.append({'params': self.deform, 'lr': lr})
 

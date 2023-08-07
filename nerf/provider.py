@@ -1,13 +1,7 @@
-import os
-import cv2
-import glob
-import json
-import tqdm
 import random
 import numpy as np
 from scipy.spatial.transform import Slerp, Rotation
 
-import trimesh
 
 import torch
 import torch.nn.functional as F
@@ -26,7 +20,7 @@ DIR_COLORS = np.array([
 
 def visualize_poses(poses, dirs, size=0.1):
     # poses: [B, 4, 4], dirs: [B]
-
+    import trimesh
     axes = trimesh.creation.axis(axis_length=4)
     sphere = trimesh.creation.icosphere(radius=1)
     objects = [axes, sphere]
@@ -50,13 +44,13 @@ def visualize_poses(poses, dirs, size=0.1):
     trimesh.Scene(objects).show()
 
 def get_view_direction(thetas, phis, overhead, front):
-    #                   phis: [B,];          thetas: [B,]
-    # front = 0             [-front/2, front/2)
-    # side (cam left) = 1   [front/2, 180-front/2)
-    # back = 2              [180-front/2, 180+front/2)
-    # side (cam right) = 3  [180+front/2, 360-front/2)
-    # top = 4               [0, overhead]
-    # bottom = 5            [180-overhead, 180]
+    #                   phis [B,];          thetas: [B,]
+    # front = 0         [0, front)
+    # side (right) = 1   [front, 180)
+    # back = 2          [180, 180+front)
+    # side (left) = 3  [180+front, 360)
+    # top = 4                               [0, overhead]
+    # bottom = 5                            [180-overhead, 180]
     res = torch.zeros(thetas.shape[0], dtype=torch.long)
     # first determine by phis
     phis = phis % (2 * np.pi)
@@ -92,9 +86,9 @@ def rand_poses(size, device, opt, radius_range=[1, 1.5], theta_range=[0, 120], p
     if random.random() < uniform_sphere_rate:
         unit_centers = F.normalize(
             torch.stack([
-                torch.randn(size, device=device),
-                torch.abs(torch.randn(size, device=device)),
-                torch.randn(size, device=device),
+                (torch.rand(size, device=device) - 0.5) * 2.0,
+                torch.rand(size, device=device),
+                (torch.rand(size, device=device) - 0.5) * 2.0,
             ], dim=-1), p=2, dim=1
         )
         thetas = torch.acos(unit_centers[:,1])
@@ -155,7 +149,7 @@ def circle_poses(device, radius=torch.tensor([3.2]), theta=torch.tensor([60]), p
     phi = phi / 180 * np.pi
     angle_overhead = angle_overhead / 180 * np.pi
     angle_front = angle_front / 180 * np.pi
-
+    
     centers = torch.stack([
         radius * torch.sin(theta) * torch.sin(phi),
         radius * torch.cos(theta),
@@ -258,8 +252,8 @@ class NeRFDataset:
 
         elif self.type == 'six_views':
             # six views
-            thetas_six = [90, 90,  90,  90, 1e-3, 179.999]
-            phis_six =   [ 0, 90, 180, -90,    0,       0]
+            thetas_six = [90]*4 + [1e-6] + [180]
+            phis_six = [0, 90, 180, -90, 0, 0]
             thetas = torch.FloatTensor([thetas_six[index[0]]]).to(self.device)
             phis = torch.FloatTensor([phis_six[index[0]]]).to(self.device)
             radius = torch.FloatTensor([self.opt.default_radius]).to(self.device)
@@ -318,3 +312,18 @@ class NeRFDataset:
         loader = DataLoader(list(range(self.size)), batch_size=batch_size, collate_fn=self.collate, shuffle=self.training, num_workers=0)
         loader._data = self
         return loader
+
+
+def generate_grid_points(resolution=128, device='cuda'):
+    # resolution: number of points along each dimension
+    # Generate the grid points
+    x = torch.linspace(0, 1, resolution)
+    y = torch.linspace(0, 1, resolution)
+    z = torch.linspace(0, 1, resolution)
+    # Create the meshgrid
+    grid_x, grid_y, grid_z = torch.meshgrid(x, y, z)
+
+    # Flatten the grid points if needed
+    grid_points = torch.stack((grid_x.flatten(), grid_y.flatten(), grid_z.flatten()), dim=1).to(device)
+    return grid_points
+

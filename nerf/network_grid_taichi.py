@@ -9,6 +9,8 @@ import numpy as np
 from encoding import get_encoder
 
 from .utils import safe_normalize
+from tqdm import tqdm 
+
 
 class MLP(nn.Module):
     def __init__(self, dim_in, dim_out, dim_hidden, num_layers, bias=True):
@@ -30,7 +32,15 @@ class MLP(nn.Module):
             if l != self.num_layers - 1:
                 x = F.relu(x, inplace=True)
         return x
-
+    
+    def reset_parameters(self):
+        @torch.no_grad()
+        def weight_init(m):
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('relu'))
+                nn.init.zeros_(m.bias)
+        self.apply(weight_init)
+     
 
 class NeRFNetwork(NeRFRenderer):
     def __init__(self, 
@@ -42,16 +52,17 @@ class NeRFNetwork(NeRFRenderer):
                  ):
         
         super().__init__(opt)
-
-        self.num_layers = num_layers
-        self.hidden_dim = hidden_dim
+        self.num_layers = opt.num_layers if hasattr(opt, 'num_layers') else num_layers
+        self.hidden_dim = opt.hidden_dim if hasattr(opt, 'hidden_dim') else hidden_dim
+        num_layers_bg = opt.num_layers_bg if hasattr(opt, 'num_layers_bg') else num_layers_bg
+        hidden_dim_bg = opt.hidden_dim_bg if hasattr(opt, 'hidden_dim_bg') else hidden_dim_bg
 
         self.encoder, self.in_dim = get_encoder('hashgrid_taichi', input_dim=3, log2_hashmap_size=19, desired_resolution=2048 * self.bound, interpolation='smoothstep')
 
         self.sigma_net = MLP(self.in_dim, 4, hidden_dim, num_layers, bias=True)
         # self.normal_net = MLP(self.in_dim, 3, hidden_dim, num_layers, bias=True)
 
-        self.density_activation = trunc_exp if self.opt.density_activation == 'exp' else F.softplus
+        self.grid_levels_mask = 0 
 
         # background network
         if self.opt.bg_radius > 0:
@@ -67,38 +78,20 @@ class NeRFNetwork(NeRFRenderer):
     def common_forward(self, x):
 
         # sigma
-        enc = self.encoder(x, bound=self.bound)
+        h = self.encoder(x, bound=self.bound)
+        
+        # Feature masking for coarse-to-fine training
+        if self.grid_levels_mask > 0:
+            h_mask: torch.Tensor = torch.arange(self.in_dim, device=h.device) < self.in_dim - self.grid_levels_mask * self.level_dim  # (self.in_dim)
+            h_mask = h_mask.reshape(1, self.in_dim).float()  # (1, self.in_dim)
+            h = h * h_mask  # (N, self.in_dim)
 
-        h = self.sigma_net(enc)
+        h = self.sigma_net(h)
 
         sigma = self.density_activation(h[..., 0] + self.density_blob(x))
         albedo = torch.sigmoid(h[..., 1:])
 
         return sigma, albedo
-    
-    # ref: https://github.com/zhaofuq/Instant-NSR/blob/main/nerf/network_sdf.py#L192
-    def finite_difference_normal(self, x, epsilon=1e-2):
-        # x: [N, 3]
-        dx_pos, _ = self.common_forward((x + torch.tensor([[epsilon, 0.00, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
-        dx_neg, _ = self.common_forward((x + torch.tensor([[-epsilon, 0.00, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
-        dy_pos, _ = self.common_forward((x + torch.tensor([[0.00, epsilon, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
-        dy_neg, _ = self.common_forward((x + torch.tensor([[0.00, -epsilon, 0.00]], device=x.device)).clamp(-self.bound, self.bound))
-        dz_pos, _ = self.common_forward((x + torch.tensor([[0.00, 0.00, epsilon]], device=x.device)).clamp(-self.bound, self.bound))
-        dz_neg, _ = self.common_forward((x + torch.tensor([[0.00, 0.00, -epsilon]], device=x.device)).clamp(-self.bound, self.bound))
-        
-        normal = torch.stack([
-            0.5 * (dx_pos - dx_neg) / epsilon, 
-            0.5 * (dy_pos - dy_neg) / epsilon, 
-            0.5 * (dz_pos - dz_neg) / epsilon
-        ], dim=-1)
-
-        return -normal
-    
-    def normal(self, x):
-        normal = self.finite_difference_normal(x)
-        normal = safe_normalize(normal)
-        normal = torch.nan_to_num(normal)
-        return normal
     
     def forward(self, x, d, l=None, ratio=1, shading='albedo'):
         # x: [N, 3], in [-bound, bound]
@@ -113,7 +106,6 @@ class NeRFNetwork(NeRFRenderer):
             color = albedo
         
         else: # lambertian shading
-            # normal = self.normal_net(enc)
             normal = self.normal(x)
 
             lambertian = ratio + (1 - ratio) * (normal * l).sum(-1).clamp(min=0) # [N,]
@@ -155,7 +147,7 @@ class NeRFNetwork(NeRFRenderer):
 
         params = [
             {'params': self.encoder.parameters(), 'lr': lr * 10},
-            {'params': self.sigma_net.parameters(), 'lr': lr},
+            {'params': self.sigma_net.parameters(), 'lr': lr * self.opt.lr_scale_nerf},
             # {'params': self.normal_net.parameters(), 'lr': lr},
         ]        
 
@@ -163,8 +155,7 @@ class NeRFNetwork(NeRFRenderer):
             # params.append({'params': self.encoder_bg.parameters(), 'lr': lr * 10})
             params.append({'params': self.bg_net.parameters(), 'lr': lr})
         
-        if self.opt.dmtet and not self.opt.lock_geo:
-            params.append({'params': self.sdf, 'lr': lr})
-            params.append({'params': self.deform, 'lr': lr})
+        if self.opt.dmtet:
+            params.append({'params': self.dmtet.parameters(), 'lr': lr})
 
         return params
