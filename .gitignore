@@ -39,5 +39,8 @@ data/futuristic_car_*
 data/church_ruins_*
 
 # rod
+temp
+workspaces/*
 data/amore_dog*
 data/green_bowl*
+torch_empty_cache.py

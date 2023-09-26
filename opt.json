@@ -86,7 +86,7 @@
         20,
         20
     ],
-    "default_radius": 3.2,
+    "default_radius": 3,
     "default_polar": 90,
     "default_azimuth": 0,
     "default_fovy": 20,
@@ -130,8 +130,8 @@
     "dataset_size_train": 100,
     "dataset_size_valid": 8,
     "dataset_size_test": 100,
-    "exp_start_iter": 0,
-    "exp_end_iter": 5000,
+    "exp_start_iter": null,
+    "exp_end_iter": null,
     "images": [],
     "ref_radii": [
         3.2

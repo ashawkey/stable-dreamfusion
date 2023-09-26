@@ -1,6 +1,8 @@
 # stable-dreamfusion-gui
 
-A gradio interface to better interact with the [Zero123](https://github.com/cvlab-columbia/zero123) component of [stable-dreamfusion](https://github.com/ashawkey/stable-dreamfusion).
+A gradio interface to use [stable-dreamfusion](https://github.com/ashawkey/stable-dreamfusion).
+
+Currently focusing on [Zero123](https://github.com/cvlab-columbia/zero123), will add support to other components later.
 
 # Install
 This installation guide assumes you are running this on a Windows machine.
