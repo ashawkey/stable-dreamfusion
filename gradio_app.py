@@ -1,241 +1,237 @@
-import os
-import gradio as gr
-import gradio_fn
+import gc
 import torch
+import os
+import json
+import gradio as gr
+import cv2
+import zipfile
 
-def delete_directory(path):
-    for root, dirs, files in os.walk(path, topdown=False):
-        for file in files:
-            file_path = os.path.join(root, file)
-            os.remove(file_path)
-        for dir in dirs:
-            dir_path = os.path.join(root, dir)
-            os.rmdir(dir_path)
 
-if __name__ == '__main__':
-    with gr.Blocks(title="zero123d reconstruction") as demo:
-        gr.Markdown(
-            """
-            # Image to 3D Model Generation
-            FYP by Rod Oh Zhi Hua.
-            """)
+# main
+
+def main():
+    # global variables used to parse variables between functions that are not users' direct input
+    global settings
+    global current_tab
+    global max_epoch
+
+    with gr.Blocks(title="zero123d reconstruction") as app:
+        # make temp directory
+        os.makedirs("temp", exist_ok=True)
         
-        with gr.Tab("show generated models"):
-            max_epoch = gr.Number(value=50, visible=False, precision=0) #50
-            dmtet = gr.Checkbox(value=False, visible=False)
-            with gr.Row():
-                image_output = gr.Image(height=512, width=512, interactive=False)
-            image_slider_input = gr.Slider(label="image (slide to change angle)", minimum=0, maximum=0, step=1)
-            workspaces = os.listdir("workspaces/")
-            workspace_input = gr.Dropdown(label="workspace name", choices=workspaces)
-            load_button = gr.Button(label="load")
-            file_output = gr.File(visible=False)
-            # events
-            image_slider_input.change(fn=gradio_fn.update_image_slider, inputs=[max_epoch, workspace_input, image_slider_input, dmtet], outputs=[image_output])
-            workspace_input.focus(fn=gradio_fn.update_workspaces_list, outputs=[workspace_input])
-            load_button.click(fn=gradio_fn.load_3d_model, inputs=[max_epoch, workspace_input], outputs=[max_epoch, image_output, image_slider_input, file_output])
+        # initialize global variables and configure gui based on loaded settings
+        settings = load_settings()
+        max_epoch = 0
+        current_tab = 3
+        if settings["info_tab_on_launch"]:
+            current_tab = 0
 
-        # with gr.Tab("preprocess image"):
-        #     with gr.Row():
-        #         image_input = gr.Image()
-        #         rgba_output = gr.Image()
-        #     with gr.Row():
-        #         depth_output = gr.Image()
-        #         normal_output = gr.Image()
-        #     generate_button = gr.Button(value="process")
-        #     generate_button.click(fn=gradio_fn.preprocess_images, inputs=image_input, outputs=[rgba_output, depth_output, normal_output])
+        with gr.Tabs(selected=current_tab) as tabs:
+            with gr.Tab(label="radius discovery", id=3) as radius_discovery_tab:
+                pass
             
-        with gr.Tab("generate novel views"):
-            with gr.Row():
-                image_input = gr.Image(height=512, width=512)
-                image_output = gr.Image(height=512, width=512)
-            image_slider = gr.Slider(label="image (slide to change angle)", minimum=1, maximum=1, step=1)
-            polar_input = gr.Number(label="polar", value=0.0) # 90.0
-            azimuth_input = gr.Number(label="azimuth", value=30.0) # 0.0
-            radius_input = gr.Number(label="radius", value=0.0) # 3.2
-            generate_button = gr.Button(value="generate")
-            generate_button.click(fn=gradio_fn.generate_novel_view, inputs=[image_input, polar_input, azimuth_input, radius_input], outputs=image_output)
+            with gr.Tab(label="six-view generation", id=4) as six_view_generation_tab:
+                pass
             
-        with gr.Tab("generate novel views (radius discovery)"):
-            with gr.Row():
-                image_input = gr.Image(height=512, width=512)
-                image_output1 = gr.Image(height=512, width=512)
-                image_output2 = gr.Image(height=512, width=512)
-            with gr.Row():
-                image_output3 = gr.Image(height=512, width=512)
-                image_output4 = gr.Image(height=512, width=512)
-                image_output5 = gr.Image(height=512, width=512)
-            with gr.Row():
-                image_output6 = gr.Image(height=512, width=512)
-                image_output7 = gr.Image(height=512, width=512)
-                image_output8 = gr.Image(height=512, width=512)
-            with gr.Row():
-                image_output9 = gr.Image(height=512, width=512)
-                image_output10 = gr.Image(height=512, width=512)
-                image_output11 = gr.Image(height=512, width=512)
-            image_slider = gr.Slider(label="image (slide to change angle)", minimum=1, maximum=1, step=1)
-            polar_input = gr.Number(label="polar", value=0.0) # 90.0
-            azimuth_input = gr.Number(label="azimuth", value=30.0) # 0.0
-            generate_button = gr.Button(value="generate")
-            generate_button.click(fn=gradio_fn.generate_novel_view_radii, 
-                                  inputs=[image_input, polar_input, azimuth_input], 
-                                  outputs=[image_output1, image_output2, image_output3, image_output4, image_output5, image_output6, image_output7, image_output8, image_output9, image_output10, image_output11])
+            with gr.Tab(label="model reconstruction", id=5) as model_reconstruction_tab:
+                pass
             
-        # with gr.Tab("generate 3d model"):
-        #     with gr.Row():
-        #         image_input = gr.Image(height=512, width=512)
-        #         image_output = gr.Image(height=512, width=512)
-        #     image_slider_input = gr.Slider(label="image (slide to change angle)", minimum=1, maximum=1, step=1)
-        #     with gr.Row():
-        #         workspace_input = gr.Textbox(label="workspace name", value="test") #trial_image
-        #         seed_input = gr.Number(label="seed", precision=0, value=None)
-        #     size_input = gr.Number(label="size (n^2, 64 really recommended.)", value=64, precision=0, step=1) #64
-        #     with gr.Row():
-        #         iters_input = gr.Number(label="iters (iterations)", value=5000, precision=0, step=1) #5000
-        #         lr_input = gr.Number(label="lr (learning rate)", value=1e-3) #1e-3
-        #         batch_size_input = gr.Number(label="batch_size", value=1, precision=0, step=1) #1
-        #     with gr.Row():
-        #         dataset_size_train_input = gr.Number(label="dataset_size_train", value=100, precision=0, step=1) #100
-        #         dataset_size_valid_input = gr.Number(label="dataset_size_valid", value=8, precision=0, step=1) #8
-        #         dataset_size_test_input = gr.Number(label="dataset_size_test", value=100, precision=0, step=1) #100
-        #     with gr.Accordion(label="advanced", open=False):
-        #         backbone_input = gr.Dropdown(label="backbone (NeRFNetwork)", choices=["grid", "vanilla", "grid_tcnn", "grid_taichi"], value="grid") #nVidia
-        #         optim_input = gr.Dropdown(label="optim (optimizer)", choices=["adan", "adam"], value="adan")
-        #         fp16_input = gr.Checkbox(label="fp16 (use float16 for training)", value=True)
-        #         max_epoch = gr.Number(value=50, visible=False, precision=0) #50
-        #         dmtet = gr.Checkbox(value=False, visible=False)
-        #     generate_button = gr.Button(value="generate")
-        #     file_output = gr.File(visible=False)
-        #     # events
-        #     image_slider_input.change(fn=gradio_fn.update_image_slider, inputs=[max_epoch, workspace_input, image_slider_input, dmtet], outputs=[image_output])
-        #     iters_input.input(fn=gradio_fn.update_max_epoch_calculate, inputs=[iters_input, dataset_size_train_input, batch_size_input], outputs=[max_epoch])
-        #     dataset_size_train_input.input(fn=gradio_fn.update_max_epoch_calculate, inputs=[iters_input, dataset_size_train_input, batch_size_input], outputs=[max_epoch])
-        #     batch_size_input.input(fn=gradio_fn.update_max_epoch_calculate, inputs=[iters_input, dataset_size_train_input, batch_size_input], outputs=[max_epoch])
-        #     generate_button.click(fn=gradio_fn.generate_3d_model, 
-        #                           inputs=[image_input, workspace_input, seed_input, size_input, iters_input, lr_input, batch_size_input, dataset_size_train_input, 
-        #                                   dataset_size_valid_input, dataset_size_test_input, backbone_input, optim_input, fp16_input, max_epoch], 
-        #                           outputs=[image_slider_input, file_output]) # the output is to update the maximum value of the image_slider which will trigger the "update_image_slider" event to load the image
+            with gr.Tab(label="model fine-tuning", id=6) as model_fine_tuning_tab:
+                pass
+            
+            with gr.Tab(label="project manager", id=2) as file_manager_tab:
+                gr.Markdown(
+                    """
+                    ### this tab is used to view and delete projects, simply select a project name to start.
+                    """
+                )
+                with gr.Row():
+                    model_viewer_output = gr.Image(label="model viewer", interactive=False)
+                    with gr.Column():
+                        model_viewer_slider_input = gr.Slider(minimum=0, maximum=0, label="slide to change viewpoint of model", step=1)
+                        project_name_input = gr.Dropdown(choices=os.listdir("workspaces/"), label="project name")
+                        delete_button = gr.Button(visible=False)
+                        file_output = gr.File(visible=False)
 
-        with gr.Tab("dmtet finetuning 3d model"):
-            with gr.Row():
-                image_output = gr.Image(height=512, width=512)
-            image_slider_input = gr.Slider(label="image (slide to change angle)", minimum=1, maximum=1, step=1)
-            with gr.Row():
-                workspace_input = gr.Dropdown(label="workspace name", choices=workspaces)
-                seed_input = gr.Number(label="seed", precision=0, value=None)
-            tet_grid_size_input = gr.Dropdown(label="tet_grid_size", choices=["32", "64", "128", "256"], value="128")
-            with gr.Row():
-                iters_input = gr.Number(label="iters (iterations)", value=10000, precision=0, step=1) #5000
-                lr_input = gr.Number(label="lr (learning rate)", value=1e-3) #1e-3
-            with gr.Accordion(label="advanced", open=False):
-                backbone_input = gr.Dropdown(label="backbone (NeRFNetwork)", choices=["grid", "vanilla", "grid_tcnn", "grid_taichi"], value="grid") #nVidia
-                optim_input = gr.Dropdown(label="optim (optimizer)", choices=["adan", "adam"], value="adan")
-                fp16_input = gr.Checkbox(label="fp16 (use float16 for training)", value=True)
-                max_epoch = gr.Number(value=50, visible=False, precision=0) #50
-                dmtet = gr.Checkbox(value=True, visible=False)
-            finetune_button = gr.Button(value="finetune")
-            file_output = gr.File(visible=False)
-            # events
-            image_slider_input.change(fn=gradio_fn.update_image_slider, inputs=[max_epoch, workspace_input, image_slider_input, dmtet], outputs=[image_output])
-            workspace_input.focus(fn=gradio_fn.update_workspaces_list, outputs=[workspace_input])
-            workspace_input.change(fn=gradio_fn.update_max_epoch_fetch, inputs=[workspace_input], outputs=[max_epoch])
-            workspace_input.change(fn=gradio_fn.update_iters_fetch, inputs=[workspace_input], outputs=[iters_input])
-            finetune_button.click(fn=gradio_fn.finetune_3d_model, 
-                                  inputs=[workspace_input, seed_input, tet_grid_size_input, iters_input, lr_input, backbone_input, optim_input, fp16_input, max_epoch], 
-                                  outputs=[image_slider_input, file_output]) # the output is to update the maximum value of the image_slider which will trigger the "update_image_slider" event to load the image
-            
-        with gr.Tab("dmtet finetuning 3d model (multi)"):
-            with gr.Row():
-                image_output = gr.Image(height=512, width=512)
-            image_slider_input = gr.Slider(label="image (slide to change angle)", minimum=1, maximum=1, step=1)
-            with gr.Row():
-                workspace_input = gr.Dropdown(label="workspace name", choices=workspaces)
-                seed_input = gr.Number(label="seed", precision=0, value=None)
-            tet_grid_size_input = gr.Dropdown(label="tet_grid_size", choices=["32", "64", "128", "256"], value="128")
-            with gr.Row():
-                iters_input = gr.Number(label="iters (iterations)", value=10000, precision=0, step=1) #5000
-                lr_input = gr.Number(label="lr (learning rate)", value=1e-3) #1e-3
-            with gr.Accordion(label="advanced", open=False):
-                backbone_input = gr.Dropdown(label="backbone (NeRFNetwork)", choices=["grid", "vanilla", "grid_tcnn", "grid_taichi"], value="grid") #nVidia
-                optim_input = gr.Dropdown(label="optim (optimizer)", choices=["adan", "adam"], value="adan")
-                fp16_input = gr.Checkbox(label="fp16 (use float16 for training)", value=True)
-                max_epoch = gr.Number(value=50, visible=False, precision=0) #50
-                dmtet = gr.Checkbox(value=True, visible=False)
-            finetune_button = gr.Button(value="finetune")
-            file_output = gr.File(visible=False)
-            # events
-            image_slider_input.change(fn=gradio_fn.update_image_slider, inputs=[max_epoch, workspace_input, image_slider_input, dmtet], outputs=[image_output])
-            workspace_input.focus(fn=gradio_fn.update_workspaces_list, outputs=[workspace_input])
-            workspace_input.change(fn=gradio_fn.update_max_epoch_fetch, inputs=[workspace_input], outputs=[max_epoch])
-            workspace_input.change(fn=gradio_fn.update_iters_fetch, inputs=[workspace_input], outputs=[iters_input])
-            finetune_button.click(fn=gradio_fn.finetune_3d_model_multi, 
-                                  inputs=[workspace_input, seed_input, tet_grid_size_input, iters_input, lr_input, backbone_input, optim_input, fp16_input, max_epoch], 
-                                  outputs=[image_slider_input, file_output]) # the output is to update the maximum value of the image_slider which will trigger the "update_image_slider" event to load the image
-
-        with gr.Tab("rod's workflow"):
-        #     with gr.Row():
-        #         dataset_size_train_input = gr.Number(label="dataset_size_train", value=100, precision=0, step=1) #100
-        #         dataset_size_valid_input = gr.Number(label="dataset_size_valid", value=8, precision=0, step=1) #8
-        #         dataset_size_test_input = gr.Number(label="dataset_size_test", value=100, precision=0, step=1) #100
-        #     with gr.Accordion(label="advanced", open=False):
-        #         backbone_input = gr.Dropdown(label="backbone (NeRFNetwork)", choices=["grid", "vanilla", "grid_tcnn", "grid_taichi"], value="grid") #nVidia
-        #         optim_input = gr.Dropdown(label="optim (optimizer)", choices=["adan", "adam"], value="adan")
-        #         fp16_input = gr.Checkbox(label="fp16 (use float16 for training)", value=True)
-        #         max_epoch = gr.Number(value=50, visible=False, precision=0) #50
-        #         dmtet = gr.Checkbox(value=False, visible=False)
-            
-            
-            image_input = gr.Image(height=512, width=512)
-            with gr.Row():
-                image_output_1 = gr.Image(height=512, width=512, visible=False)
-                image_output_2 = gr.Image(height=512, width=512, visible=False)
-                image_output_3 = gr.Image(height=512, width=512, visible=False)
-            with gr.Row():
-                image_output_4 = gr.Image(height=512, width=512, visible=False)
-                image_output_5 = gr.Image(height=512, width=512, visible=False)
-                image_output_6 = gr.Image(height=512, width=512, visible=False)
-            radius_input = gr.Number(label="radius", value=0.0) # 3.2
-            generate_novel_views_button = gr.Button(value="generate novel views")
-            model_output = gr.Image(height=512, width=512, visible=False)
-            image_slider_input = gr.Slider(label="image (slide to change angle)", minimum=1, maximum=1, step=1, visible=False)
-            with gr.Row():
-                workspace_input = gr.Textbox(label="workspace name", value="test", visible=False) #trial_image
-                seed_input = gr.Number(label="seed", precision=0, visible=False)
-            size_input = gr.Number(label="size (n^2, 64 really recommended.)", value=64, precision=0, step=1, visible=False) #64
-            with gr.Row():
-                iters_input = gr.Number(label="iters (iterations)", value=5000, precision=0, step=1, visible=False) #5000
-                lr_input = gr.Number(label="lr (learning rate)", value=1e-3, visible=False) #1e-3
-                batch_size_input = gr.Number(label="batch_size", value=1, precision=0, step=1, visible=False) #1
-            with gr.Row():
-                dataset_size_train_input = gr.Number(label="dataset_size_train", value=100, precision=0, step=1, visible=False) #100
-                dataset_size_valid_input = gr.Number(label="dataset_size_valid", value=8, precision=0, step=1, visible=False) #8
-                dataset_size_test_input = gr.Number(label="dataset_size_test", value=100, precision=0, step=1, visible=False) #100
-            with gr.Accordion(label="advanced", open=False):
-                backbone_input = gr.Dropdown(label="backbone (NeRFNetwork)", choices=["grid", "vanilla", "grid_tcnn", "grid_taichi"], value="grid", visible=False) #nVidia
-                optim_input = gr.Dropdown(label="optim (optimizer)", choices=["adan", "adam"], value="adan", visible=False)
-                fp16_input = gr.Checkbox(label="fp16 (use float16 for training)", value=True, visible=False)
-                max_epoch = gr.Number(value=50, visible=False, precision=0) #50
-                dmtet = gr.Checkbox(value=False, visible=False)
-            generate_3d_model_button = gr.Button(value="generate 3d model", visible=False)
-            # events
-            image_slider_input.change(fn=gradio_fn.update_image_slider, inputs=[max_epoch, workspace_input, image_slider_input, dmtet], outputs=[image_output])
-            workspace_input.focus(fn=gradio_fn.update_workspaces_list, outputs=[workspace_input])
-            workspace_input.change(fn=gradio_fn.update_max_epoch_fetch, inputs=[workspace_input], outputs=[max_epoch])
-            workspace_input.change(fn=gradio_fn.update_iters_fetch, inputs=[workspace_input], outputs=[iters_input])
-            generate_novel_views_button.click(fn=gradio_fn.generate_novel_view_multi, 
-                                              inputs=[image_input, radius_input], 
-                                              outputs=[workspace_input, seed_input, size_input, iters_input, lr_input, batch_size_input, dataset_size_train_input, 
-                                                       dataset_size_valid_input, dataset_size_test_input, backbone_input, optim_input, fp16_input, 
-                                                       generate_3d_model_button, image_output_1, image_output_2, image_output_3, image_output_4, image_output_5, image_output_6])
-            generate_3d_model_button.click(fn=gradio_fn.generate_3d_model_multi,
-                                           inputs=[image_output_1, image_output_2, image_output_3, image_output_4, image_output_5, image_output_6, radius_input,
-                                                   workspace_input, seed_input, size_input, iters_input, lr_input, batch_size_input, dataset_size_train_input, 
-                                                   dataset_size_valid_input, dataset_size_test_input, backbone_input, optim_input, fp16_input, max_epoch],
-                                           outputs=[model_output, image_slider_input, file_output])
+                    model_viewer_slider_input.change(fn=change_model_viewer_slider_event, 
+                                                    inputs=[project_name_input, model_viewer_slider_input], 
+                                                    outputs=[model_viewer_output])
+                    project_name_input.input(fn=load_project, 
+                                            inputs=[project_name_input], 
+                                            outputs=[model_viewer_output, model_viewer_slider_input, delete_button, file_output])
+                    delete_button.click(fn=delete_project,
+                                        inputs=[project_name_input],
+                                        outputs=[model_viewer_output, model_viewer_slider_input, project_name_input, delete_button, file_output])
+                
+            with gr.Tab(label="settings", id=1) as settings_tab:
+                info_tab_on_launch = gr.Checkbox(value=settings["info_tab_on_launch"], label="load up info tab on launch")
+                settings_tab_save_button = gr.Button(value="save settings", variant="primary")
+                
+                settings_tab_save_button.click(fn=save_settings,
+                                                inputs=[info_tab_on_launch])
+                    
+            with gr.Tab(label="info", id=0) as info_tab:
+                gr.Markdown(
+                    """
+                    # image to 3d model generation
+                    a final year project by oh zhi hua (rod) for nanyang technological university computer engineering program.
+                    
+                    ## Introduction
+                    This project provides a graphical user interface to generate 3D models from a single image by wrapping the stable-dreamfusion with gradio.
+                    
+                    As the quality of the 3D model depends largely on the quality of the image generated by stable-diffusion, any unsatisfactory image will ruin the end result.
+                    
+                    Therefore, the project also provide a way to generate novel viewpoints of the object in the input image, which is then fed into stable-dreamfusion for 3D reconstruction.
+                    
+                    To start, simply click the tab labeled "reconstruction" to start exploring.
+                    
+                    Have fun!
+                    
+                    ## Tabs
+                    rod's workflow ==> generate 3D models from a single image using rod's workflow
+                    
+                    file manager   ==> manage the existing projects, removing (deleting) unwanted projects, cleaning temp files
+                    
+                    settings       ==> settings page to configure the default values when starting the application
+                    
+                    ## Support
+                    If you need support, please submit an issue at "https://github.com/ghotinggoad/stable-dreamfusion-gui/issues"
+                    I will check if the bug is from my wrapper or from stable-dreamfusion!
+                    """)
+        
+        # navigation buttons and events for the main tasks
+        with gr.Row():
+            previous_tab_button = gr.Button(value="previous")
+            next_tab_button = gr.Button(value="next", variant="primary")
+        previous_tab_button.click(fn=previous_tab_button_event, outputs=[tabs, previous_tab_button, next_tab_button])
+        next_tab_button.click(fn=next_tab_button_event, outputs=[tabs, previous_tab_button, next_tab_button])
+        # these events are used to update current_tab when click since gradio doesn't support getting selected input
+        radius_discovery_tab.select(fn=lambda: globals().update(current_tab=3)).then(fn=update_current_tab_event, outputs=[previous_tab_button, next_tab_button])
+        six_view_generation_tab.select(fn=lambda: globals().update(current_tab=4)).then(fn=update_current_tab_event, outputs=[previous_tab_button, next_tab_button])
+        model_reconstruction_tab.select(fn=lambda: globals().update(current_tab=5)).then(fn=update_current_tab_event, outputs=[previous_tab_button, next_tab_button])
+        model_fine_tuning_tab.select(fn=lambda: globals().update(current_tab=6)).then(fn=update_current_tab_event, outputs=[previous_tab_button, next_tab_button])
+        file_manager_tab.select(fn=lambda: globals().update(current_tab=2)).then(fn=update_current_tab_event, outputs=[previous_tab_button, next_tab_button])
+        settings_tab.select(fn=lambda: globals().update(current_tab=1)).then(fn=update_current_tab_event, outputs=[previous_tab_button, next_tab_button])
+        info_tab.select(fn=lambda: globals().update(current_tab=0)).then(fn=update_current_tab_event, outputs=[previous_tab_button, next_tab_button])
     
-    demo.launch()
+    app.launch()
     
     # rmdir temp folder
-    delete_directory("temp/")
-    # clear gpu vram
+    delete_directory("temp")
+    # clear ram (including vram)
+    clear_memory()
+
+# functions used to interact with system
+
+def clear_memory():
+    # called after deleting the items in python
+    gc.collect()
     torch.cuda.empty_cache()
+
+def delete_directory(path):
+    try:
+        for root, dirs, files in os.walk(path, topdown=False):
+            for file in files:
+                file_path = os.path.join(root, file)
+                os.remove(file_path)
+            for dir in dirs:
+                dir_path = os.path.join(root, dir)
+                os.rmdir(dir_path)
+        os.rmdir(path)
+    except:
+        print("cannot delete the folder "+path)
+
+def load_settings():
+    try:
+        with open("settings.json", "r") as file:
+            data = json.load(file)
+        return data
+    except:
+        print("settings failed to load")
+
+def save_settings(info_tab_on_launch):
+    try:
+        with open("settings.json", "w") as file:
+            settings["info_tab_on_launch"] = info_tab_on_launch
+            json.dump(settings, file, indent=4)
+    except:
+        print("settings failed to save")
+
+def load_project(project_name):
+    global max_epoch
+
+    items = os.listdir("workspaces/"+project_name+"/results/")
+    if not items:
+        return gr.Slider.update(maximum=0, value=0)
+    for item in items:
+        index = str(item).find("df_ep")+5
+        if index > 0:
+            max_epoch = int(str(item)[index:index+4])
+            break
+    
+    os.makedirs("temp/"+project_name, exist_ok=True)
+    video = cv2.VideoCapture("workspaces/"+project_name+"/results/df_ep{:04d}_rgb.mp4".format(max_epoch))
+    image = video.read()[1]
+    
+    cv2.imwrite("temp/"+project_name+"/df_ep{:04d}_{:02d}_rgb.png".format(max_epoch, 0), image)
+    for i in range(1, 100):
+        temp = video.read()[1]
+        cv2.imwrite("temp/"+project_name+"/df_ep{:04d}_{:02d}_rgb.png".format(max_epoch, i), temp)
+    
+    image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
+    
+    with zipfile.ZipFile("temp/"+project_name+"/"+project_name+".zip", "w") as file:
+        file.write("workspaces/"+project_name+"/mesh/albedo.png", arcname="albedo.png")
+        file.write("workspaces/"+project_name+"/mesh/mesh.mtl", arcname="mesh.mtl")
+        file.write("workspaces/"+project_name+"/mesh/mesh.obj", arcname="mesh.obj")
+    
+    return image, gr.Slider(label="slide to change viewpoint of model", minimum=0, maximum=99, value=0, step=1), \
+           gr.Button(value="delete", visible=True, variant="stop"), gr.File(value="temp/"+project_name+"/"+project_name+".zip", label="download", visible=True)
+
+def delete_project(project_name):
+    # delete_directory("workspaces/"+project_name)
+    return gr.Image(value=None, interactive=False), gr.Slider(minimum=0, maximum=0, value=None, step=1, label="slide to change viewpoint of model"), \
+           gr.Dropdown(choices=os.listdir("workspaces/"), value=None, label="project name"), gr.Button(visible=False), gr.File(visible=False)
+                        
+
+# gradio event functions
+
+def previous_tab_button_event():
+    global current_tab
+    current_tab -= 1
+    if current_tab <= 3:
+        current_tab = 3
+        return gr.Tabs(selected=current_tab), gr.Button(value="previous", variant="secondary", visible=True), gr.Button(value="next", variant="primary", visible=True)
+    else:
+        return gr.Tabs(selected=current_tab), gr.Button(value="previous", variant="primary", visible=True), gr.Button(value="next", variant="primary", visible=True)
+
+def next_tab_button_event():
+    global current_tab
+    current_tab += 1
+    if current_tab >= 6:
+        current_tab = 6
+        return gr.Tabs(selected=current_tab), gr.Button(value="previous", variant="primary", visible=True), gr.Button(value="next", variant="secondary", visible=True)
+    else:
+        return gr.Tabs(selected=current_tab), gr.Button(value="previous", variant="primary", visible=True), gr.Button(value="next", variant="primary", visible=True)
+
+def update_current_tab_event():
+    global current_tab
+    if current_tab == 3:
+        return gr.Button(value="previous", variant="secondary", visible=True), gr.Button(value="next", variant="primary", visible=True)
+    elif current_tab == 6:
+        return gr.Button(value="previous", variant="primary", visible=True), gr.Button(value="next", variant="secondary", visible=True)
+    elif current_tab < 3:
+        return gr.Button(visible=False), gr.Button(visible=False)
+    else:
+        return gr.Button(value="previous", variant="primary", visible=True), gr.Button(value="next", variant="primary", visible=True)
+
+def change_model_viewer_slider_event(project_name, slider):
+    # updates the image based on the slider value, usually to select the "angle" (index of the image)
+    image = cv2.imread("temp/"+project_name+"/df_ep{:04d}_{:02d}_rgb.png".format(max_epoch, slider))
+    image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
+    return gr.Image(value=image, interactive=False)
+
+# zero123/stable-dreamfusion/cv functions
+
+if __name__ == "__main__":
+    main()
