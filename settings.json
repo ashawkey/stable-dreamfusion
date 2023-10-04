@@ -1,3 +1,6 @@
 {
-    "info_tab_on_launch": false
+    "info_tab_on_launch": false,
+    "backbone": "grid",
+    "optimizer": "adan",
+    "fp16": true
 }

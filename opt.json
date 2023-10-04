@@ -124,7 +124,7 @@
     "light_theta": 60,
     "light_phi": 0,
     "max_spp": 1,
-    "zero123_config": "./pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml",
+    "zero123_config": "pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml",
     "zero123_ckpt": "pretrained/zero123/zero123-xl.ckpt",
     "zero123_grad_scale": "angle",
     "dataset_size_train": 100,

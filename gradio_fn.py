@@ -205,7 +205,9 @@ def generate_novel_view(image, polar, azimuth, radius):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = zero123_utils.load_model_from_config(
         OmegaConf.load("pretrained/zero123/sd-objaverse-finetune-c_concat-256.yaml"),
-        "pretrained/zero123/zero123-xl.ckpt",
+        # "pretrained/zero123/105000.ckpt",
+        "pretrained/zero123/165000.ckpt",
+        # "pretrained/zero123/zero123-xl.ckpt",
         device)
     model.use_ema = False
     

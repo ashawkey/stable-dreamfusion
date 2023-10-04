@@ -163,54 +163,54 @@ if __name__ == '__main__':
                                   inputs=[workspace_input, seed_input, tet_grid_size_input, iters_input, lr_input, backbone_input, optim_input, fp16_input, max_epoch], 
                                   outputs=[image_slider_input, file_output]) # the output is to update the maximum value of the image_slider which will trigger the "update_image_slider" event to load the image
 
-        # with gr.Tab("rod's workflow"):
-        #     image_input = gr.Image(height=512, width=512)
-        #     with gr.Row():
-        #         image_output_1 = gr.Image(height=512, width=512, visible=False)
-        #         image_output_2 = gr.Image(height=512, width=512, visible=False)
-        #         image_output_3 = gr.Image(height=512, width=512, visible=False)
-        #     with gr.Row():
-        #         image_output_4 = gr.Image(height=512, width=512, visible=False)
-        #         image_output_5 = gr.Image(height=512, width=512, visible=False)
-        #         image_output_6 = gr.Image(height=512, width=512, visible=False)
-        #     radius_input = gr.Number(label="radius", value=0.0) # 3.2
-        #     generate_novel_views_button = gr.Button(value="generate novel views")
-        #     model_output = gr.Image(height=512, width=512, visible=False)
-        #     image_slider_input = gr.Slider(label="image (slide to change angle)", minimum=1, maximum=1, step=1, visible=False)
-        #     with gr.Row():
-        #         workspace_input = gr.Textbox(label="workspace name", value="test", visible=False) #trial_image
-        #         seed_input = gr.Number(label="seed", precision=0, visible=False)
-        #     size_input = gr.Number(label="size (n^2, 64 really recommended.)", value=64, precision=0, step=1, visible=False) #64
-        #     with gr.Row():
-        #         iters_input = gr.Number(label="iters (iterations)", value=5000, precision=0, step=1, visible=False) #5000
-        #         lr_input = gr.Number(label="lr (learning rate)", value=1e-3, visible=False) #1e-3
-        #         batch_size_input = gr.Number(label="batch_size", value=1, precision=0, step=1, visible=False) #1
-        #     with gr.Row():
-        #         dataset_size_train_input = gr.Number(label="dataset_size_train", value=100, precision=0, step=1, visible=False) #100
-        #         dataset_size_valid_input = gr.Number(label="dataset_size_valid", value=8, precision=0, step=1, visible=False) #8
-        #         dataset_size_test_input = gr.Number(label="dataset_size_test", value=100, precision=0, step=1, visible=False) #100
-        #     with gr.Accordion(label="advanced", open=False):
-        #         backbone_input = gr.Dropdown(label="backbone (NeRFNetwork)", choices=["grid", "vanilla", "grid_tcnn", "grid_taichi"], value="grid", visible=False) #nVidia
-        #         optim_input = gr.Dropdown(label="optim (optimizer)", choices=["adan", "adam"], value="adan", visible=False)
-        #         fp16_input = gr.Checkbox(label="fp16 (use float16 for training)", value=True, visible=False)
-        #         max_epoch = gr.Number(value=50, visible=False, precision=0) #50
-        #         dmtet = gr.Checkbox(value=False, visible=False)
-        #     generate_3d_model_button = gr.Button(value="generate 3d model", visible=False)
-        #     # events
-        #     image_slider_input.change(fn=gradio_fn.update_image_slider, inputs=[max_epoch, workspace_input, image_slider_input, dmtet], outputs=[image_output])
-        #     workspace_input.focus(fn=gradio_fn.update_workspaces_list, outputs=[workspace_input])
-        #     workspace_input.change(fn=gradio_fn.update_max_epoch_fetch, inputs=[workspace_input], outputs=[max_epoch])
-        #     workspace_input.change(fn=gradio_fn.update_iters_fetch, inputs=[workspace_input], outputs=[iters_input])
-        #     generate_novel_views_button.click(fn=gradio_fn.generate_novel_view_multi, 
-        #                                       inputs=[image_input, radius_input], 
-        #                                       outputs=[workspace_input, seed_input, size_input, iters_input, lr_input, batch_size_input, dataset_size_train_input, 
-        #                                                dataset_size_valid_input, dataset_size_test_input, backbone_input, optim_input, fp16_input, 
-        #                                                generate_3d_model_button, image_output_1, image_output_2, image_output_3, image_output_4, image_output_5, image_output_6])
-        #     generate_3d_model_button.click(fn=gradio_fn.generate_3d_model_multi,
-        #                                    inputs=[image_output_1, image_output_2, image_output_3, image_output_4, image_output_5, image_output_6, radius_input,
-        #                                            workspace_input, seed_input, size_input, iters_input, lr_input, batch_size_input, dataset_size_train_input, 
-        #                                            dataset_size_valid_input, dataset_size_test_input, backbone_input, optim_input, fp16_input, max_epoch],
-        #                                    outputs=[model_output, image_slider_input, file_output])
+        with gr.Tab("rod's workflow"):
+            image_input = gr.Image(height=512, width=512)
+            with gr.Row():
+                image_output_1 = gr.Image(height=512, width=512, visible=False)
+                image_output_2 = gr.Image(height=512, width=512, visible=False)
+                image_output_3 = gr.Image(height=512, width=512, visible=False)
+            with gr.Row():
+                image_output_4 = gr.Image(height=512, width=512, visible=False)
+                image_output_5 = gr.Image(height=512, width=512, visible=False)
+                image_output_6 = gr.Image(height=512, width=512, visible=False)
+            radius_input = gr.Number(label="radius", value=0.0) # 3.2
+            generate_novel_views_button = gr.Button(value="generate novel views")
+            model_output = gr.Image(height=512, width=512, visible=False)
+            image_slider_input = gr.Slider(label="image (slide to change angle)", minimum=1, maximum=1, step=1, visible=False)
+            with gr.Row():
+                workspace_input = gr.Textbox(label="workspace name", value="test", visible=False) #trial_image
+                seed_input = gr.Number(label="seed", precision=0, visible=False)
+            size_input = gr.Number(label="size (n^2, 64 really recommended.)", value=64, precision=0, step=1, visible=False) #64
+            with gr.Row():
+                iters_input = gr.Number(label="iters (iterations)", value=5000, precision=0, step=1, visible=False) #5000
+                lr_input = gr.Number(label="lr (learning rate)", value=1e-3, visible=False) #1e-3
+                batch_size_input = gr.Number(label="batch_size", value=1, precision=0, step=1, visible=False) #1
+            with gr.Row():
+                dataset_size_train_input = gr.Number(label="dataset_size_train", value=100, precision=0, step=1, visible=False) #100
+                dataset_size_valid_input = gr.Number(label="dataset_size_valid", value=8, precision=0, step=1, visible=False) #8
+                dataset_size_test_input = gr.Number(label="dataset_size_test", value=100, precision=0, step=1, visible=False) #100
+            with gr.Accordion(label="advanced", open=False):
+                backbone_input = gr.Dropdown(label="backbone (NeRFNetwork)", choices=["grid", "vanilla", "grid_tcnn", "grid_taichi"], value="grid", visible=False) #nVidia
+                optim_input = gr.Dropdown(label="optim (optimizer)", choices=["adan", "adam"], value="adan", visible=False)
+                fp16_input = gr.Checkbox(label="fp16 (use float16 for training)", value=True, visible=False)
+                max_epoch = gr.Number(value=50, visible=False, precision=0) #50
+                dmtet = gr.Checkbox(value=False, visible=False)
+            generate_3d_model_button = gr.Button(value="generate 3d model", visible=False)
+            # events
+            image_slider_input.change(fn=gradio_fn.update_image_slider, inputs=[max_epoch, workspace_input, image_slider_input, dmtet], outputs=[image_output])
+            workspace_input.focus(fn=gradio_fn.update_workspaces_list, outputs=[workspace_input])
+            workspace_input.change(fn=gradio_fn.update_max_epoch_fetch, inputs=[workspace_input], outputs=[max_epoch])
+            workspace_input.change(fn=gradio_fn.update_iters_fetch, inputs=[workspace_input], outputs=[iters_input])
+            generate_novel_views_button.click(fn=gradio_fn.generate_novel_view_multi, 
+                                              inputs=[image_input, radius_input], 
+                                              outputs=[workspace_input, seed_input, size_input, iters_input, lr_input, batch_size_input, dataset_size_train_input, 
+                                                       dataset_size_valid_input, dataset_size_test_input, backbone_input, optim_input, fp16_input, 
+                                                       generate_3d_model_button, image_output_1, image_output_2, image_output_3, image_output_4, image_output_5, image_output_6])
+            generate_3d_model_button.click(fn=gradio_fn.generate_3d_model_multi,
+                                           inputs=[image_output_1, image_output_2, image_output_3, image_output_4, image_output_5, image_output_6, radius_input,
+                                                   workspace_input, seed_input, size_input, iters_input, lr_input, batch_size_input, dataset_size_train_input, 
+                                                   dataset_size_valid_input, dataset_size_test_input, backbone_input, optim_input, fp16_input, max_epoch],
+                                           outputs=[model_output, image_slider_input, file_output])
     
     demo.launch()
     

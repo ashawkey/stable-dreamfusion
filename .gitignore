@@ -43,4 +43,4 @@ temp
 workspaces/*
 data/amore_dog*
 data/green_bowl*
-torch_empty_cache.py
+clear_memory.py
