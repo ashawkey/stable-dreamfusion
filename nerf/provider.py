@@ -194,8 +194,8 @@ class NeRFDataset:
 
         self.training = self.type in ['train', 'all']
 
-        self.cx = self.H / 2
-        self.cy = self.W / 2
+        self.cx = self.W / 2
+        self.cy = self.H / 2
 
         self.near = self.opt.min_near
         self.far = 1000 # infinite
@@ -208,8 +208,8 @@ class NeRFDataset:
 
         H = int(self.opt.known_view_scale * self.H)
         W = int(self.opt.known_view_scale * self.W)
-        cx = H / 2
-        cy = W / 2
+        cx = W / 2
+        cy = H / 2
 
         radii = torch.FloatTensor(self.opt.ref_radii).to(self.device)
         thetas = torch.FloatTensor(self.opt.ref_polars).to(self.device)
